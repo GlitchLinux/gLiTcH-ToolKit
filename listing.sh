@@ -36,36 +36,42 @@ while true; do
     read -rp "Choose a script to run (0 to exit): " choice
     
     case "$choice" in
-        1) script="3MB-VAULT.sh" ;;
-        2) script="NaLa.sh" ;;
-        3) script="autologin-xfce.sh" ;;
-        4) script="network-reset.sh" ;;
-        5) script="Brave-Browser-Install.sh" ;;
-        6) script="PARROT-OS-QEMU-Autoscript.sh" ;;
-        7) script="crypto-tools.sh" ;;
-        8) script="QEMU-QuickBoot.sh" ;;
-        9) script="dd_GUI.sh" ;;
-        10) script="restart-network.sh" ;;
-        11) script="FireFox-Autoscript.sh" ;;
-        12) script="rsync_GUI.sh" ;;
-        13) script="FLATPAK-INSTALL.sh" ;;
-        14) script="ssh-file-transfer.sh" ;;
-        15) script="GRUB-MULTIBOOT-CREATE.sh" ;;
-        16) script="ssh-guard.sh" ;;
-        17) script="install_torbrowser.sh" ;;
-        18) script="ssh.sh" ;;
-        19) script="linux-live-encrypted-persistence.sh" ;;
-        20) script="sudo.visudo.conf" ;;
-        21) script="missing-locales-fix.sh" ;;
-        22) script="System-CleanUp.sh" ;;
-        23) script="MultiBoot-OS-QEMU-VM.sh" ;;
-        24) script="TAILS-OS-QEMU-Autoscript.sh" ;;
-        25) script="MULTIBOOT-USB-CREATE.sh" ;;
+        1) script="./3MB-VAULT.sh" ;;
+        2) script="./NaLa.sh" ;;
+        3) script="./autologin-xfce.sh" ;;
+        4) script="./network-reset.sh" ;;
+        5) script="./Brave-Browser-Install.sh" ;;
+        6) script="./PARROT-OS-QEMU-Autoscript.sh" ;;
+        7) script="./crypto-tools.sh" ;;
+        8) script="./QEMU-QuickBoot.sh" ;;
+        9) script="./dd_GUI.sh" ;;
+        10) script="./restart-network.sh" ;;
+        11) script="./FireFox-Autoscript.sh" ;;
+        12) script="./rsync_GUI.sh" ;;
+        13) script="./FLATPAK-INSTALL.sh" ;;
+        14) script="./ssh-file-transfer.sh" ;;
+        15) script="./GRUB-MULTIBOOT-CREATE.sh" ;;
+        16) script="./ssh-guard.sh" ;;
+        17) script="./install_torbrowser.sh" ;;
+        18) script="./ssh.sh" ;;
+        19) script="./linux-live-encrypted-persistence.sh" ;;
+        20) script="./sudo.visudo.conf" ;;
+        21) script="./missing-locales-fix.sh" ;;
+        22) script="./System-CleanUp.sh" ;;
+        23) script="./MultiBoot-OS-QEMU-VM.sh" ;;
+        24) script="./TAILS-OS-QEMU-Autoscript.sh" ;;
+        25) script="./MULTIBOOT-USB-CREATE.sh" ;;
         0) echo "Exiting..." ; exit 0 ;;
         *) echo "Invalid selection. Please choose a number between 0 and 25." ; read -rp "Press Enter to continue..." ; continue ;;
     esac
     
     if [[ -f "$script" ]]; then
+        # Ensure the script is executable
+        if [[ ! -x "$script" ]]; then
+            echo "Error: $script is not executable. Attempting to make it executable."
+            sudo chmod +x "$script"
+        fi
+        
         echo "Running: $script"
         sudo bash "$script"
     else
