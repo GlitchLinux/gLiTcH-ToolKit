@@ -5,14 +5,16 @@ function separator_line() {
     echo "----------------------------------------"
 }
 
+sudo apt update && sudo apt install nala -y
+
 # Automatically fetch new mirrors
-sudo nala fetch
+sudo nala fetch 
 
 # Update package lists
-nala update
+sudo nala update
 
 # Upgrade installed packages
-nala upgrade
+sudo nala upgrade
 
 # Install any missing dependencies
 nala install -f
