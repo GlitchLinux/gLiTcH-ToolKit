@@ -6,7 +6,7 @@ scripts=(
     "Brave-Browser-Install.sh" "PARROT-OS-QEMU-Autoscript.sh" "crypto-tools.sh" "QEMU-QuickBoot.sh"
     "dd_GUI.sh" "restart-network.sh" "FireFox-Autoscript.sh" "rsync_GUI.sh"
     "FLATPAK-INSTALL.sh" "ssh-file-transfer.sh" "GRUB-MULTIBOOT-CREATE.sh" "ssh-guard.sh"
-    "install_torbrowser.sh" "ssh.sh" "linux-live-encrypted-persistence.sh"
+    "install_torbrowser.sh" "ssh.sh" "linux-live-encrypted-persistence.sh" "sudo.visudo.conf"
     "missing-locales-fix.sh" "System-CleanUp.sh" "MultiBoot-OS-QEMU-VM.sh" "TAILS-OS-QEMU-Autoscript.sh"
     "MULTIBOOT-USB-CREATE.sh"
 )
