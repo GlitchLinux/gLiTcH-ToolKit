@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Display banner
-echo "╔════════════════════════════════╗"
-echo "║ AUTOMATED FIREFOX ESR INSTALLER ║"
-echo "╚════════════════════════════════╝"
+echo "╔═══════════════════════╗"
+echo "║ FIREFOX ESR INSTALLER ║"
+echo "╚═══════════════════════╝"
 
 # Step 1: Download Firefox ESR
 echo "Downloading Firefox ESR..."
