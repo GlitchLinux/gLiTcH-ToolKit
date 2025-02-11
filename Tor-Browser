@@ -1,7 +1,0 @@
-#!/bin/bash
-cd /tmp
-wget http://archive.ubuntu.com/ubuntu/pool/universe/t/torbrowser-launcher/torbrowser-launcher_0.3.7-2_amd64.deb
-sudo dpkg -i torbrowser-launcher_0.3.7-2_amd64.deb
-sudo rm torbrowser-launcher_0.3.7-2_amd64.deb
-sudo apt install -f
-torbrowser-launcher
