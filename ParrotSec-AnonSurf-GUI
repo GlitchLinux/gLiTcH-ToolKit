@@ -1,6 +1,9 @@
 #!/bin/bash
 sudo touch /etc/apt/sources.list.d/parrot.list
-sudo echo "deb [trusted=yes] https://deb.parrot.sh/parrot/ rolling main contrib non-free" >> /etc/apt/sources.list.d/parrot.list
-sudo echo "deb [trusted=yes] https://deb.parrot.sh/parrot/ rolling-security main contrib non-free" >> /etc/apt/sources.list.d/parrot.list
-sudo apt update
-sudo apt install anonsurf-gtk
+sudo echo "deb [trusted=yes] https://deb.parrot.sh/parrot lory main contrib non-free non-free-firmware" >> /etc/apt/sources.list.d/parrot.list
+sudo echo "deb [trusted=yes] https://deb.parrot.sh/parrot lory-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list.d/parrot.list
+sudo echo "deb [trusted=yes] https://deb.parrot.sh/parrot lory-backports main contrib non-free non-free-firmware" >> /etc/apt/sources.list.d/parrot.list
+wget -qO - https://deb.parrot.sh/parrot/misc/parrotsec.gpg | sudo apt-key add -
+sudo apt update && sudo apt install anonsurf-gtk
+cd /etc/apt/sources.list.d/
+sudo rm parrot.list
