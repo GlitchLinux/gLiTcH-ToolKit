@@ -1,8 +1,7 @@
 #!/bin/bash
 sudo touch /etc/apt/sources.list.d/kali.list
-sudo echo "deb [trusted=yes] http://http.kali.org/kali kali-rolling main non-free contrib" >> /etc/apt/sources.list.d/kali.list
-wget -qO - https://archive.kali.org/archive-key.asc | sudo apt-key add -
+echo "deb [trusted=yes] http://http.kali.org/kali kali-rolling main non-free contrib" | sudo tee /etc/apt/sources.list.d/kali.list
+wget -qO - https://archive.kali.org/archive-key.asc | sudo gpg --dearmor -o /usr/share/keyrings/kali-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/kali-archive-keyring.gpg] http://http.kali.org/kali kali-rolling main non-free contrib" | sudo tee /etc/apt/sources.list.d/kali.list
 sudo apt update
-sudo apt install -f kali-undercover
-cd /etc/apt/sources.list.d/
-sudo rm kali.list
+sudo apt install kali-tools-information-gathering kali-tools-top10 kali-tools-vulnerability kali-tools-wireless kali-tools-web kali-tools-passwords
