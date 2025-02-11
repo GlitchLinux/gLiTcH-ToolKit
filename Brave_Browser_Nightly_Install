@@ -1,8 +1,0 @@
-#!/bin/bash  
-cd /tmp/
-wget https://github.com/brave/brave-browser/releases/download/v1.77.26/brave-browser-nightly_1.77.26_amd64.deb
-sudo dpkg -i brave-browser-nightly_1.77.26_amd64.deb
-sudo apt install -f
-sudo rm brave-browser-nightly_1.77.26_amd64.deb
-brave-browser
-exit
