@@ -2,4 +2,4 @@
 cd /tmp
 wget https://glitchlinux.wtf/FILES/DEB-PACKAGES/midori_11.5_amd64.deb
 sudo dpkg -i midori_11.5_amd64.deb
-sudo rm midori_11.5_amd64
+sudo rm midori_11.5_amd64.deb
