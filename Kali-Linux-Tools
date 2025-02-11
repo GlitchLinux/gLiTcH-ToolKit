@@ -5,7 +5,7 @@ wget -qO - https://archive.kali.org/archive-key.asc | sudo gpg --dearmor -o /usr
 echo "deb [signed-by=/usr/share/keyrings/kali-archive-keyring.gpg] http://http.kali.org/kali kali-rolling main non-free contrib" | sudo tee /etc/apt/sources.list.d/kali.list
 sudo apt update
 sudo apt remove uim
-sudo apt install kali-tools-information-gathering kali-tools-top10 kali-tools-vulnerability kali-tools-wireless kali-tools-web kali-tools-passwords
+sudo apt install -f kali-tools-information-gathering kali-tools-top10 kali-tools-vulnerability kali-tools-wireless kali-tools-web kali-tools-passwords
 sudo rm /etc/apt/sources.list.d/kali.list
 sudo rm /usr/share/keyrings/kali-archive-keyring.gpg
 sudo apt update
