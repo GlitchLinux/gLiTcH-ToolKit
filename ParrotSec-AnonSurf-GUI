@@ -7,3 +7,4 @@ wget -qO - https://deb.parrot.sh/parrot/misc/parrotsec.gpg | sudo apt-key add -
 sudo apt update && sudo apt install anonsurf-gtk
 cd /etc/apt/sources.list.d/
 sudo rm parrot.list
+anon-gui
