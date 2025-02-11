@@ -1,5 +1,5 @@
 #!/bin/bash
 cd /tmp
-wget https://objects.githubusercontent.com/github-production-release-asset-2e65be/702150401/5aba2084-889a-4e5b-8c87-11b6e6b48a7f?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction%2F20250211%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20250211T083819Z&X-Amz-Expires=300&X-Amz-Signature=011fe4f628ced9c86b81518af475e5960e0b139598fca3061ffab4d95f049be3&X-Amz-SignedHeaders=host&response-content-disposition=attachment%3B%20filename%3Dmidori_11.5_amd64.deb&response-content-type=application%2Foctet-stream
+wget https://glitchlinux.wtf/FILES/DEB-PACKAGES/midori_11.5_amd64.deb
 sudo dpkg -i midori_11.5_amd64
 sudo rm midori_11.5_amd64
