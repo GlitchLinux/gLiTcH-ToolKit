@@ -6,3 +6,6 @@ echo "deb [signed-by=/usr/share/keyrings/kali-archive-keyring.gpg] http://http.k
 sudo apt update
 sudo apt install uim
 sudo apt install kali-tools-information-gathering kali-tools-top10 kali-tools-vulnerability kali-tools-wireless kali-tools-web kali-tools-passwords
+sudo rm /etc/apt/sources.list.d/kali.list
+sudo rm /usr/share/keyrings/kali-archive-keyring.gpg
+sudo apt update
