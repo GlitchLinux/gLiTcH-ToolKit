@@ -1,0 +1,6 @@
+#!/bin/bash
+sudo touch /etc/apt/sources.list.d/parrot.list
+sudo echo "deb [trusted=yes] https://deb.parrot.sh/parrot/ rolling main contrib non-free" >> /etc/apt/sources.list.d/parrot.list
+sudo echo "deb [trusted=yes] https://deb.parrot.sh/parrot/ rolling-security main contrib non-free" >> /etc/apt/sources.list.d/parrot.list
+sudo apt update
+sudo apt install anonsurf-gtk
