@@ -24,8 +24,5 @@ restart_network_adapters
 # Restart network services
 restart_network_services
 
-# Ping https://dietpi.com/
-ping_dietpi
-
 # End of script
 echo "Startup script completed."
