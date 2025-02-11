@@ -5,6 +5,6 @@ wget -qO - https://archive.kali.org/archive-key.asc | sudo gpg --dearmor -o /usr
 echo "deb [signed-by=/usr/share/keyrings/kali-archive-keyring.gpg] http://http.kali.org/kali kali-rolling main non-free contrib" | sudo tee /etc/apt/sources.list.d/kali.list
 sudo apt update
 sudo apt install kali-tools-top10
-sudo rm /etc/apt/sources.list.d/kali.list
+# sudo rm /etc/apt/sources.list.d/kali.list
 sudo rm /usr/share/keyrings/kali-archive-keyring.gpg
 sudo apt update
