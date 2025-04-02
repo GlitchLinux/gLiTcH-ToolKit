@@ -119,60 +119,94 @@ cat > /mnt/chroot_install.sh <<'EOF'
 
 #!/bin/bash
 
-# Exit on error and unset variables
-set -o errexit
-set -o nounset
-set -o pipefail
+# Exit on error
+set -e
 
-# Configure basic system settings
+# Basic system configuration
 echo "Configuring system..."
-ln -sf /usr/share/zoneinfo/UTC /etc/localtime
-hwclock --systohc
-locale-gen
+[ -f /etc/localtime ] || ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+hwclock --systohc || true
+locale-gen en_US.UTF-8
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
-echo "KEYMAP=us" > /etc/vconsole.conf
-echo "hostname" > /etc/hostname
 
-# Install GRUB and configure bootloader
-echo "Installing bootloader..."
-apt-get install -y --reinstall grub-efi-amd64 grub-efi-amd64-bin
-
-# Configure GRUB for cryptodisk if needed
+# Configure GRUB for LUKS
 if [[ -f /etc/crypttab ]]; then
-    echo "Configuring GRUB for encrypted system..."
-    echo "GRUB_ENABLE_CRYPTODISK=y" >> /etc/default/grub
-    echo "Adding cryptodisk modules to GRUB..."
-    sed -i 's/GRUB_PRELOAD_MODULES=".*"/GRUB_PRELOAD_MODULES="part_gpt cryptodisk luks"/' /etc/default/grub
-    echo "GRUB_CMDLINE_LINUX=\"cryptdevice=UUID=$(blkid -s UUID -o value /dev/mapper/cryptroot):cryptroot\"" >> /etc/default/grub
+    echo "Configuring GRUB for LUKS encryption..."
+    echo "GRUB_ENABLE_CRYPTODISK=y" > /etc/default/grub
+    echo "GRUB_PRELOAD_MODULES=\"part_gpt cryptodisk luks\"" >> /etc/default/grub
+    CRYPT_UUID=$(blkid -s UUID -o value $(findmnt / -o SOURCE -n | sed 's/\/dev\/mapper\///;s/-.*//'))
+    echo "GRUB_CMDLINE_LINUX=\"cryptdevice=UUID=$CRYPT_UUID:cryptroot\"" >> /etc/default/grub
 fi
 
-# Install GRUB properly
-echo "Installing GRUB to EFI partition..."
+# Create minimal EFI loader that just chainloads
+mkdir -p /boot/efi/EFI/BOOT
+grub-mkimage -p /efi/boot -O x86_64-efi -o /boot/efi/EFI/BOOT/BOOTX64.EFI \
+    part_gpt fat ext2 chain configfile
+
+# Simple chainloader config
+cat > /boot/efi/efi/boot/grub.cfg <<'EFI_CFG'
+set timeout=3
+menuentry "Load Main GRUB" {
+    search --file --set=root /boot/grub/grub.cfg
+    configfile /boot/grub/grub.cfg
+}
+EFI_CFG
+
+# Main GRUB configuration with proper cryptomount
+ROOT_DEV=$(findmnt / -o SOURCE -n)
+CRYPT_DEV=${ROOT_DEV#/dev/mapper/}
+cat > /boot/grub/grub.cfg <<'MAIN_CFG'
+# Enable cryptodisk support
+insmod cryptodisk
+insmod luks
+insmod gcry_rijndael
+insmod gcry_sha256
+
+# Try to unlock all encrypted devices
+if cryptomount -a; then
+    # Success - set root and load normal config
+    set root=(crypto0)
+    configfile /boot/grub/grub.cfg
+else
+    # Failed - show error and retry
+    echo "Failed to unlock encrypted disk!"
+    echo "Press any key to try again..."
+    sleep --interruptible 5
+    configfile ${prefix}/grub.cfg
+fi
+
+# Normal boot entries
+menuentry "Boot System" {
+    linux /vmlinuz root=UUID=$(blkid -s UUID -o value $ROOT_DEV) ro
+    initrd /initrd.img
+}
+
+menuentry "Failsafe Boot" {
+    linux /vmlinuz root=UUID=$(blkid -s UUID -o value $ROOT_DEV) ro single
+    initrd /initrd.img
+}
+MAIN_CFG
+
+# Install GRUB with all required modules
+echo "Installing GRUB with cryptodisk support..."
 grub-install --target=x86_64-efi \
              --efi-directory=/boot/efi \
              --bootloader-id=GRUB \
-             --recheck \
-             --modules="part_gpt ext2 fat cryptodisk luks" \
-             --debug
+             --modules="part_gpt fat ext2 cryptodisk luks gcry_rijndael gcry_sha256" \
+             --no-nvram
 
-# Create fallback EFI bootloader
-mkdir -p /boot/efi/EFI/BOOT
-cp /boot/efi/EFI/GRUB/grubx64.efi /boot/efi/EFI/BOOT/BOOTX64.EFI
-
-# Generate GRUB config with proper paths
-echo "Generating GRUB configuration..."
-grub-mkconfig -o /boot/grub/grub.cfg
-
-# Verify GRUB installation
-if [[ ! -f /boot/grub/grub.cfg ]]; then
-    echo "ERROR: GRUB configuration failed to generate!"
-    echo "Attempting manual recovery..."
-    grub-mkconfig -o /boot/grub/grub.cfg
-fi
-
-# Update initramfs (critical for LUKS)
+# Update initramfs
 echo "Updating initramfs..."
 update-initramfs -u -k all
+
+# Verify installation
+if [[ ! -f /boot/grub/grub.cfg ]]; then
+    echo "ERROR: GRUB configuration failed!"
+    exit 1
+fi
+
+echo "GRUB installation complete!"
+EOF
 
 EOF
 
