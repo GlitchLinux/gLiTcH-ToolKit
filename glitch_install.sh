@@ -116,7 +116,6 @@ mount --bind /sys /mnt/sys
 mount --bind /run /mnt/run
 
 cat > /mnt/chroot_install.sh <<'EOF'
-
 #!/bin/bash
 
 # Exit on error
@@ -129,85 +128,59 @@ hwclock --systohc || true
 locale-gen en_US.UTF-8
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
-# Configure GRUB for LUKS
-if [[ -f /etc/crypttab ]]; then
-    echo "Configuring GRUB for LUKS encryption..."
-    echo "GRUB_ENABLE_CRYPTODISK=y" > /etc/default/grub
-    echo "GRUB_PRELOAD_MODULES=\"part_gpt cryptodisk luks\"" >> /etc/default/grub
-    CRYPT_UUID=$(blkid -s UUID -o value $(findmnt / -o SOURCE -n | sed 's/\/dev\/mapper\///;s/-.*//'))
-    echo "GRUB_CMDLINE_LINUX=\"cryptdevice=UUID=$CRYPT_UUID:cryptroot\"" >> /etc/default/grub
-fi
+# Install GRUB
+apt-get install -y grub-efi-amd64
 
-# Create minimal EFI loader that just chainloads
+echo "GRUB_ENABLE_CRYPTODISK=y" > /etc/default/grub
+
+# Create minimal EFI bootloader that chainloads
 mkdir -p /boot/efi/EFI/BOOT
 grub-mkimage -p /efi/boot -O x86_64-efi -o /boot/efi/EFI/BOOT/BOOTX64.EFI \
     part_gpt fat ext2 chain configfile
 
-# Simple chainloader config
-cat > /boot/efi/efi/boot/grub.cfg <<'EFI_CFG'
-set timeout=3
-menuentry "Load Main GRUB" {
+# Create chainloading config
+mkdir -p /boot/efi/efi/boot
+cat > /boot/efi/efi/boot/grub.cfg <<'GRUB_CFG'
+set timeout=5
+menuentry "Chainload GRUB" {
     search --file --set=root /boot/grub/grub.cfg
     configfile /boot/grub/grub.cfg
 }
-EFI_CFG
+GRUB_CFG
 
-# Main GRUB configuration with proper cryptomount
-ROOT_DEV=$(findmnt / -o SOURCE -n)
-CRYPT_DEV=${ROOT_DEV#/dev/mapper/}
-cat > /boot/grub/grub.cfg <<'MAIN_CFG'
-# Enable cryptodisk support
-insmod cryptodisk
-insmod luks
-insmod gcry_rijndael
-insmod gcry_sha256
+# Main GRUB config on root partition
+ROOT_UUID=$(blkid -s UUID -o value ${USE_LUKS:+"/dev/mapper/cryptroot"} || echo "/dev/root")
+cat > /boot/grub/grub.cfg <<'ROOT_GRUB'
+if [ -e $prefix/grubenv ]; then load_env; fi
+set default=0
+set timeout=5
 
-# Try to unlock all encrypted devices
-if cryptomount -a; then
-    # Success - set root and load normal config
-    set root=(crypto0)
-    configfile /boot/grub/grub.cfg
-else
-    # Failed - show error and retry
-    echo "Failed to unlock encrypted disk!"
-    echo "Press any key to try again..."
-    sleep --interruptible 5
-    configfile ${prefix}/grub.cfg
+if [ -f /etc/crypttab ]; then
+    if cryptomount -u $(blkid -s UUID -o value ${ROOT_PART}); then
+        set root=(crypto0)
+        configfile /boot/grub/grub.cfg
+    else
+        echo "Failed to unlock disk! Trying again..."
+        sleep 5
+        configfile ${prefix}/grub.cfg
+    fi
 fi
 
-# Normal boot entries
-menuentry "Boot System" {
-    linux /vmlinuz root=UUID=$(blkid -s UUID -o value $ROOT_DEV) ro
+menuentry "Linux" {
+    linux /vmlinuz root=UUID=${ROOT_UUID} ro
     initrd /initrd.img
 }
+ROOT_GRUB
 
-menuentry "Failsafe Boot" {
-    linux /vmlinuz root=UUID=$(blkid -s UUID -o value $ROOT_DEV) ro single
-    initrd /initrd.img
-}
-MAIN_CFG
-
-# Install GRUB with all required modules
-echo "Installing GRUB with cryptodisk support..."
+# Install GRUB to both locations
 grub-install --target=x86_64-efi \
              --efi-directory=/boot/efi \
              --bootloader-id=GRUB \
-             --modules="part_gpt fat ext2 cryptodisk luks gcry_rijndael gcry_sha256" \
+             --modules="part_gpt fat ext2 chain crypto luks" \
              --no-nvram
 
 # Update initramfs
-echo "Updating initramfs..."
 update-initramfs -u -k all
-
-# Verify installation
-if [[ ! -f /boot/grub/grub.cfg ]]; then
-    echo "ERROR: GRUB configuration failed!"
-    exit 1
-fi
-
-echo "GRUB installation complete!"
-EOF
-
 EOF
 
 chmod +x /mnt/chroot_install.sh
