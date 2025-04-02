@@ -25,13 +25,12 @@ apt-get update && apt-get install -y \
     grub-efi-amd64 grub-efi-amd64-bin \
     parted rsync locales
 
-# Ensure script is run as root
+# Main script
 if [[ $EUID -ne 0 ]]; then
     echo "This script must be run as root" 
     exit 1
 fi
 
-# Check if running in UEFI mode
 if [[ ! -d /sys/firmware/efi ]]; then
     echo "This script requires UEFI boot mode."
     exit 1
@@ -51,7 +50,7 @@ USE_LUKS=${USE_LUKS,,}
 
 [[ "$USE_LUKS" == "y" ]] && verify_luks_support
 
-# Wipe and partition disk
+# Wipe and partition disk (100MB EFI partition)
 echo "Creating new partition table..."
 wipefs -a "$TARGET_DISK"
 sgdisk --zap-all "$TARGET_DISK"
@@ -69,6 +68,7 @@ mkfs.vfat -F32 -n EFI "$EFI_PART"
 
 if [[ "$USE_LUKS" == "y" ]]; then
     echo "Setting up LUKS1 encryption (for GRUB compatibility)..."
+    echo -e "\nWARNING: You'll need to enter your encryption passphrase twice for verification."
     cryptsetup luksFormat --type luks1 \
               --hash sha512 \
               --iter-time 5000 \
@@ -88,7 +88,7 @@ fi
 
 mkfs.ext4 -L root "$ROOT_DEVICE"
 
-# Mount filesystems
+# Mount filesystems in correct order
 echo "Mounting filesystems..."
 mount "$ROOT_DEVICE" /mnt
 mkdir -p /mnt/boot/efi
@@ -108,11 +108,6 @@ mkdir -p /mnt/etc
     echo "UUID=$(blkid -s UUID -o value "$ROOT_DEVICE") / ext4 defaults 0 1"
 } > /mnt/etc/fstab
 
-# Add crypttab entry if LUKS is enabled
-if [[ "$USE_LUKS" == "y" ]]; then
-    echo "cryptroot UUID=$ROOT_UUID none luks" > /mnt/etc/crypttab
-fi
-
 # Prepare chroot environment
 echo "Preparing chroot environment..."
 mount --bind /dev /mnt/dev
@@ -122,55 +117,70 @@ mount --bind /run /mnt/run
 
 cat > /mnt/chroot_install.sh <<'EOF'
 #!/bin/bash
+
+# Exit on error
 set -e
 
 # Basic system configuration
 echo "Configuring system..."
-ln -sf /usr/share/zoneinfo/UTC /etc/localtime
-hwclock --systohc
+[ -f /etc/localtime ] || ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+hwclock --systohc || true
 locale-gen en_US.UTF-8
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
 # Install GRUB
 apt-get install -y grub-efi-amd64
 
-# Enable cryptodisk
 echo "GRUB_ENABLE_CRYPTODISK=y" > /etc/default/grub
 
-# Install GRUB bootloader
-grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB --recheck
+# Create minimal EFI bootloader that chainloads
+mkdir -p /boot/efi/EFI/BOOT
+grub-mkimage -p /efi/boot -O x86_64-efi -o /boot/efi/EFI/BOOT/BOOTX64.EFI \
+    part_gpt fat ext2 chain configfile
 
-# Create GRUB config
-ROOT_UUID=$(blkid -s UUID -o value /dev/mapper/cryptroot)
-cat > /boot/grub/grub.cfg <<GRUB_CFG
-insmod cryptodisk
-insmod luks
-insmod part_gpt
-insmod ext2
-insmod gzio
+# Create chainloading config
+mkdir -p /boot/efi/efi/boot
+cat > /boot/efi/efi/boot/grub.cfg <<'GRUB_CFG'
+set timeout=5
+menuentry "Chainload GRUB" {
+    search --file --set=root /boot/grub/grub.cfg
+    configfile /boot/grub/grub.cfg
+}
+GRUB_CFG
 
-if [ -e \$prefix/grubenv ]; then
-    load_env
-fi
-
+# Main GRUB config on root partition
+ROOT_UUID=$(blkid -s UUID -o value ${USE_LUKS:+"/dev/mapper/cryptroot"} || echo "/dev/root")
+cat > /boot/grub/grub.cfg <<'ROOT_GRUB'
+if [ -e $prefix/grubenv ]; then load_env; fi
 set default=0
 set timeout=5
 
 if [ -f /etc/crypttab ]; then
-    cryptomount -u $ROOT_UUID
-    set root=(crypto0)
+    if cryptomount -u $(blkid -s UUID -o value ${ROOT_PART}); then
+        set root=(crypto0)
+        configfile /boot/grub/grub.cfg
+    else
+        echo "Failed to unlock disk! Trying again..."
+        sleep 5
+        configfile ${prefix}/grub.cfg
+    fi
 fi
 
 menuentry "Linux" {
-    search --no-floppy --fs-uuid --set=root $ROOT_UUID
-    linux /vmlinuz root=UUID=$ROOT_UUID ro
+    linux /vmlinuz root=UUID=${ROOT_UUID} ro
     initrd /initrd.img
 }
-GRUB_CFG
+ROOT_GRUB
+
+# Install GRUB to both locations
+grub-install --target=x86_64-efi \
+             --efi-directory=/boot/efi \
+             --bootloader-id=GRUB \
+             --modules="part_gpt fat ext2 chain crypto luks" \
+             --no-nvram
 
 # Update initramfs
 update-initramfs -u -k all
-
 EOF
 
 chmod +x /mnt/chroot_install.sh
@@ -181,6 +191,7 @@ echo "   chroot /mnt /bin/bash"
 echo "2. Execute the installation script:"
 echo "   /chroot_install.sh"
 echo "3. After completion, exit and reboot"
+echo -e "\nNOTE: For LUKS, you'll need to enter your passphrase once during boot."
 
 read -p "Press Enter after completing chroot steps..." dummy
 
