@@ -17,46 +17,13 @@ verify_luks_support() {
     fi
 }
 
-# Enhanced dependency installation
-install_dependencies() {
-    REQUIRED_PKGS=(
-        "gdisk" "dosfstools" "e2fsprogs" 
-        "cryptsetup" "cryptsetup-initramfs"
-        "grub-efi-amd64" "grub-efi-amd64-bin"
-        "parted" "rsync"
-    )
-    
-    echo "Installing required packages..."
-    apt-get update
-    for pkg in "${REQUIRED_PKGS[@]}"; do
-        if ! dpkg -l | grep -q "^ii  $pkg "; then
-            apt-get install -y "$pkg"
-        fi
-    done
-}
-
-# Manual fstab generation (fixed version)
-generate_fstab() {
-    echo "Generating fstab..."
-    mkdir -p /mnt/etc
-    
-    # Get UUIDs after mounting
-    EFI_UUID=$(blkid -s UUID -o value "$EFI_PART")
-    if [[ "$USE_LUKS" == "y" ]]; then
-        ROOT_UUID=$(blkid -s UUID -o value "$ROOT_DEVICE")
-    else
-        ROOT_UUID=$(blkid -s UUID -o value "$ROOT_PART")
-    fi
-    
-    {
-        echo "# <file system> <mount point> <type> <options> <dump> <pass>"
-        echo "UUID=$EFI_UUID /boot/efi vfat defaults,umask=0077 0 1"
-        echo "UUID=$ROOT_UUID / ext4 defaults 0 1"
-    } > /mnt/etc/fstab
-    
-    echo "Generated fstab:"
-    cat /mnt/etc/fstab
-}
+# Quick dependency installation at start
+echo "Updating and installing dependencies..."
+apt-get update && apt-get install -y \
+    gdisk dosfstools e2fsprogs \
+    cryptsetup cryptsetup-initramfs \
+    grub-efi-amd64 grub-efi-amd64-bin \
+    parted rsync locales
 
 # Main script
 if [[ $EUID -ne 0 ]]; then
@@ -81,7 +48,6 @@ read -p "WARNING: ALL DATA ON $TARGET_DISK WILL BE DESTROYED! Continue? (y/N): "
 read -p "Enable LUKS encryption? (y/N): " USE_LUKS
 USE_LUKS=${USE_LUKS,,}
 
-install_dependencies
 [[ "$USE_LUKS" == "y" ]] && verify_luks_support
 
 # Wipe and partition disk (100MB EFI partition)
@@ -133,8 +99,14 @@ rsync -aAXH --info=progress2 \
       --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found"} \
       / /mnt/
 
-# Generate fstab after mounting
-generate_fstab
+# Generate fstab
+echo "Generating fstab..."
+mkdir -p /mnt/etc
+{
+    echo "# <file system> <mount point> <type> <options> <dump> <pass>"
+    echo "UUID=$(blkid -s UUID -o value "$EFI_PART") /boot/efi vfat defaults,umask=0077 0 1"
+    echo "UUID=$(blkid -s UUID -o value "$ROOT_DEVICE") / ext4 defaults 0 1"
+} > /mnt/etc/fstab
 
 # Prepare chroot environment
 echo "Preparing chroot environment..."
@@ -143,102 +115,65 @@ mount --bind /proc /mnt/proc
 mount --bind /sys /mnt/sys
 mount --bind /run /mnt/run
 
-cat > /mnt/chroot_install.sh <<EOF
+cat > /mnt/chroot_install.sh <<'EOF'
+
 #!/bin/bash
 
-# Basic setup
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Exit on error and unset variables
+set -o errexit
+set -o nounset
+set -o pipefail
 
-# Fix systemd bus connection
-mkdir -p /run/systemd
-ln -fs /proc/self/mounts /etc/mtab
-
-# Fix EFI variables support
-mount -t efivarfs efivarfs /sys/firmware/efi/efivars 2>/dev/null || true
-
-# Fix locale issues
-export LANG=C.UTF-8
-export LC_ALL=C.UTF-8
-apt-get install -y locales
-echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+# Configure basic system settings
+echo "Configuring system..."
+ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+hwclock --systohc
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
+echo "KEYMAP=us" > /etc/vconsole.conf
+echo "hostname" > /etc/hostname
 
-# Timezone setup
-ln -sf /usr/share/zoneinfo/$(timedatectl | grep "Time zone" | awk '{print $3}') /etc/localtime 2>/dev/null || true
-hwclock --systohc
+# Install GRUB and configure bootloader
+echo "Installing bootloader..."
+apt-get install -y --reinstall grub-efi-amd64 grub-efi-amd64-bin
 
-# LUKS specific setup
-if [[ "$USE_LUKS" == "y" ]]; then
-    echo "Configuring encrypted boot..."
-    
-    # Install necessary packages
-    apt-get update
-    apt-get install -y cryptsetup-initramfs grub-efi-amd64-bin
-    
-    # Create keyfile for automatic unlock
-    mkdir -p /etc/cryptsetup-keys.d
-    dd if=/dev/urandom bs=512 count=4 of=/etc/cryptsetup-keys.d/cryptroot.key
-    chmod 0400 /etc/cryptsetup-keys.d/cryptroot.key
-    
-    # Add key to LUKS container
-    while ! cryptsetup luksAddKey "$ROOT_PART" /etc/cryptsetup-keys.d/cryptroot.key; do
-        echo "Failed to add key, trying again..."
-        sleep 1
-    done
-    
-    # Configure crypttab
-    echo "cryptroot UUID=$ROOT_UUID /etc/cryptsetup-keys.d/cryptroot.key luks,discard" > /etc/crypttab
-    
-    # Configure initramfs
-    echo "KEYFILE_PATTERN=\"/etc/cryptsetup-keys.d/*.key\"" >> /etc/cryptsetup-initramfs/conf-hook
-    echo "UMASK=0077" >> /etc/initramfs-tools/initramfs.conf
-    
-    # Configure GRUB
-    echo "GRUB_DEFAULT=0
-GRUB_TIMEOUT=5
-GRUB_DISTRIBUTOR=\`lsb_release -i -s 2> /dev/null || echo Debian\`
-GRUB_CMDLINE_LINUX_DEFAULT=\"quiet\"
-GRUB_CMDLINE_LINUX=\"cryptdevice=UUID=$ROOT_UUID:cryptroot root=/dev/mapper/cryptroot\"
-GRUB_ENABLE_CRYPTODISK=y
-GRUB_PRELOAD_MODULES=\"part_gpt cryptodisk luks\"" > /etc/default/grub
-    
-    # Update initramfs
-    update-initramfs -v -u -k all
-else
-    # Non-LUKS GRUB configuration
-    echo "GRUB_DEFAULT=0
-GRUB_TIMEOUT=5
-GRUB_DISTRIBUTOR=\`lsb_release -i -s 2> /dev/null || echo Debian\`
-GRUB_CMDLINE_LINUX_DEFAULT=\"quiet\"
-GRUB_CMDLINE_LINUX=\"root=UUID=$ROOT_UUID\"
-GRUB_ENABLE_CRYPTODISK=n" > /etc/default/grub
+# Configure GRUB for cryptodisk if needed
+if [[ -f /etc/crypttab ]]; then
+    echo "Configuring GRUB for encrypted system..."
+    echo "GRUB_ENABLE_CRYPTODISK=y" >> /etc/default/grub
+    echo "Adding cryptodisk modules to GRUB..."
+    sed -i 's/GRUB_PRELOAD_MODULES=".*"/GRUB_PRELOAD_MODULES="part_gpt cryptodisk luks"/' /etc/default/grub
+    echo "GRUB_CMDLINE_LINUX=\"cryptdevice=UUID=$(blkid -s UUID -o value /dev/mapper/cryptroot):cryptroot\"" >> /etc/default/grub
 fi
 
-# Install and configure GRUB with crypto modules
+# Install GRUB properly
+echo "Installing GRUB to EFI partition..."
 grub-install --target=x86_64-efi \
              --efi-directory=/boot/efi \
              --bootloader-id=GRUB \
-             --modules="part_gpt cryptodisk luks" \
-             --recheck
+             --recheck \
+             --modules="part_gpt ext2 fat cryptodisk luks" \
+             --debug
 
-update-grub
-update-initramfs -v -u -k all
+# Create fallback EFI bootloader
+mkdir -p /boot/efi/EFI/BOOT
+cp /boot/efi/EFI/GRUB/grubx64.efi /boot/efi/EFI/BOOT/BOOTX64.EFI
 
-# Create manual EFI boot entry if needed
-if [ -d /sys/firmware/efi ]; then
-    efibootmgr --create --disk $(echo $ROOT_PART | sed 's/[0-9]*$//') \
-               --part ${ROOT_PART: -1} \
-               --loader /EFI/GRUB/grubx64.efi \
-               --label "GRUB" 2>/dev/null || true
+# Generate GRUB config with proper paths
+echo "Generating GRUB configuration..."
+grub-mkconfig -o /boot/grub/grub.cfg
+
+# Verify GRUB installation
+if [[ ! -f /boot/grub/grub.cfg ]]; then
+    echo "ERROR: GRUB configuration failed to generate!"
+    echo "Attempting manual recovery..."
+    grub-mkconfig -o /boot/grub/grub.cfg
 fi
 
-# Set root password
-echo "Set root password:"
-passwd
+# Update initramfs (critical for LUKS)
+echo "Updating initramfs..."
+update-initramfs -u -k all
 
-# Clean up
-[ -f /chroot_install.sh ] && rm /chroot_install.sh
 EOF
 
 chmod +x /mnt/chroot_install.sh
@@ -253,7 +188,7 @@ echo -e "\nNOTE: For LUKS, you'll need to enter your passphrase once during boot
 
 read -p "Press Enter after completing chroot steps..." dummy
 
-# Clean up mounts
+# Clean up
 umount -R /mnt
 [[ "$USE_LUKS" == "y" ]] && cryptsetup close cryptroot
 
