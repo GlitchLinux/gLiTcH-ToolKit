@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# Check if running as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root. Use 'sudo ./uninstall-libreoffice.sh'."
+    exit 1
+fi
+
+# Step 1: Remove all LibreOffice packages
+echo "Removing LibreOffice packages..."
+apt purge -y $(dpkg -l | grep -E 'libreoffice|libobasis' | awk '{print $2}') 2>/dev/null
+
+# Step 2: Remove orphaned dependencies
+echo "Cleaning up unused dependencies..."
+apt autoremove -y --purge
+
+# Step 3: Remove system-wide config files
+echo "Removing system configuration files..."
+rm -rf /etc/libreoffice
+rm -rf /usr/lib/libreoffice
+rm -rf /usr/share/libreoffice
+
+# Step 4: Remove user-specific LibreOffice configs (for all users)
+echo "Removing user configuration files..."
+for user_home in /home/* /root; do
+    [ -d "$user_home" ] || continue
+    rm -rf "$user_home/.config/libreoffice"
+    rm -rf "$user_home/.local/share/libreoffice"
+done
+
+# Step 5: Clean up temporary files
+echo "Removing temporary files..."
+rm -rf /tmp/libreoffice*
+rm -rf /var/tmp/libreoffice*
+
+# Step 6: Update package database
+echo "Updating package database..."
+apt update -y
+
+echo "LibreOffice has been completely uninstalled."
