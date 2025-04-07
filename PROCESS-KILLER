@@ -1,0 +1,57 @@
+#!/bin/bash
+
+# Define ANSI color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Function to display processes
+show_processes() {
+    clear
+    echo -e "${CYAN}┌───────────────────────────────────────────────────────┐"
+    echo -e "│ ${YELLOW}Process Killer - Select a process to terminate ${CYAN}        │"
+    echo -e "└───────────────────────────────────────────────────────┘${NC}"
+    echo ""
+    
+    # Get processes with PID, CPU%, MEM%, and command
+    ps -eo pid,pcpu,pmem,comm --sort=-%cpu | awk 'NR<=20' | while read -r pid pcpu pmem comm; do
+        printf "${GREEN}%6s ${RED}%5s%% ${BLUE}%5s%% ${YELLOW}%-30s${NC}\n" "$pid" "$pcpu" "$pmem" "$comm"
+    done
+}
+
+while true; do
+    show_processes
+    
+    echo -e "\n${CYAN}Enter PID to kill (or 'q' to quit, 'r' to refresh):${NC} "
+    read -r choice
+    
+    # Exit if user chooses q
+    if [[ "$choice" == "q" ]]; then
+        echo -e "${RED}Exiting.${NC}"
+        break
+    fi
+    
+    # Refresh if user chooses r
+    if [[ "$choice" == "r" ]]; then
+        continue
+    fi
+    
+    # Check if input is numeric
+    if [[ "$choice" =~ ^[0-9]+$ ]]; then
+        # Verify process exists
+        if ps -p "$choice" > /dev/null; then
+            echo -e "${YELLOW}Killing process ${RED}$choice${YELLOW}...${NC}"
+            kill -9 "$choice"
+            sleep 1
+        else
+            echo -e "${RED}No process with PID $choice found!${NC}"
+            sleep 1
+        fi
+    else
+        echo -e "${RED}Invalid input. Please enter a numeric PID.${NC}"
+        sleep 1
+    fi
+done
