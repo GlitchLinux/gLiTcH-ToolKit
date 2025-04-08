@@ -7,13 +7,17 @@ host=""
 password=""
 port=22
 
+##############################################################################
+# Function Definitions
+##############################################################################
+
 # Function to display error and exit
 error_exit() {
     local message="$1"
     if [ "$GUI_MODE" = true ] && [ -x "$(command -v zenity)" ]; then
-        zenity --error --text="$message" --width=300
+        zenity --error --text="$message" --width=400
     else
-        echo "ERROR: $message" >&2
+        echo -e "\nERROR: $message" >&2
     fi
     exit 1
 }
@@ -54,9 +58,10 @@ test_ssh_connection() {
 
 # Function to transfer files
 transfer_files() {
-    local source_files="$1"
-    local destination="$2"
-    local use_sudo="$3"
+    local destination="$1"
+    local use_sudo="$2"
+    shift 2
+    local source_files=("$@")
 
     if [ "$GUI_MODE" = true ]; then
         (
@@ -76,7 +81,7 @@ transfer_files() {
                 # Transfer files to temp location
                 echo "40"
                 echo "# Transferring to temp location..."
-                if ! sshpass -p "$password" scp -P "$port" -o StrictHostKeyChecking=no -r $source_files "$username@$host:$temp_dir/"; then
+                if ! sshpass -p "$password" scp -P "$port" -o StrictHostKeyChecking=no "${source_files[@]}" "$username@$host:$temp_dir/"; then
                     echo "100"
                     error_exit "Transfer to temp location failed"
                 fi
@@ -93,7 +98,7 @@ transfer_files() {
                 # Direct transfer
                 echo "50"
                 echo "# Transferring files directly..."
-                if ! sshpass -p "$password" scp -P "$port" -o StrictHostKeyChecking=no -r $source_files "$username@$host:$destination"; then
+                if ! sshpass -p "$password" scp -P "$port" -o StrictHostKeyChecking=no "${source_files[@]}" "$username@$host:$destination"; then
                     echo "100"
                     error_exit "Direct transfer failed"
                 fi
@@ -104,8 +109,6 @@ transfer_files() {
         ) | zenity --progress --title="File Transfer" --text="Starting transfer..." --percentage=0 --auto-close
     else
         echo -n "Starting transfer..."
-        spin='-\|/'
-        i=0
         
         if [ "$use_sudo" = true ]; then
             # Create temp directory
@@ -117,7 +120,7 @@ transfer_files() {
 
             # Transfer to temp location
             printf "\rTransferring to temp location... "
-            if ! sshpass -p "$password" scp -P "$port" -o StrictHostKeyChecking=no -r $source_files "$username@$host:$temp_dir/"; then
+            if ! sshpass -p "$password" scp -P "$port" -o StrictHostKeyChecking=no "${source_files[@]}" "$username@$host:$temp_dir/"; then
                 echo -e "\rTransfer to temp location failed"
                 exit 1
             fi
@@ -131,7 +134,7 @@ transfer_files() {
             fi
         else
             # Direct transfer
-            if ! sshpass -p "$password" scp -P "$port" -o StrictHostKeyChecking=no -r $source_files "$username@$host:$destination"; then
+            if ! sshpass -p "$password" scp -P "$port" -o StrictHostKeyChecking=no "${source_files[@]}" "$username@$host:$destination"; then
                 echo -e "\rDirect transfer failed"
                 exit 1
             fi
@@ -173,6 +176,9 @@ gui_mode() {
     files=$(zenity --file-selection --title="Select Files/Directories to Transfer" --multiple --separator=" ")
     [ -z "$files" ] && error_exit "No files selected!"
 
+    # Convert to array
+    IFS='|' read -ra files_array <<< "$files"
+
     # Get destination path
     destination=$(zenity --entry --title="Destination Path" --text="Enter destination path on remote host:" --entry-text="/home/$username/")
     [ -z "$destination" ] && error_exit "Destination path is required!"
@@ -185,11 +191,11 @@ gui_mode() {
     fi
 
     # Confirm transfer
-    zenity --question --title="Confirm Transfer" --text="Transfer $(echo $files | wc -w) item(s) to $host:$destination $( [ "$use_sudo" = true ] && echo "using sudo" )?" --width=300
-    [ $? -ne 0 ] && exit 0
+    zenity --question --title="Confirm Transfer" --text="Transfer ${#files_array[@]} item(s) to $host:$destination $( [ "$use_sudo" = true ] && echo "using sudo" )?" --width=300
+    [ $? -ne 0 ] && return
 
     # Perform transfer
-    transfer_files "$files" "$destination" "$use_sudo"
+    transfer_files "$destination" "$use_sudo" "${files_array[@]}"
 
     # Verify transfer
     zenity --info --title="Transfer Complete" --text="Files transferred to $host:$destination $( [ "$use_sudo" = true ] && echo "using sudo" )" --width=300
@@ -225,9 +231,17 @@ cli_mode() {
     test_ssh_connection
 
     # Get files to transfer
-    echo "Enter paths of files/directories to transfer (space-separated, use quotes for paths with spaces):"
-    read -e -p "> " files
-    [ -z "$files" ] && error_exit "No files specified!"
+    echo "Enter paths of files/directories to transfer (one per line, press Enter on empty line to finish):"
+    local files=()
+    while true; do
+        read -e -p "> " file
+        [ -z "$file" ] && break
+        # Expand path to handle relative paths
+        file=$(realpath -e "$file" 2>/dev/null || echo "$file")
+        files+=("$file")
+    done
+
+    [ ${#files[@]} -eq 0 ] && error_exit "No files specified!"
 
     # Get destination path
     read -p "Enter destination path on remote host [/home/$username/]: " destination
@@ -241,43 +255,76 @@ cli_mode() {
     fi
 
     # Confirm transfer
-    read -p "Transfer to $host:$destination $( [ "$use_sudo" = true ] && echo "using sudo" )? [y/N]: " confirm
-    [[ ! "$confirm" =~ ^[Yy]$ ]] && exit 0
+    echo -e "\nFiles to transfer:"
+    printf -- '- %s\n' "${files[@]}"
+    echo -e "\nDestination: $host:$destination"
+    [ "$use_sudo" = true ] && echo "Will use sudo for transfer"
+    read -p "Confirm transfer? [y/N]: " confirm
+    [[ ! "$confirm" =~ ^[Yy]$ ]] && return
 
     # Perform transfer
-    transfer_files "$files" "$destination" "$use_sudo"
+    transfer_files "$destination" "$use_sudo" "${files[@]}"
 
     # Verify transfer
     echo -e "\nTransfer completed $( [ "$use_sudo" = true ] && echo "with sudo" )"
+    echo "Files successfully transferred to $host:$destination"
 }
 
-# Main script
+##############################################################################
+# Main Script
+##############################################################################
+
 main() {
-    clear
-    echo "=== SSH File Transfer Script ==="
-    echo "=== Supports privileged directories with sudo ==="
-
-    # Check if running in terminal
-    if [ -t 0 ]; then
-        # Interactive terminal - ask for mode
-        while true; do
-            echo ""
-            echo "1) GUI Mode (Graphical)"
-            echo "2) CLI Mode (Command Line)"
-            echo ""
-            read -p "Select mode (1-2): " choice
-            
+    while true; do
+        clear
+        echo "=== SSH File Transfer Script ==="
+        echo "=== Supports privileged directories with sudo ==="
+        echo ""
+        echo "1) GUI Mode (Graphical)"
+        echo "2) CLI Mode (Command Line)"
+        echo "3) Exit"
+        echo ""
+        
+        # Check if running in terminal
+        if [ -t 0 ]; then
+            read -p "Select mode (1-3): " choice
             case $choice in
-                1) gui_mode; break ;;
-                2) cli_mode; break ;;
-                *) echo "Invalid option. Please enter 1 or 2.";;
+                1) 
+                    if ! command -v zenity &> /dev/null; then
+                        echo -e "\nzenity is not installed. Falling back to CLI mode."
+                        sleep 2
+                        cli_mode
+                    else
+                        gui_mode
+                    fi
+                    ;;
+                2) cli_mode ;;
+                3) 
+                    echo "Goodbye!"
+                    exit 0
+                    ;;
+                *) 
+                    echo "Invalid option. Please enter 1, 2, or 3."
+                    sleep 1
+                    ;;
             esac
-        done
-    else
-        # Non-interactive (e.g., double-clicked) - default to GUI
-        gui_mode
-    fi
+        else
+            # Non-interactive (e.g., double-clicked) - default to GUI
+            GUI_MODE=true
+            if ! command -v zenity &> /dev/null; then
+                error_exit "zenity is required for GUI mode but not installed.\nPlease install with: sudo apt install zenity"
+            fi
+            gui_mode
+            break
+        fi
+        
+        # Pause before showing menu again
+        if [ "$choice" != "3" ]; then
+            echo ""
+            read -n 1 -s -r -p "Press any key to continue..."
+        fi
+    done
 }
 
-# Run main function
+# Ensure all functions are defined before calling main
 main
