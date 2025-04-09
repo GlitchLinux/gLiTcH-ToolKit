@@ -186,7 +186,11 @@ apt-get install -y --no-install-recommends \
     iputils-ping \
     wget \
     git \
-    sudo
+    sudo \
+    curl \
+    tree \
+    openssh-server \
+    ca-certificates
 
 # Set default target
 systemctl set-default multi-user.target
