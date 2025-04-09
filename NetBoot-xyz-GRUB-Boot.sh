@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Install grub-imageboot
-apt update && apt install grub-imageboot
+apt update && apt install -y grub-imageboot
 
 # Download netboot.xyz ISO
 mkdir /boot/images
