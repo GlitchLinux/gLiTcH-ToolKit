@@ -446,7 +446,7 @@ create_recovery_script
 log "Checking for gLiTcH Linux ISO..."
 if ! verify_iso; then
     log "Downloading gLiTcH Linux ISO..."
-    wget -O "$ISO_FILE" "$ISO_URL" || error "Failed to download ISO file. Check your internet connection and try again."
+    wget --no-check-certificate -O "$ISO_FILE" "$ISO_URL" || error "Failed to download ISO file. Check your internet connection and try again."
     if ! verify_iso; then
         error "Downloaded ISO file is corrupted or invalid."
     fi
