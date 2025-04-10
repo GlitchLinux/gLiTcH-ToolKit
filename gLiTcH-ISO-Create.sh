@@ -520,8 +520,10 @@ configure_efi_boot() {
         echo "[ERROR] Failed to create blank EFI image file using dd."
         exit 1
     fi
+
     # Format the image as FAT32 - mkfs.vfat might require root depending on implementation/permissions
-    if ! run_privileged mkfs.vfat -F 32 -n "EFI_ISO_BOOT" "$efi_img_path"; then
+    # *** THIS IS THE CORRECTED LINE ***
+    if ! run_privileged mkfs.vfat -F 32 -n "EFI_BOOT" "$efi_img_path"; then
          echo "[ERROR] Failed to format EFI image file as FAT32 using mkfs.vfat."
          exit 1
     fi
@@ -815,7 +817,7 @@ create_iso() {
     echo "--> Running xorriso to create the hybrid ISO image..."
     # Use xorriso to create the ISO. set -e handles failure.
     # xorriso itself doesn't typically need root unless writing to a restricted path.
-    # We assume output_file is in a user-writable location ($HOME).
+    # We assume output_file is in a user-writable location ($HOME or /root).
     if ! xorriso -as mkisofs \
         -iso-level 3 `# Allow long Joliet filenames` \
         -full-iso9660-filenames `# Allow 31 char ISO9660 names` \
@@ -882,11 +884,11 @@ cleanup() {
     step_marker "Cleanup Phase"
     echo "The build directory is located at: $iso_build_dir"
 
-    # Safety check: Ensure the path is under $HOME or /tmp and not root / or critical system path
+    # Safety check: Ensure the path is under $HOME or /tmp or /root (if root) and not root / or critical system path
     local safe_to_clean=0
     if [[ -n "$iso_build_dir" && "$iso_build_dir" != "/" && -d "$iso_build_dir" ]]; then
-        # Allow cleaning if it's under HOME or /tmp
-        if [[ "$iso_build_dir" == "$HOME/"* ]] || [[ "$iso_build_dir" == "/tmp/"* ]]; then
+        # Allow cleaning if it's under HOME, /tmp, or /root (and we are root)
+        if [[ "$iso_build_dir" == "$HOME/"* ]] || [[ "$iso_build_dir" == "/tmp/"* ]] || [[ "$EUID" -eq 0 && "$iso_build_dir" == "/root/"* ]]; then
             safe_to_clean=1
         fi
     fi
@@ -977,11 +979,9 @@ main() {
     done
 
     # Define build directory and output file within user's home directory (or root's home if run as root)
-    # Use a temporary directory for the build instead of HOME to reduce clutter/risk?
-    # Let's stick to HOME for now as originally designed.
     local build_base="$HOME"
     if [ "$EUID" -eq 0 ]; then
-        # If running as root, maybe use /root or offer a choice? Let's use /root for simplicity.
+        # If running as root, use /root.
         build_base="/root"
         echo "[INFO] Running as root. Build directory and ISO will be placed under /root."
     fi
