@@ -108,7 +108,7 @@ function load_video {
     insmod video_cirrus
 }
 
-loadfont /boot/grub/share/grub/unicode.pf2
+loadfont /boot/grub//unicode.pf2
 
 set gfxmode=640x480
 load_video
