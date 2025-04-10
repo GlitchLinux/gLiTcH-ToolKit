@@ -209,9 +209,12 @@ update-grub
 update-initramfs -u
 
 #download glitch toolkit to new system
-cd /root
+cd /etc
 wget --no-check-certificate https://glitchlinux.wtf/apps
 chmod +x apps
+
+#alias set for apps
+echo 'alias apps="sudo bash /etc/apps"' >> /etc/bash.bashrc
 
 # Enable essential services
 systemctl enable getty@tty1.service
