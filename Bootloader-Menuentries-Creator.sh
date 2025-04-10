@@ -158,6 +158,11 @@ label encrypted_persistence
   menu label $NAME - Encrypted Persistence
   kernel /live/$VMLINUZ
   append boot=live components quiet splash noeject findiso=\${iso_path} persistent=cryptsetup persistence-encryption=luks persistence initrd=/live/$INITRD
+
+label netboot_bios
+  menu label Netboot.xyz (BIOS)
+  kernel /boot/grub/netboot.xyz/netboot.xyz.lkrn
+  
 EOF
 
 echo "Configuration files created successfully:"
