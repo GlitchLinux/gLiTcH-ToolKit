@@ -1,48 +1,31 @@
 #!/bin/bash
 set -e
 
-# Install required packages if not present
-if ! command -v mksquashfs &> /dev/null; then
-    echo "Installing squashfs-tools..."
-    apt-get update && apt-get install -y squashfs-tools
-fi
+# Install required packages
+sudo apt-get update
+sudo apt-get install -y squashfs-tools rsync
 
-# Create output directory
+# Setup directories
+WORK_DIR="/tmp/squashfs_build"
 OUTPUT_DIR="$HOME/debian_live"
+mkdir -p "$WORK_DIR"
 mkdir -p "$OUTPUT_DIR"
 
-# Create a list of directories to exclude
-cat > /tmp/squashfs-exclude.txt << EOF
-proc
-sys
-tmp
-dev
-run
-mnt
-media
-lost+found
-var/cache/apt/archives
-var/log
-var/tmp
-home/*/.cache
-root/.cache
-boot/grub
-swapfile
-etc/fstab
-${OUTPUT_DIR#/}
-EOF
+# Create a clean copy of the system, excluding problematic directories
+echo "Creating system snapshot (this may take a while)..."
+sudo rsync -aAXv /* "$WORK_DIR" \
+    --exclude={/dev/*,/proc/*,/sys/*,/tmp/*,/run/*,/mnt/*,/media/*,/lost+found,/var/cache/apt/archives/*} \
+    --exclude={/var/log/*,/var/tmp/*,/home/*/.cache/*,/root/.cache/*,/swapfile,/boot/grub/*} \
+    --exclude="$OUTPUT_DIR/*" \
+    --exclude="$WORK_DIR/*"
 
-# Clean up apt cache to reduce image size
-apt-get clean
+# Create the squashfs from the clean copy
+echo "Creating filesystem.squashfs..."
+sudo mksquashfs "$WORK_DIR" "$OUTPUT_DIR/filesystem.squashfs" -comp xz -noappend
 
-# Create the squashfs file
-echo "Creating filesystem.squashfs (this may take a while)..."
-sudo mksquashfs / "$OUTPUT_DIR/filesystem.squashfs" -comp xz -e /tmp/squashfs-exclude.txt
+# Cleanup
+sudo rm -rf "$WORK_DIR"
 
 echo "SquashFS image created at: $OUTPUT_DIR/filesystem.squashfs"
 echo "Size: $(du -h "$OUTPUT_DIR/filesystem.squashfs" | cut -f1)"
-
-# Cleanup
-rm /tmp/squashfs-exclude.txt
-
 echo "Note: To make this bootable, you'll need to set up a proper boot structure with initramfs and bootloader"
