@@ -15,17 +15,28 @@ detect_pkg_manager() {
     else echo "unknown"; fi
 }
 
+# Helper function to execute commands with sudo IF NOT already root
+run_privileged() {
+    if [ "$EUID" -ne 0 ]; then
+        sudo "$@"
+    else
+        # Already root, just run the command
+        "$@"
+    fi
+}
+
+
 install_pkg() {
     local pkg_manager=$1
     shift
     local packages=("$@")
     echo "--> Attempting to install required packages: ${packages[*]}"
-    # Use sudo for package installation
+    # Use run_privileged helper for package installation
     case "$pkg_manager" in
-        apt) sudo apt-get update && sudo apt-get install -y "${packages[@]}" ;;
-        dnf) sudo dnf install -y "${packages[@]}" ;;
-        yum) sudo yum install -y "${packages[@]}" ;;
-        pacman) sudo pacman -S --noconfirm "${packages[@]}" ;;
+        apt) run_privileged apt-get update && run_privileged apt-get install -y "${packages[@]}" ;;
+        dnf) run_privileged dnf install -y "${packages[@]}" ;;
+        yum) run_privileged yum install -y "${packages[@]}" ;;
+        pacman) run_privileged pacman -S --noconfirm "${packages[@]}" ;;
         *) echo "[ERROR] Unsupported package manager '$pkg_manager'. Cannot install packages." ; return 1 ;;
     esac
     echo "--> Package installation attempt finished."
@@ -131,7 +142,7 @@ install_dependencies() {
              if ! install_pkg "$pm" "$grub_efi_pkg"; then
                  echo "[WARNING] Failed to install GRUB EFI package ($grub_efi_pkg). UEFI boot might fail."
              fi
-        fi
+         fi
     fi
     echo "Dependency check/installation finished."
 }
@@ -158,21 +169,21 @@ regenerate_host_initramfs() {
     pm=$(detect_pkg_manager)
     local success=0
 
-    # Use 'sudo' for these commands
+    # Use 'run_privileged' helper for these commands
     case "$pm" in
         apt)
-            echo "Running 'sudo update-initramfs -u -k all'..."
-            if sudo update-initramfs -u -k all; then success=1; fi
+            echo "Running 'run_privileged update-initramfs -u -k all'..."
+            if run_privileged update-initramfs -u -k all; then success=1; fi
             ;;
         dnf | yum)
-            echo "Running 'sudo dracut --force --regenerate-all'..."
+            echo "Running 'run_privileged dracut --force --regenerate-all'..."
             echo "(Ensure /etc/dracut.conf or conf.d includes live modules like 'dmsquash-live')"
-            if sudo dracut --force --regenerate-all; then success=1; fi
+            if run_privileged dracut --force --regenerate-all; then success=1; fi
             ;;
         pacman)
-            echo "Running 'sudo mkinitcpio -P'..."
+            echo "Running 'run_privileged mkinitcpio -P'..."
             echo "(Ensure /etc/mkinitcpio.conf HOOKS includes 'archiso' or similar live hooks)"
-            if sudo mkinitcpio -P; then success=1; fi
+            if run_privileged mkinitcpio -P; then success=1; fi
             ;;
         *)
             echo "[WARNING] Cannot automatically regenerate initramfs for this system ($pm)."
@@ -201,6 +212,7 @@ create_squashfs() {
 
     # Ensure target directory exists
     echo "--> Creating live directory: $iso_build_dir/live"
+    # No sudo needed if $iso_build_dir is in $HOME or user-writable area
     mkdir -p "$iso_build_dir/live"
     if [ $? -ne 0 ]; then
         echo "[ERROR] Failed to create directory structure: $iso_build_dir/live"
@@ -212,7 +224,7 @@ create_squashfs() {
     # Exclude pseudo-filesystems, temporary data, caches, logs, host-specific configs,
     # sensitive data, build artifacts, and potentially large/unneeded directories.
     local exclusions=(
-        "$iso_build_dir/*"          # Exclude the build directory itself! Crucial.
+        "$iso_build_dir/*"        # Exclude the build directory itself! Crucial.
         /proc/*
         /sys/*
         /dev/*
@@ -257,13 +269,13 @@ create_squashfs() {
         /var/cache/pacman/pkg/* # Pacman package cache
 
         # Host-specific configuration files
-        /etc/fstab                  # Should be handled by live env
-        /etc/crypttab               # Host encryption
-        /etc/mtab                   # Should be generated
-        /etc/hostname               # Should be set for live system
-        /etc/hosts                  # Often minimal/generated in live system
-        /etc/resolv.conf            # Often managed dynamically or by live-config
-        /etc/machine-id             # Should be generated on first boot
+        /etc/fstab                   # Should be handled by live env
+        /etc/crypttab                # Host encryption
+        /etc/mtab                    # Should be generated
+        /etc/hostname                # Should be set for live system
+        /etc/hosts                   # Often minimal/generated in live system
+        /etc/resolv.conf             # Often managed dynamically or by live-config
+        /etc/machine-id              # Should be generated on first boot
         /etc/ssh/ssh_host_* # Host SSH keys MUST NOT be cloned
         /etc/NetworkManager/system-connections/* # Saved Wi-Fi passwords etc.
         /etc/udev/rules.d/70-persistent-net.rules # Host specific network device naming
@@ -275,7 +287,7 @@ create_squashfs() {
         /boot/config-* # Kernel config files usually not needed runtime
 
         # Other potential exclusions
-        "$HOME/*.iso"               # Exclude existing ISOs in user's home
+        "$HOME/*.iso"             # Exclude existing ISOs in user's home
         /var/lib/docker/* # Exclude docker images/volumes if present
         /var/lib/libvirt/images/* # Exclude VM images if present
         # Add more based on your specific host system setup
@@ -288,15 +300,15 @@ create_squashfs() {
     done
 
     echo "Creating filesystem.squashfs from / ..."
-    echo "(This will take a significant amount of time and requires sudo privileges)"
+    echo "(This will take a significant amount of time and requires root privileges)"
     echo "Excluding numerous paths (like /proc, /sys, /dev, /tmp, /home/*/.ssh, /var/log, etc)..."
     # echo "Full exclusion list:"
     # printf '  %s\n' "${exclusions[@]}" # Uncomment to see all exclusions
 
-    # Run mksquashfs using sudo. set -e will cause script exit on failure.
+    # Run mksquashfs using run_privileged helper. set -e will cause script exit on failure.
     # -comp xz uses more CPU but gives better compression. Use 'gzip' for faster builds.
     # -b 1M sets block size to 1 MiB, good for general use.
-    if sudo mksquashfs / "$squashfs_target" \
+    if run_privileged mksquashfs / "$squashfs_target" \
         -comp xz \
         -b 1048576 \
         -noappend \
@@ -311,6 +323,7 @@ create_squashfs() {
 
     # Verify the squashfs file (optional, but good practice)
     echo "--> Verifying the created squashfs file (quick check)..."
+    # unsquashfs doesn't typically need root unless checking permissions deep inside
     if ! unsquashfs -s "$squashfs_target" > /dev/null; then
         echo "[ERROR] Created squashfs file ($squashfs_target) appears invalid or corrupted!"
         exit 1
@@ -335,18 +348,18 @@ copy_kernel_initrd() {
     # Prioritize versioned kernels, excluding rescue kernels, sort by version, take latest
     vmlinuz_file=$(find /boot -maxdepth 1 -name 'vmlinuz-[0-9]*' ! -name '*-rescue*' -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)
      if [ -z "$vmlinuz_file" ]; then
-         # Fallback to generic name or first found if specific version not found
-         vmlinuz_file=$(find /boot -maxdepth 1 -name 'vmlinuz' -o -name 'vmlinuz-linux' | head -n 1)
-         if [ -z "$vmlinuz_file" ]; then
-            echo "[ERROR] Could not find a suitable vmlinuz kernel file in /boot."
-            exit 1
-         fi
-         echo "[WARNING] Could not find versioned kernel, using generic: $vmlinuz_file"
-     fi
+          # Fallback to generic name or first found if specific version not found
+          vmlinuz_file=$(find /boot -maxdepth 1 -name 'vmlinuz' -o -name 'vmlinuz-linux' | head -n 1)
+          if [ -z "$vmlinuz_file" ]; then
+              echo "[ERROR] Could not find a suitable vmlinuz kernel file in /boot."
+              exit 1
+          fi
+          echo "[WARNING] Could not find versioned kernel, using generic: $vmlinuz_file"
+       fi
 
     echo "--> Using Kernel: $vmlinuz_file"
-    # Use sudo for the copy for robustness, even if /boot is readable
-    if ! sudo cp "$vmlinuz_file" "$live_dir/vmlinuz"; then
+    # Use run_privileged helper for the copy
+    if ! run_privileged cp "$vmlinuz_file" "$live_dir/vmlinuz"; then
         echo "[ERROR] Failed to copy kernel file '$vmlinuz_file' to '$live_dir/vmlinuz'."
         exit 1
     fi
@@ -370,13 +383,13 @@ copy_kernel_initrd() {
     fi
 
     echo "--> Using Initrd: $initrd_file"
-    # Use sudo for the copy
-    if ! sudo cp "$initrd_file" "$live_dir/initrd.img"; then
+    # Use run_privileged helper for the copy
+    if ! run_privileged cp "$initrd_file" "$live_dir/initrd.img"; then
         echo "[ERROR] Failed to copy initrd file '$initrd_file' to '$live_dir/initrd.img'."
         exit 1
     fi
 
-    # Set permissions (can be done by user if files were copied successfully)
+    # Set permissions (can usually be done by user if files were copied successfully)
     chmod 644 "$live_dir/vmlinuz" "$live_dir/initrd.img"
 
     echo "Kernel and initrd files copied successfully:"
@@ -436,7 +449,7 @@ configure_efi_boot() {
     echo "--> Searching for a suitable GRUB EFI bootloader (bootx64.efi)..."
     # Define potential locations for the GRUB EFI binary
     local potential_grub_paths=(
-        "/usr/lib/grub/x86_64-efi/grubx64.efi"          # Common location (sometimes core.efi)
+        "/usr/lib/grub/x86_64-efi/grubx64.efi"           # Common location (sometimes core.efi)
         "/usr/lib/grub/x86_64-efi-signed/grubx64.efi"   # Signed version (Ubuntu)
         "/usr/lib/grub/x86_64-efi/core.efi"             # Alternative name
         "/boot/efi/EFI/debian/grubx64.efi"              # Installed Debian/Ubuntu
@@ -456,6 +469,7 @@ configure_efi_boot() {
     # Copy or generate the GRUB EFI binary
     if [ -n "$grub_efi_source" ]; then
         echo "--> Copying GRUB EFI binary to $grub_efi_target..."
+        # Copy doesn't usually need root if target is user-writable
         cp "$grub_efi_source" "$grub_efi_target"
         if [ $? -ne 0 ]; then
              echo "[ERROR] Failed to copy GRUB EFI binary from $grub_efi_source."
@@ -468,6 +482,7 @@ configure_efi_boot() {
             # Ensure required grub modules are installed (e.g., grub-efi-amd64-bin on Debian)
             # The modules included here are fairly standard for ISO booting.
             # set -e handles grub-mkimage failure
+            # grub-mkimage itself doesn't usually require root, unless accessing restricted module paths
             if ! grub-mkimage \
                 -o "$grub_efi_target" \
                 -O x86_64-efi \
@@ -500,13 +515,13 @@ configure_efi_boot() {
 
     echo "--> Creating EFI boot image ($efi_img_path, ${efi_img_size}MiB)..."
     rm -f "$efi_img_path" # Remove previous if exists
-    # Use dd with progress status
+    # Use dd with progress status - doesn't need root if target dir is writable
     if ! dd if=/dev/zero of="$efi_img_path" bs=1M count=$efi_img_size status=progress; then
         echo "[ERROR] Failed to create blank EFI image file using dd."
         exit 1
     fi
-    # Format the image as FAT32
-    if ! mkfs.vfat -F 32 -n "EFI_ISO_BOOT" "$efi_img_path"; then
+    # Format the image as FAT32 - mkfs.vfat might require root depending on implementation/permissions
+    if ! run_privileged mkfs.vfat -F 32 -n "EFI_ISO_BOOT" "$efi_img_path"; then
          echo "[ERROR] Failed to format EFI image file as FAT32 using mkfs.vfat."
          exit 1
     fi
@@ -514,26 +529,26 @@ configure_efi_boot() {
     echo "--> Mounting EFI image and copying bootloader..."
     efi_mount_point=$(mktemp -d /tmp/efi_img_mount_XXXXXX)
 
-    # Use sudo to mount the loop device
-    if ! sudo mount -o loop "$efi_img_path" "$efi_mount_point"; then
+    # Use run_privileged helper to mount the loop device
+    if ! run_privileged mount -o loop "$efi_img_path" "$efi_mount_point"; then
         echo "[ERROR] Failed to mount EFI image $efi_img_path at $efi_mount_point."
         rm -rf "$efi_mount_point" # Clean up mount point dir
         exit 1
     fi
 
-    # Use sudo to create directory and copy within the mounted image
-    if ! sudo mkdir -p "$efi_mount_point/EFI/BOOT"; then
+    # Use run_privileged helper to create directory and copy within the mounted image
+    if ! run_privileged mkdir -p "$efi_mount_point/EFI/BOOT"; then
         echo "[ERROR] Failed to create /EFI/BOOT directory inside the mounted EFI image."
-        sudo umount "$efi_mount_point" # Attempt unmount
+        run_privileged umount "$efi_mount_point" # Attempt unmount
         rm -rf "$efi_mount_point"
         exit 1
     fi
 
     if [ -f "$grub_efi_target" ]; then
         # UEFI standard path is /EFI/BOOT/BOOTX64.EFI (case-insensitive on FAT)
-        if ! sudo cp "$grub_efi_target" "$efi_mount_point/EFI/BOOT/BOOTX64.EFI"; then
+        if ! run_privileged cp "$grub_efi_target" "$efi_mount_point/EFI/BOOT/BOOTX64.EFI"; then
             echo "[ERROR] Failed to copy $grub_efi_target into the EFI image."
-            sudo umount "$efi_mount_point" # Attempt unmount
+            run_privileged umount "$efi_mount_point" # Attempt unmount
             rm -rf "$efi_mount_point"
             exit 1
         fi
@@ -541,14 +556,14 @@ configure_efi_boot() {
     else
         # This case should ideally not be reached due to earlier checks/exit
         echo "[ERROR] GRUB EFI binary ($grub_efi_target) is missing. Cannot copy into EFI image."
-        sudo umount "$efi_mount_point" # Attempt unmount
+        run_privileged umount "$efi_mount_point" # Attempt unmount
         rm -rf "$efi_mount_point"
         exit 1
     fi
 
     echo "--> Unmounting EFI image..."
-    # Use sudo to unmount
-    if ! sudo umount "$efi_mount_point"; then
+    # Use run_privileged helper to unmount
+    if ! run_privileged umount "$efi_mount_point"; then
          echo "[WARNING] Failed to unmount EFI image cleanly from $efi_mount_point. Continuing, but check for stale mounts."
     fi
     rm -rf "$efi_mount_point" # Clean up mount point directory itself
@@ -627,10 +642,10 @@ menuentry "$iso_name_pretty - Live Boot (Copy to RAM)" --class gnu-linux --class
 # Persistence example - requires manual setup on the USB drive after writing ISO.
 # A partition or file labeled 'persistence' (or as configured in live-config) is needed.
 # menuentry "$iso_name_pretty - Live with Persistence" --class gnu-linux --class gnu --class os {
-#     echo "Loading Linux kernel: $VMLINUZ_PATH (with Persistence)..."
-#     linux $VMLINUZ_PATH boot=live persistence persistence-read-only quiet splash ---
-#     echo "Loading initial ramdisk: $INITRD_PATH ..."
-#     initrd $INITRD_PATH
+#      echo "Loading Linux kernel: $VMLINUZ_PATH (with Persistence)..."
+#      linux $VMLINUZ_PATH boot=live persistence persistence-read-only quiet splash ---
+#      echo "Loading initial ramdisk: $INITRD_PATH ..."
+#      initrd $INITRD_PATH
 # }
 
 # Optional: Memtest (if memtest binary is included, e.g., at /boot/memtest86+.bin)
@@ -643,8 +658,8 @@ menuentry "$iso_name_pretty - Live Boot (Copy to RAM)" --class gnu-linux --class
 
 # Optional: Chainload Windows (if detected)
 # menuentry "Boot Windows (if installed)" --class windows --class os {
-#     search --fs-uuid --no-floppy --set=root XXXX-XXXX # Replace with Windows EFI partition UUID
-#     chainloader (\${root})/EFI/Microsoft/Boot/bootmgfw.efi
+#      search --fs-uuid --no-floppy --set=root XXXX-XXXX # Replace with Windows EFI partition UUID
+#      chainloader (\${root})/EFI/Microsoft/Boot/bootmgfw.efi
 # }
 
 menuentry "System shutdown" --class shutdown {
@@ -682,15 +697,15 @@ TIMEOUT 150
 # Menu Look and Feel (requires vesamenu.c32)
 MENU TITLE $iso_name_pretty Live Boot Menu
 # MENU BACKGROUND /isolinux/splash.png  # Uncomment and ensure splash.png exists
-MENU COLOR screen       37;40      #80ffffff #00000000 std
-MENU COLOR border       30;44      #40000000 #00000000 std
-MENU COLOR title        1;36;44    #c0ffffff #00000000 std
-MENU COLOR unsel        37;44      #90ffffff #00000000 std
-MENU COLOR hotkey       1;37;44    #ffffffff #00000000 std
-MENU COLOR sel          7;37;40    #e0ffffff #20ffffff all
-MENU COLOR hotsel       1;7;37;40  #e0ffffff #20ffffff all
-MENU COLOR disabled     1;30;44    #60cccccc #00000000 std
-MENU COLOR scrollbar    30;44      #40000000 #00000000 std
+MENU COLOR screen        37;40    #80ffffff #00000000 std
+MENU COLOR border        30;44    #40000000 #00000000 std
+MENU COLOR title         1;36;44  #c0ffffff #00000000 std
+MENU COLOR unsel         37;44    #90ffffff #00000000 std
+MENU COLOR hotkey        1;37;44  #ffffffff #00000000 std
+MENU COLOR sel           7;37;40  #e0ffffff #20ffffff all
+MENU COLOR hotsel        1;7;37;40 #e0ffffff #20ffffff all
+MENU COLOR disabled      1;30;44  #60cccccc #00000000 std
+MENU COLOR scrollbar     30;44    #40000000 #00000000 std
 MENU TABMSG Press [Tab] to edit options, [F1] for Help Menu
 
 LABEL live
@@ -780,8 +795,8 @@ create_iso() {
              mkdir -p "$source_dir/isolinux" # Ensure dir exists
              cp "$syslinux_mbr_found" "$isohybrid_mbr_path"
              if [ ! -f "$isohybrid_mbr_path" ]; then # Verify copy worked
-                echo "[ERROR] Failed to copy isohdpfx.bin. Cannot create hybrid MBR."
-                check_failed=1
+                 echo "[ERROR] Failed to copy isohdpfx.bin. Cannot create hybrid MBR."
+                 check_failed=1
              fi
          else
              echo "[ERROR] Could not find isohdpfx.bin on the system either (searched /usr/lib/syslinux, /usr/share/syslinux, /usr/lib/ISOLINUX)."
@@ -799,8 +814,8 @@ create_iso() {
 
     echo "--> Running xorriso to create the hybrid ISO image..."
     # Use xorriso to create the ISO. set -e handles failure.
-    # This command builds a BIOS+UEFI bootable ISO using ISOLINUX/Syslinux for BIOS
-    # and the GRUB EFI image for UEFI.
+    # xorriso itself doesn't typically need root unless writing to a restricted path.
+    # We assume output_file is in a user-writable location ($HOME).
     if ! xorriso -as mkisofs \
         -iso-level 3 `# Allow long Joliet filenames` \
         -full-iso9660-filenames `# Allow 31 char ISO9660 names` \
@@ -855,7 +870,7 @@ create_iso() {
     echo "------------------------------------------------------------------------------"
     echo "You can now burn this ISO to a DVD or write it to a USB drive using tools like"
     echo "'dd', 'Rufus', 'Ventoy', 'balenaEtcher', etc."
-    echo "(Example using dd: sudo dd if=$output_file of=/dev/sdX bs=4M status=progress oflag=sync )"
+    echo "(Example using dd: run_privileged dd if=$output_file of=/dev/sdX bs=4M status=progress oflag=sync )"
     echo "** Be EXTREMELY careful when using dd to select the correct output device (/dev/sdX) **"
     echo "------------------------------------------------------------------------------"
 
@@ -867,24 +882,33 @@ cleanup() {
     step_marker "Cleanup Phase"
     echo "The build directory is located at: $iso_build_dir"
 
-    # Safety check: Ensure the path is under $HOME and not root /
-    if [[ -n "$iso_build_dir" && "$iso_build_dir" != "/" && "$iso_build_dir" == "$HOME/"* && -d "$iso_build_dir" ]]; then
+    # Safety check: Ensure the path is under $HOME or /tmp and not root / or critical system path
+    local safe_to_clean=0
+    if [[ -n "$iso_build_dir" && "$iso_build_dir" != "/" && -d "$iso_build_dir" ]]; then
+        # Allow cleaning if it's under HOME or /tmp
+        if [[ "$iso_build_dir" == "$HOME/"* ]] || [[ "$iso_build_dir" == "/tmp/"* ]]; then
+            safe_to_clean=1
+        fi
+    fi
+
+    if [[ "$safe_to_clean" -eq 1 ]]; then
        read -p "Do you want to remove the build directory ($iso_build_dir)? (y/N): " confirm_cleanup
        if [[ "$confirm_cleanup" =~ ^[Yy]$ ]]; then
            echo "--> Removing build directory: $iso_build_dir ..."
-           # No sudo should be needed if it's in $HOME and owned by user
+           # rm -rf usually doesn't need root if the user owns the dir (e.g., under $HOME)
+           # If run as root, root can remove it anyway.
            rm -rf "$iso_build_dir"
            if [ $? -eq 0 ]; then
-                echo "--> Build directory removed successfully."
+               echo "--> Build directory removed successfully."
            else
-                echo "[WARNING] Failed to remove the build directory completely. Manual cleanup might be required."
-                echo "Check permissions within $iso_build_dir"
+               echo "[WARNING] Failed to remove the build directory completely. Manual cleanup might be required."
+               echo "Check permissions within $iso_build_dir"
            fi
        else
-            echo "--> Skipping cleanup. Build directory preserved."
+           echo "--> Skipping cleanup. Build directory preserved."
        fi
     else
-        echo "[WARNING] Skipping automatic cleanup prompt due to potentially unsafe or non-existent path: $iso_build_dir"
+        echo "[WARNING] Skipping automatic cleanup prompt due to potentially unsafe or non-standard path: $iso_build_dir"
         echo "Please check and clean up manually if needed."
     fi
 }
@@ -900,27 +924,36 @@ main() {
     echo "### WARNING: This script clones the running    ###"
     echo "###          host system, potentially including###"
     echo "###          sensitive data and configuration. ###"
-    echo "###          It also requires sudo privileges  ###"
-    echo "###          for many operations. USE CAUTION! ###"
+    echo "###          USE CAUTION!                      ###"
+    echo "##################################################"
+    echo "### MODIFICATION WARNING: The check preventing ###"
+    echo "### root execution has been removed. Running   ###"
+    echo "### this script as root carries increased risk.###"
     echo "##################################################"
     echo ""
 
-    # Check if running as root - Don't allow this.
-    if [ "$EUID" -eq 0 ]; then
-      echo "[ERROR] Please do not run this script as root."
-      echo "It will use 'sudo' internally for commands that require elevated privileges."
-      exit 1
-    fi
-    # Check if sudo is available
-    if ! command -v sudo &> /dev/null; then
-        echo "[ERROR] 'sudo' command not found. This script requires sudo access."
+    # ======================================================================== #
+    # === ROOT EXECUTION CHECK REMOVED ===
+    # The original check preventing root execution has been commented out/removed
+    # as per the user request. This is NOT recommended for safety.
+    #
+    # Original check was:
+    # if [ "$EUID" -eq 0 ]; then
+    #     echo "[ERROR] Please do not run this script as root."
+    #     echo "It will use 'sudo' internally for commands that require elevated privileges."
+    #     exit 1
+    # fi
+    # ======================================================================== #
+
+    # Check if sudo is available (Still useful if script is NOT run as root)
+    if [ "$EUID" -ne 0 ] && ! command -v sudo &> /dev/null; then
+        echo "[ERROR] 'sudo' command not found. This script requires sudo access if not run as root."
         exit 1
     fi
-    # Verify the user has sudo privileges by running a simple command
-    if ! sudo -v; then
-        echo "[ERROR] Could not verify sudo privileges. Please ensure you can run sudo commands."
-        exit 1
-    fi
+    # Verify the user has sudo privileges (Only relevant if NOT run as root)
+    # We skip the `sudo -v` check here as it might require interaction and is less critical
+    # if the user explicitly decided to run as root or non-root. The internal `run_privileged`
+    # function will handle sudo prompting if needed and possible.
 
 
     # === Phase 1: Setup and Preparation ===
@@ -943,9 +976,17 @@ main() {
         fi
     done
 
-    # Define build directory and output file within user's home directory
-    local iso_build_dir="$HOME/ISO_BUILD_${iso_name}" # Make build dir name distinct
-    local output_iso_file="$HOME/${iso_name}.iso" # Final ISO path in user's home
+    # Define build directory and output file within user's home directory (or root's home if run as root)
+    # Use a temporary directory for the build instead of HOME to reduce clutter/risk?
+    # Let's stick to HOME for now as originally designed.
+    local build_base="$HOME"
+    if [ "$EUID" -eq 0 ]; then
+        # If running as root, maybe use /root or offer a choice? Let's use /root for simplicity.
+        build_base="/root"
+        echo "[INFO] Running as root. Build directory and ISO will be placed under /root."
+    fi
+    local iso_build_dir="${build_base}/ISO_BUILD_${iso_name}" # Make build dir name distinct
+    local output_iso_file="${build_base}/${iso_name}.iso" # Final ISO path
 
     # Create a sanitized volume label (uppercase, limited chars/length for ISO standard)
     local iso_vol_label=$(echo "$iso_name" | tr '[:lower:]' '[:upper:]' | tr -cd '[:alnum:]_' | cut -c1-32)
@@ -954,10 +995,10 @@ main() {
     fi
 
     echo "--- Configuration Summary ---"
-    echo " ISO Base Name      : $iso_name"
-    echo " ISO Volume ID      : $iso_vol_label"
-    echo " Build Directory    : $iso_build_dir"
-    echo " Output ISO File    : $output_iso_file"
+    echo " ISO Base Name     : $iso_name"
+    echo " ISO Volume ID     : $iso_vol_label"
+    echo " Build Directory   : $iso_build_dir"
+    echo " Output ISO File   : $output_iso_file"
     echo "---------------------------"
 
     # Check for existing build directory or ISO file
@@ -965,6 +1006,7 @@ main() {
         read -p "[WARNING] Build directory '$iso_build_dir' already exists. Overwrite? (y/N): " confirm_overwrite_build
         if [[ "$confirm_overwrite_build" =~ ^[Yy]$ ]]; then
             echo "--> Removing existing build directory..."
+            # Root can remove anything, user needs write permission
             rm -rf "$iso_build_dir"
         else
             echo "Aborting."
@@ -983,6 +1025,9 @@ main() {
 
     # === Phase 3: Build Steps ===
     # 'set -e' ensures script stops automatically if any step below fails
+
+    # Ensure build dir exists before starting steps that write to it
+    mkdir -p "$iso_build_dir"
 
     create_squashfs "$iso_build_dir"
     copy_kernel_initrd "$iso_build_dir"
