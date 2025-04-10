@@ -1,6 +1,6 @@
 #/bin/bash
 
-sudo apt update && sudo apt install -y calamares calamares-settings-debian cryptsetup xterm
+sudo apt update && sudo apt install -y calamares calamares-settings-debian xterm xinit xserver-xorg xserver-xorg-video-dummy
 sudo rm -r /etc/calamares/
 
 cd /tmp 
