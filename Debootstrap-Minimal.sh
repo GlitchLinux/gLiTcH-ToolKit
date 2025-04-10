@@ -120,7 +120,7 @@ echo "gLiTcH" > /etc/hostname
 # Configure hosts file
 cat > /etc/hosts <<HOSTS
 127.0.0.1   localhost
-127.0.1.1   debian
+127.0.1.1   gLiTcH
 
 # The following lines are desirable for IPv6 capable hosts
 ::1     localhost ip6-localhost ip6-loopback
