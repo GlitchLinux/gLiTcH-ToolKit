@@ -1,18 +1,17 @@
 #!/bin/bash
 
-# Script to install fastfetch, configure it with a Text Banner logo theme (v9),
+# Script to install fastfetch, configure it for STATS ONLY (No Logo - v10),
 # setup .bashrc to run it (including 'glitch' alias), and backup the existing .bashrc.
-# NOTE: This version embeds ANSI colors in the logo file and uses default formats.
+# NOTE: Uses default formats, attempts green keys/separator.
 
 BASHRC_FILE="$HOME/.bashrc"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="${BASHRC_FILE}.bak_ff_glitch_${TIMESTAMP}"
 CONFIG_DIR="$HOME/.config/fastfetch"
-# Using a descriptive name for the logo file
-ASCII_FILE="$CONFIG_DIR/text_banner_logo.txt"
+# No ASCII_FILE needed
 CONFIG_FILE="$CONFIG_DIR/config.jsonc"
 
-echo "--- Text Banner Logo Fastfetch .bashrc Installer (v9) ---"
+echo "--- No-Logo Fastfetch .bashrc Installer (v10) ---"
 echo "[WARN] This script requires Nerd Fonts for icons to display correctly."
 echo "[INFO] Will attempt to install 'fastfetch'."
 
@@ -61,38 +60,22 @@ else
     exit 1
 fi
 
-# 4. Create Text Banner ASCII art file WITH ANSI COLORS
-# Using cat + heredoc; LG=Light Green, GR=Gray, R=Reset
-print_info "Creating/Updating custom ASCII art file with ANSI colors: $ASCII_FILE ..."
-LG='\e[1;92m' GR='\e[0;90m' R='\e[0m' # Define colors
-cat > "$ASCII_FILE" << EOF_ASCII
-${GR} -+-+-+-+-+-+-+-+-+-+-+-+${R}
-${GR} |${LG}g${GR}|${LG}L${GR}|${LG}i${GR}|${LG}T${GR}|${LG}c${GR}|${LG}H${GR}|${LG}-${GR}|${LG}L${GR}|${LG}I${GR}|${LG}N${GR}|${LG}U${GR}|${LG}X${GR}|${R}
-${GR} -+-+-+-+-+-+-+-+-+-+-+-+${R}
-EOF_ASCII
-# Check status after cat
-if [ $? -eq 0 ]; then
-    print_success "ASCII art file created/updated."
-else
-    print_error "Failed to create ASCII art file."
-    rm "$ASCII_FILE" 2>/dev/null
-    exit 1
-fi
+# 4. ASCII File Creation REMOVED
 
-
-# 5. Create fastfetch config file (v9 - Text Banner Logo Path)
+# 5. Create fastfetch config file (v10 - No Logo, Display attempt)
 print_info "Creating/Updating fastfetch config file: $CONFIG_FILE ..."
 cat > "$CONFIG_FILE" << EOF
-// ~/.config/fastfetch/config.jsonc (v9 - Text Banner Logo & Default Formats)
+// ~/.config/fastfetch/config.jsonc (v10 - No Logo, Display Attempt)
 {
   "\$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
   "logo": {
-    // Updated source path to match the variable used above
-    "source": "$ASCII_FILE", // Logo file now contains ANSI colors
-    "type": "file"
-    // Color settings removed here
+    "type": "none" // Disable logo display
   },
-  // "display": { ... } section still removed pending version info. Defaults will be used.
+  // Re-attempting simplified display section - remove if it causes errors
+  "display": {
+    "separator": "  󰑃 ",      // Nerd Font icon separator
+    "keyColor": "light_green" // Color for keys like 'OS', 'Kernel'
+  },
   "modules": [
     // Most "format" keys removed to use defaults, which seem more compatible.
     // Keys use Nerd Font icons for minimal look.
@@ -280,8 +263,8 @@ if [ -f "$BACKUP_FILE" ]; then
     echo "Your previous configuration was backed up to: $BACKUP_FILE"
 fi
 echo "Remember to install a Nerd Font and set it in your terminal for icons!"
-echo "[INFO] Logo is now Text Banner with embedded ANSI colors."
-echo "[INFO] Still recommend providing 'fastfetch --version' and default 'display' config"
-echo "[INFO] if further customization of keys/separators/colors is needed."
+echo "[INFO] Fastfetch is now configured to show STATS ONLY (No Logo)."
+echo "[INFO] Attempted to set green keys/separator. If errors occur or style is wrong,"
+echo "[INFO] please provide 'fastfetch --version' and default 'display' config section."
 echo ""
 exit 0
