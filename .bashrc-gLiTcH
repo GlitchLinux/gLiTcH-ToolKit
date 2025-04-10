@@ -1,17 +1,17 @@
 #!/bin/bash
 
-# Script to install fastfetch, configure it for STATS ONLY (No Logo - v10),
+# Script to install fastfetch, configure it with a glitchy Debian theme (v5),
 # setup .bashrc to run it (including 'glitch' alias), and backup the existing .bashrc.
-# NOTE: Uses default formats, attempts green keys/separator.
+# NOTE: This version removes most custom formats and embeds ANSI colors in the logo file.
 
 BASHRC_FILE="$HOME/.bashrc"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="${BASHRC_FILE}.bak_ff_glitch_${TIMESTAMP}"
 CONFIG_DIR="$HOME/.config/fastfetch"
-# No ASCII_FILE needed
+ASCII_FILE="$CONFIG_DIR/glitchy_debian.txt"
 CONFIG_FILE="$CONFIG_DIR/config.jsonc"
 
-echo "--- No-Logo Fastfetch .bashrc Installer (v10) ---"
+echo "--- Glitchy Debian Fastfetch .bashrc Installer (v5 - ANSI Logo & Default Formats) ---"
 echo "[WARN] This script requires Nerd Fonts for icons to display correctly."
 echo "[INFO] Will attempt to install 'fastfetch'."
 
@@ -60,22 +60,49 @@ else
     exit 1
 fi
 
-# 4. ASCII File Creation REMOVED
-
-# 5. Create fastfetch config file (v10 - No Logo, Display attempt)
-print_info "Creating/Updating fastfetch config file: $CONFIG_FILE ..."
-cat > "$CONFIG_FILE" << EOF
-// ~/.config/fastfetch/config.jsonc (v10 - No Logo, Display Attempt)
+# 4. Create glitchy ASCII art file WITH ANSI COLORS
+# Using printf to ensure ANSI escapes (\e) are interpreted correctly
+print_info "Creating/Updating custom ASCII art file with ANSI colors: $ASCII_FILE ..."
 {
-  "\$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+printf "%b\n" '\e[1;92m        _,met\$\$\$\$\$gg.\e[0m'
+printf "%b\n" '\e[0;32m      ,g\$\$\$\$\$\$\$\$\$\$\$\$\$P.\e[1;92mzZz\e[0m'
+printf "%b\n" '\e[1;92m    ,g\$\$P\e[0;90m""\e[1;92m    #  \`\`\`\`Y\$\$.\e[0;90m\\\e[0m'
+printf "%b\n" '\e[0;32m   ,\$\$P\e[0;90m%\e[0;32m     d0   \e[0;90m&\e[0;32m   \`\$\$..;\e[0m'
+printf "%b\n" '\e[1;92m  \',\$\$P      \e[0;90m,\e[1;92mggs\e[0;32m..\e[1;92m   \e[0;90m%\e[1;92m \`\$\$b:\e[0m'
+printf "%b\n" '\e[0;32m  \`d\$\$\'     ,\$P\e[0;90m"\e[0;32m\'  \e[1;92m.\e[0;32m   \$\$\$;\e[0m'
+printf "%b\n" '\e[1;92m   \$\$P \e[0;90m/\e[1;92m   d\$\'  \e[0;32m ^ \e[0;90m,\e[1;92m   \$\$P\e[0m'
+printf "%b\n" '\e[0;32m   \$\$:     \e[0;90m\$\$..\e[1;92m_\e[0;32m -\e[0;90m#\e[0;32m  ,d\$\$\' \e[0m'
+printf "%b\n" '\e[1;92m   \$\$;     Y\$b._ \e[0;90m _\e[1;92m,d\$P\' \e[0;32m/\e[0m'
+printf "%b\n" '\e[0;32m   Y\$\$. \`.\e[0;90m\`\e[0;32m\"Y\$\$\$\$P\e[0;90m"\e[0;32m\' \e[0;90m#\e[0m'
+printf "%b\n" '\e[1;92m   \`\$\$b \e[0;32m- \e[1;92m  \"-.__ \e[0;90m\'\e[1;92m    \e[0;32m>\e[0m'
+printf "%b\n" '\e[0;32m    \`Y\$\$b       \e[0;90m~ \e[0;32m   :: \e[1;92m_\e[0m'
+printf "%b\n" '\e[1;92m     \`Y\$\$.\e[0;32m    \e[0;90m>!\e[1;92m      \e[0;32m /\e[0m'
+printf "%b\n" '\e[0;32m       \`\$\$b.\e[1;92m  \e[0;90m *\e[0;32m     \e[1;92m_\e[0m'
+printf "%b\n" '\e[1;92m         \`\"Y\$b._ \e[0;90m # \e[0;32m.\e[0m'
+printf "%b\n" '\e[0;32m             \`\"\"\"\"\e[0;90m>\e[0m'
+} > "$ASCII_FILE"
+if [ $? -eq 0 ]; then
+    print_success "ASCII art file created/updated."
+else
+    print_error "Failed to create ASCII art file."
+    # Attempt to remove potentially broken file
+    rm "$ASCII_FILE" 2>/dev/null
+    exit 1
+fi
+
+
+# 5. Create fastfetch config file (v5 - Default Formats)
+print_info "Creating/Updating fastfetch config file (default formats): $CONFIG_FILE ..."
+cat > "$CONFIG_FILE" << 'EOF'
+// ~/.config/fastfetch/config.jsonc (v5 - Default Formats & ANSI Logo)
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
   "logo": {
-    "type": "none" // Disable logo display
+    "source": "~/.config/fastfetch/glitchy_debian.txt", // Logo file now contains ANSI colors
+    "type": "file"
+    // Color settings removed here
   },
-  // Re-attempting simplified display section - remove if it causes errors
-  "display": {
-    "separator": "  󰑃 ",      // Nerd Font icon separator
-    "keyColor": "light_green" // Color for keys like 'OS', 'Kernel'
-  },
+  // "display": { ... } section still removed pending version info. Defaults will be used.
   "modules": [
     // Most "format" keys removed to use defaults, which seem more compatible.
     // Keys use Nerd Font icons for minimal look.
@@ -110,17 +137,16 @@ cat > "$CONFIG_FILE" << EOF
   ]
 }
 EOF
-# Check the config file write was successful before proceeding
-if [ $? -ne 0 ]; then
+if [ $? -eq 0 ]; then
+    print_success "Fastfetch config file created/updated."
+else
     print_error "Failed to create fastfetch config file."
     exit 1
-else
-     print_success "Fastfetch config file created/updated."
 fi
 
 
 # 6. Write the new .bashrc configuration (with glitch alias)
-# (No changes needed in .bashrc itself from previous versions)
+# (No changes needed in .bashrc itself from v4)
 print_info "Checking/Updating .bashrc configuration..."
 touch "$BASHRC_FILE"
 # Remove existing fastfetch block if present to avoid duplicates
@@ -235,13 +261,11 @@ cat >> "$BASHRC_FILE" << 'EOF'
 # --- Run Fastfetch on Login ---
 # Check if command exists and shell is interactive and stdout is a tty
 if command -v fastfetch &> /dev/null && [ -t 1 ] && [[ $- == *i* ]]; then
-    # Pointing fastfetch to the specific config file
     fastfetch --config "$HOME/.config/fastfetch/config.jsonc"
 fi
 
 # End of .bashrc ---
 EOF
-
 
 # Final check and completion message
 if [ -s "$BASHRC_FILE" ] && grep -q "# --- Run Fastfetch on Login ---" "$BASHRC_FILE" && grep -q "alias glitch='exec \$SHELL'" "$BASHRC_FILE"; then
@@ -263,8 +287,9 @@ if [ -f "$BACKUP_FILE" ]; then
     echo "Your previous configuration was backed up to: $BACKUP_FILE"
 fi
 echo "Remember to install a Nerd Font and set it in your terminal for icons!"
-echo "[INFO] Fastfetch is now configured to show STATS ONLY (No Logo)."
-echo "[INFO] Attempted to set green keys/separator. If errors occur or style is wrong,"
-echo "[INFO] please provide 'fastfetch --version' and default 'display' config section."
+echo "[INFO] Logo color is now embedded in the logo file."
+echo "[INFO] Most stats formats are now using defaults for compatibility."
+echo "[INFO] Please provide 'fastfetch --version' output and the default 'display' config section"
+echo "[INFO] if you want to customize separators or key/value colors further."
 echo ""
 exit 0
