@@ -7,20 +7,20 @@
 install_dependencies() {
     echo "Installing required packages..."
     if [ -x "$(command -v apt-get)" ]; then
-        sudo apt-get install -y xorriso isolinux syslinux-utils mtools wget squashfs-tools grub-efi-amd64-bin
+        sudo apt-get install -y xorriso isolinux syslinux-utils mtools wget squashfs-tools rsync dosfstools grub-efi-amd64-bin
     elif [ -x "$(command -v dnf)" ]; then
-        sudo dnf install -y xorriso syslinux mtools wget squashfs-tools grub2-efi-x64
+        sudo dnf install -y xorriso syslinux mtools wget squashfs-tools rsync dosfstools grub2-efi-x64
     elif [ -x "$(command -v yum)" ]; then
-        sudo yum install -y xorriso syslinux mtools wget squashfs-tools grub2-efi-x64
+        sudo yum install -y xorriso syslinux mtools wget squashfs-tools rsync dosfstools grub2-efi-x64
     elif [ -x "$(command -v pacman)" ]; then
-        sudo pacman -S --noconfirm xorriso syslinux mtools wget squashfs-tools grub
+        sudo pacman -S --noconfirm xorriso syslinux mtools wget squashfs-tools rsync dosfstools grub
     else
         echo "ERROR: Could not detect package manager to install dependencies."
         exit 1
     fi
 }
 
-# Create squashfs filesystem directly without using rsync and temp directory
+# Create squashfs filesystem
 create_squashfs() {
     local iso_name="$1"
     local iso_dir="/home/$iso_name"
@@ -36,48 +36,44 @@ create_squashfs() {
     # Create directory structure
     mkdir -p "$iso_dir/live"
     
-    # Create a tmpfs for the exclude list to avoid writing to disk
-    mkdir -p /tmp/squashfs-excludes
+    # Create temporary directory for building squashfs
+    local squashfs_build_dir="/tmp/squashfs_build_$$"
+    mkdir -p "$squashfs_build_dir"
     
-    # Create exclude list for mksquashfs
-    cat > /tmp/squashfs-excludes/exclude.list << EOF
-/dev/*
-/proc/*
-/sys/*
-/tmp/*
-/run/*
-/mnt/*
-/media/*
-/lost+found
-/var/tmp/*
-/var/cache/apt/archives/*
-/var/lib/apt/lists/*
-/home/$iso_name
-/home/*.iso
-/root/.bash_history
-/root/.cache/*
-/usr/src/*
-/boot/*rescue*
-/boot/System.map*
-/boot/vmlinuz.old
-/swapfile
-/swap.img
-EOF
-
-    # Create squashfs directly from root filesystem with exclusions
-    echo "Creating filesystem.squashfs directly (this may take a while)..."
-    sudo mksquashfs \
-        / \
+    # Copy entire system except excluded paths
+    echo "Copying files to temporary directory (this may take a while)..."
+    sudo rsync -aAX \
+        --exclude="$iso_dir" \
+        --exclude="/tmp/*" \
+        --exclude="/var/tmp/*" \
+        --exclude="/var/cache/*" \
+        --exclude="/var/log/*" \
+        --exclude="/var/lib/apt/lists/*" \
+        --exclude="/home/*" \
+        --exclude="/root/.bash_history" \
+        --exclude="/root/.cache" \
+        --exclude="/usr/src/*" \
+        --exclude="/boot/*rescue*" \
+        --exclude="/boot/*config*" \
+        --exclude="/boot/System.map*" \
+        --exclude="/boot/vmlinuz.old" \
+        --exclude="/proc/*" \
+        --exclude="/sys/*" \
+        --exclude="/dev/*" \
+        --exclude="/run/*" \
+        --exclude="*.swap" \
+        / "$squashfs_build_dir"
+    
+    # Create squashfs with maximum compression
+    echo "Compressing filesystem..."
+    sudo mksquashfs "$squashfs_build_dir" \
         "$iso_dir/live/filesystem.squashfs" \
         -comp xz \
         -b 1048576 \
-        -noappend \
-        -ef /tmp/squashfs-excludes/exclude.list
+        -noappend
     
     local squashfs_result=$?
-    
-    # Clean up excludes
-    rm -rf /tmp/squashfs-excludes
+    sudo rm -rf "$squashfs_build_dir"
     
     if [ $squashfs_result -ne 0 ]; then
         echo "Error creating squashfs filesystem"
@@ -115,7 +111,6 @@ copy_kernel_initrd() {
     fi
     
     cp "$initrd_file" "$iso_dir/live/initrd.img"
-    chmod 644 "$iso_dir/live/vmlinuz" "$iso_dir/live/initrd.img"
     
     echo "Kernel and initrd files copied successfully:"
     echo " - $iso_dir/live/vmlinuz"
@@ -145,54 +140,42 @@ download_bootfiles() {
     echo "Bootfiles installed successfully"
 }
 
-# Configure EFI boot
-configure_efi_boot() {
+# Create EFI boot files
+create_efi_files() {
     local iso_dir="$1"
-    local iso_name="$2"
     
-    echo "Configuring EFI boot..."
+    echo "Creating EFI boot files..."
     
-    # Create EFI directory structure
     mkdir -p "$iso_dir/EFI/boot"
     
-    # Copy GRUB EFI files
-    if [ -f /usr/lib/grub/x86_64-efi/core.efi ]; then
-        cp /usr/lib/grub/x86_64-efi/core.efi "$iso_dir/EFI/boot/bootx64.efi"
-    elif [ -f /usr/share/grub/x86_64-efi/core.efi ]; then
-        cp /usr/share/grub/x86_64-efi/core.efi "$iso_dir/EFI/boot/bootx64.efi"
-    elif [ -f /boot/efi/EFI/debian/grubx64.efi ]; then
-        cp /boot/efi/EFI/debian/grubx64.efi "$iso_dir/EFI/boot/bootx64.efi"
-    elif [ -f /boot/efi/EFI/ubuntu/grubx64.efi ]; then
-        cp /boot/efi/EFI/ubuntu/grubx64.efi "$iso_dir/EFI/boot/bootx64.efi"
+    # Create EFI boot image
+    dd if=/dev/zero of="$iso_dir/EFI/boot/efi.img" bs=1M count=32
+    mkfs.vfat -F 32 "$iso_dir/EFI/boot/efi.img"
+    
+    # Mount the image to copy files
+    local efi_mount="/tmp/efi_mount_$$"
+    mkdir -p "$efi_mount"
+    sudo mount -o loop "$iso_dir/EFI/boot/efi.img" "$efi_mount"
+    
+    # Create EFI directory structure
+    sudo mkdir -p "$efi_mount/EFI/BOOT"
+    
+    # Copy bootloader (try to find grub or systemd-boot)
+    if [ -f /usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed ]; then
+        sudo cp /usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed "$efi_mount/EFI/BOOT/bootx64.efi"
+    elif [ -f /usr/lib/grub/x86_64-efi/grubx64.efi ]; then
+        sudo cp /usr/lib/grub/x86_64-efi/grubx64.efi "$efi_mount/EFI/BOOT/bootx64.efi"
+    elif [ -f /usr/lib/systemd/boot/efi/systemd-bootx64.efi ]; then
+        sudo cp /usr/lib/systemd/boot/efi/systemd-bootx64.efi "$efi_mount/EFI/BOOT/bootx64.efi"
     else
-        # Try to generate it
-        echo "GRUB EFI binary not found, attempting to generate one..."
-        if command -v grub-mkstandalone &>/dev/null; then
-            grub-mkstandalone -O x86_64-efi -o "$iso_dir/EFI/boot/bootx64.efi" \
-                --modules="part_gpt part_msdos fat iso9660" \
-                --fonts="unicode" \
-                --locales="" \
-                --themes="" \
-                "/boot/grub/grub.cfg=$iso_dir/boot/grub/grub.cfg"
-        else
-            echo "WARNING: Unable to find or create GRUB EFI binary, EFI boot may not work!"
-        fi
+        echo "Warning: Could not find EFI bootloader, ISO may not boot in UEFI mode"
     fi
     
-    # Create EFI image if not using the bootfiles' version
-    if [ ! -f "$iso_dir/EFI/boot/efi.img" ]; then
-        echo "Creating EFI boot image..."
-        dd if=/dev/zero of="$iso_dir/EFI/boot/efi.img" bs=1M count=16
-        mkfs.vfat "$iso_dir/EFI/boot/efi.img"
-        
-        # Create EFI directory structure on FAT image
-        mmd -i "$iso_dir/EFI/boot/efi.img" ::/EFI ::/EFI/BOOT
-        
-        # Copy EFI file to FAT image
-        if [ -f "$iso_dir/EFI/boot/bootx64.efi" ]; then
-            mcopy -i "$iso_dir/EFI/boot/efi.img" "$iso_dir/EFI/boot/bootx64.efi" ::/EFI/BOOT/
-        fi
-    fi
+    # Unmount and clean up
+    sudo umount "$efi_mount"
+    rm -rf "$efi_mount"
+    
+    echo "EFI boot files created successfully"
 }
 
 # Create the ISO
@@ -201,25 +184,13 @@ create_iso() {
     local output_file="$2"
     local iso_label="$3"
     
-    # Verify we have the necessary files
-    if [ ! -f "$source_dir/isolinux/isolinux.bin" ]; then
-        echo "Error: Required file isolinux.bin not found"
-        return 1
-    fi
-    
-    if [ ! -f "$source_dir/isolinux/isohdpfx.bin" ]; then
-        echo "Error: Required file isohdpfx.bin not found"
-        return 1
-    fi
+    # Create EFI boot files
+    create_efi_files "$source_dir"
     
     echo "Creating hybrid ISO image..."
     xorriso -as mkisofs \
         -iso-level 3 \
-        -full-iso9660-filenames \
         -volid "$iso_label" \
-        -appid "GlitchLinux Live" \
-        -publisher "GlitchLinux" \
-        -preparer "GlitchLinux ISO Creator" \
         -b isolinux/isolinux.bin \
         -c isolinux/boot.cat \
         -no-emul-boot \
@@ -233,14 +204,7 @@ create_iso() {
         -o "$output_file" \
         "$source_dir"
 
-    local iso_result=$?
-    if [ $iso_result -ne 0 ]; then
-        echo "Error creating ISO image"
-        return 1
-    fi
-    
     echo "ISO created successfully at: $output_file"
-    return 0
 }
 
 # Generate boot configurations
@@ -261,8 +225,6 @@ generate_boot_configs() {
 set default="0"
 set timeout=10
 
-search --set=root --file /live/vmlinuz
-
 function load_video {
     insmod vbe
     insmod vga
@@ -278,24 +240,28 @@ insmod gfxterm
 set locale_dir=/boot/grub/locale
 set lang=C
 insmod gettext
-if [ -f /boot/grub/splash.png ]; then
-    background_image -m stretch /boot/grub/splash.png
-    terminal_output gfxterm
-    insmod png
+background_image -m stretch /boot/grub/splash.png
+terminal_output gfxterm
+insmod png
+if background_image /boot/grub/splash.png; then
+    true
+else
+    set menu_color_normal=cyan/blue
+    set menu_color_highlight=white/blue
 fi
 
 menuentry "$NAME - LIVE" {
-    linux /live/$VMLINUZ boot=live quiet splash
+    linux /live/$VMLINUZ boot=live config quiet
     initrd /live/$INITRD
 }
 
 menuentry "$NAME - Boot ISO to RAM" {
-    linux /live/$VMLINUZ boot=live quiet splash toram
+    linux /live/$VMLINUZ boot=live config quiet toram
     initrd /live/$INITRD
 }
 
 menuentry "$NAME - Encrypted Persistence" {
-    linux /live/$VMLINUZ boot=live quiet splash noeject findiso=\${iso_path} persistent=cryptsetup persistence-encryption=luks persistence
+    linux /live/$VMLINUZ boot=live components quiet splash noeject findiso=\${iso_path} persistent=cryptsetup persistence-encryption=luks persistence
     initrd /live/$INITRD
 }
 
@@ -320,17 +286,17 @@ menu background splash.png
 label live
   menu label $NAME - LIVE
   kernel /live/$VMLINUZ
-  append initrd=/live/$INITRD boot=live quiet splash
+  append boot=live config quiet initrd=/live/$INITRD
 
 label live_ram
   menu label $NAME - Boot ISO to RAM
   kernel /live/$VMLINUZ
-  append initrd=/live/$INITRD boot=live quiet splash toram
+  append boot=live config quiet toram initrd=/live/$INITRD
 
 label encrypted_persistence
   menu label $NAME - Encrypted Persistence
   kernel /live/$VMLINUZ
-  append initrd=/live/$INITRD boot=live quiet splash noeject findiso=\${iso_path} persistent=cryptsetup persistence-encryption=luks persistence
+  append boot=live components quiet splash noeject findiso=\${iso_path} persistent=cryptsetup persistence-encryption=luks persistence initrd=/live/$INITRD
 
 label netboot_bios
   menu label Netboot.xyz (BIOS)
@@ -347,7 +313,9 @@ main() {
     echo "=== ISO Creation Script ==="
     
     # Check and install dependencies
-    if ! command -v xorriso &>/dev/null || ! command -v mkfs.vfat &>/dev/null || ! command -v wget &>/dev/null || ! command -v mksquashfs &>/dev/null; then
+    if ! command -v xorriso &>/dev/null || ! command -v mkfs.vfat &>/dev/null || 
+       ! command -v wget &>/dev/null || ! command -v mksquashfs &>/dev/null ||
+       ! command -v rsync &>/dev/null; then
         install_dependencies
     fi
     
@@ -364,9 +332,6 @@ main() {
     
     # Download bootfiles
     download_bootfiles "$ISO_DIR"
-    
-    # Configure EFI boot
-    configure_efi_boot "$ISO_DIR" "$iso_name"
     
     # Set detected files
     VMLINUZ="vmlinuz"
