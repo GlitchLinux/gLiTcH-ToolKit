@@ -125,7 +125,7 @@ menuentry "$NAME - Encrypted Persistence" {
     initrd /live/$INITRD
 }
 
-menuentry "GRUBFM (UEFI)" {
+menuentry "GRUBFM - (UEFI)" {
     chainloader /EFI/GRUB-FM/E2B-bootx64.efi
 }
 
