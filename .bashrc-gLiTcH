@@ -1,36 +1,159 @@
 #!/bin/bash
 
-# Script to install the custom gLiTcH Linux .bashrc theme
-# and backup the existing configuration.
+# Script to install fastfetch, configure it with a glitchy Debian theme (v5),
+# setup .bashrc to run it (including 'glitch' alias), and backup the existing .bashrc.
+# NOTE: This version removes most custom formats and embeds ANSI colors in the logo file.
 
 BASHRC_FILE="$HOME/.bashrc"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="${BASHRC_FILE}.bak_${TIMESTAMP}"
+BACKUP_FILE="${BASHRC_FILE}.bak_ff_glitch_${TIMESTAMP}"
+CONFIG_DIR="$HOME/.config/fastfetch"
+ASCII_FILE="$CONFIG_DIR/glitchy_debian.txt"
+CONFIG_FILE="$CONFIG_DIR/config.jsonc"
 
-echo "--- gLiTcH Linux .bashrc Installer ---"
+echo "--- Glitchy Debian Fastfetch .bashrc Installer (v5 - ANSI Logo & Default Formats) ---"
+echo "[WARN] This script requires Nerd Fonts for icons to display correctly."
+echo "[INFO] Will attempt to install 'fastfetch'."
 
-# 1. Check for existing .bashrc and create backup
-if [ -f "$BASHRC_FILE" ]; then
-  echo "[INFO] Found existing configuration at $BASHRC_FILE"
-  echo "[INFO] Creating backup: $BACKUP_FILE ..."
-  if cp "$BASHRC_FILE" "$BACKUP_FILE"; then
-    echo "[SUCCESS] Backup created successfully."
-  else
-    echo "[ERROR] Failed to create backup. Aborting."
-    exit 1
-  fi
+# --- Helper Functions ---
+print_info() { echo "[INFO] $1"; }
+print_success() { echo "[SUCCESS] $1"; }
+print_warn() { echo "[WARN] $1"; }
+print_error() { echo "[ERROR] $1"; }
+
+# --- Installation ---
+
+# 1. Install fastfetch (Check added)
+if ! command -v fastfetch &> /dev/null; then
+    print_info "fastfetch not found. Attempting to install..."
+    if sudo apt update && sudo apt install -y fastfetch; then
+        print_success "fastfetch installed successfully."
+    else
+        print_error "Failed to install fastfetch. Please install it manually and re-run."
+        exit 1
+    fi
 else
-  echo "[INFO] No existing $BASHRC_FILE found. Skipping backup."
+    print_info "fastfetch is already installed."
 fi
 
-# 2. Write the new .bashrc configuration using a heredoc
-echo "[INFO] Writing new gLiTcH Linux .bashrc configuration..."
+# 2. Backup existing .bashrc (Check added)
+if [ -f "$BASHRC_FILE" ] && ! grep -q "# --- Run Fastfetch on Login ---" "$BASHRC_FILE"; then
+    print_info "Found existing configuration at $BASHRC_FILE (doesn't seem to have fastfetch yet)"
+    print_info "Creating backup: $BACKUP_FILE ..."
+    if cp "$BASHRC_FILE" "$BACKUP_FILE"; then
+        print_success "Backup created successfully."
+    else
+        print_error "Failed to create backup. Aborting."
+        exit 1
+    fi
+elif [ -f "$BASHRC_FILE" ]; then
+     print_info "Existing $BASHRC_FILE found, appears to have fastfetch section already. Skipping backup."
+else
+    print_info "No existing $BASHRC_FILE found. Skipping backup."
+fi
 
-# Use 'EOF' to prevent expansion within the heredoc
+# 3. Create config directory
+if mkdir -p "$CONFIG_DIR"; then
+    print_info "Ensured fastfetch config directory exists: $CONFIG_DIR"
+else
+    print_error "Failed to create config directory: $CONFIG_DIR"
+    exit 1
+fi
+
+# 4. Create glitchy ASCII art file WITH ANSI COLORS
+# Using printf to ensure ANSI escapes (\e) are interpreted correctly
+print_info "Creating/Updating custom ASCII art file with ANSI colors: $ASCII_FILE ..."
+{
+printf "%b\n" '\e[1;92m        _,met\$\$\$\$\$gg.\e[0m'
+printf "%b\n" '\e[0;32m      ,g\$\$\$\$\$\$\$\$\$\$\$\$\$P.\e[1;92mzZz\e[0m'
+printf "%b\n" '\e[1;92m    ,g\$\$P\e[0;90m""\e[1;92m    #  \`\`\`\`Y\$\$.\e[0;90m\\\e[0m'
+printf "%b\n" '\e[0;32m   ,\$\$P\e[0;90m%\e[0;32m     d0   \e[0;90m&\e[0;32m   \`\$\$..;\e[0m'
+printf "%b\n" '\e[1;92m  \',\$\$P      \e[0;90m,\e[1;92mggs\e[0;32m..\e[1;92m   \e[0;90m%\e[1;92m \`\$\$b:\e[0m'
+printf "%b\n" '\e[0;32m  \`d\$\$\'     ,\$P\e[0;90m"\e[0;32m\'  \e[1;92m.\e[0;32m   \$\$\$;\e[0m'
+printf "%b\n" '\e[1;92m   \$\$P \e[0;90m/\e[1;92m   d\$\'  \e[0;32m ^ \e[0;90m,\e[1;92m   \$\$P\e[0m'
+printf "%b\n" '\e[0;32m   \$\$:     \e[0;90m\$\$..\e[1;92m_\e[0;32m -\e[0;90m#\e[0;32m  ,d\$\$\' \e[0m'
+printf "%b\n" '\e[1;92m   \$\$;     Y\$b._ \e[0;90m _\e[1;92m,d\$P\' \e[0;32m/\e[0m'
+printf "%b\n" '\e[0;32m   Y\$\$. \`.\e[0;90m\`\e[0;32m\"Y\$\$\$\$P\e[0;90m"\e[0;32m\' \e[0;90m#\e[0m'
+printf "%b\n" '\e[1;92m   \`\$\$b \e[0;32m- \e[1;92m  \"-.__ \e[0;90m\'\e[1;92m    \e[0;32m>\e[0m'
+printf "%b\n" '\e[0;32m    \`Y\$\$b       \e[0;90m~ \e[0;32m   :: \e[1;92m_\e[0m'
+printf "%b\n" '\e[1;92m     \`Y\$\$.\e[0;32m    \e[0;90m>!\e[1;92m      \e[0;32m /\e[0m'
+printf "%b\n" '\e[0;32m       \`\$\$b.\e[1;92m  \e[0;90m *\e[0;32m     \e[1;92m_\e[0m'
+printf "%b\n" '\e[1;92m         \`\"Y\$b._ \e[0;90m # \e[0;32m.\e[0m'
+printf "%b\n" '\e[0;32m             \`\"\"\"\"\e[0;90m>\e[0m'
+} > "$ASCII_FILE"
+if [ $? -eq 0 ]; then
+    print_success "ASCII art file created/updated."
+else
+    print_error "Failed to create ASCII art file."
+    # Attempt to remove potentially broken file
+    rm "$ASCII_FILE" 2>/dev/null
+    exit 1
+fi
+
+
+# 5. Create fastfetch config file (v5 - Default Formats)
+print_info "Creating/Updating fastfetch config file (default formats): $CONFIG_FILE ..."
+cat > "$CONFIG_FILE" << 'EOF'
+// ~/.config/fastfetch/config.jsonc (v5 - Default Formats & ANSI Logo)
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": {
+    "source": "~/.config/fastfetch/glitchy_debian.txt", // Logo file now contains ANSI colors
+    "type": "file"
+    // Color settings removed here
+  },
+  // "display": { ... } section still removed pending version info. Defaults will be used.
+  "modules": [
+    // Most "format" keys removed to use defaults, which seem more compatible.
+    // Keys use Nerd Font icons for minimal look.
+    {"type": "title"}, // Default format (usually user@host)
+    "break",
+
+    {"type": "os", "key": ""},
+    {"type": "kernel", "key": ""},
+    {"type": "packages", "key": "󰏖"},
+    {"type": "uptime", "key": ""},
+    {"type": "shell", "key": ""},
+    "separator",
+
+    {"type": "de", "key": ""},
+    {"type": "theme", "key": "󰉼"},
+    {"type": "icons", "key": "󰀻"},
+    {"type": "font", "key": ""},
+    {"type": "terminal", "key": ""},
+    "separator",
+
+    {"type": "host", "key": "󰌢"},
+    {"type": "cpu", "key": "󰻠"},
+    {"type": "gpu", "key": "󰻑"},
+    {"type": "display", "key": "󰍹"},
+    {"type": "memory", "key": "󰾆"}, // Using default format
+    {"type": "disk", "key": " /", "paths": ["/"]}, // Using default format for /
+    "separator",
+
+    {"type": "publicip", "key": " IP"}, // Default format
+    "break",
+    "colors"
+  ]
+}
+EOF
+if [ $? -eq 0 ]; then
+    print_success "Fastfetch config file created/updated."
+else
+    print_error "Failed to create fastfetch config file."
+    exit 1
+fi
+
+
+# 6. Write the new .bashrc configuration (with glitch alias)
+# (No changes needed in .bashrc itself from v4)
+print_info "Checking/Updating .bashrc configuration..."
+touch "$BASHRC_FILE"
+# Remove existing fastfetch block if present to avoid duplicates
+sed -i '/# --- Run Fastfetch on Login ---/,/# End of .bashrc ---/d' "$BASHRC_FILE" 2>/dev/null
+# Write the main .bashrc content (excluding the fastfetch call for now)
 cat > "$BASHRC_FILE" << 'EOF'
 # ~/.bashrc: executed by bash(1) for non-login shells.
-# gLiTcH Linux Custom Bash Configuration
-# Theme: Green on Black (Inspired by splash.jpg)
 
 # If not running interactively, don't do anything
 case $- in
@@ -39,39 +162,21 @@ case $- in
 esac
 
 # --- History Control ---
-# Don't put duplicate lines or lines starting with space in the history.
-# See bash(1) for more options
 HISTCONTROL=ignoreboth
-
-# Append to the history file, don't overwrite it
 shopt -s histappend
-
-# Set history length
 HISTSIZE=10000
 HISTFILESIZE=20000
-
-# Check the window size after each command and, if necessary,
-# update the values of LINES and COLUMNS.
 shopt -s checkwinsize
 
 # --- Color Settings ---
-# Uncomment for a colored prompt, if the terminal has the capability; turned
-# off by default to not distract the user: the focus in a terminal window
-# is on the output of commands, not on the prompt
 force_color_prompt=yes
-
 if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
-    # We have color support; assume it's compliant with Ecma-48
-    # (ISO/IEC-6429). (Lack of such support is extremely rare, and such
-    # a case would tend to support setf rather than setaf.)
     color_prompt=yes
 else
     color_prompt=no
 fi
 
-# Enable color support of ls, grep, etc.
 if [ "$color_prompt" = yes ]; then
-    # Set variable identifying the filesystem color scheme of graphical GNU ls
     export LS_COLORS='rs=0:di=1;92:ln=1;96:mh=0:pi=40;33:so=1;95:do=1;95:bd=40;33;1:cd=40;33;1:or=40;31;1:mi=0:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=1;91:*~=0;90:*bak=0;90:*.log=0;90:*.txt=0;37:*.md=0;37:*.sh=1;93:*.py=1;93:*.js=1;93:*.c=1;93:*.cpp=1;93:*.h=1;93:*.php=1;93:*.pl=1;93:*.rb=1;93:*.json=0;37:*.xml=0;37:*.html=0;37:*.css=0;37:*.jpg=1;95:*.jpeg=1;95:*.png=1;95:*.gif=1;95:*.svg=1;95:*.bmp=1;95:*.tiff=1;95:*.webp=1;95:*.mp3=0;95:*.ogg=0;95:*.wav=0;95:*.flac=0;95:*.opus=0;95:*.mp4=0;95:*.mkv=0;95:*.avi=0;95:*.mov=0;95:*.wmv=0;95:*.zip=1;91:*.tar=1;91:*.gz=1;91:*.bz2=1;91:*.xz=1;91:*.7z=1;91:*.rar=1;91:*.iso=1;91:*.deb=1;91:*.rpm=1;91:*.pdf=0;91:*.gpg=1;94:*.asc=1;94:'
     export LS_OPTIONS='--color=auto'
     export GREP_OPTIONS='--color=auto'
@@ -83,112 +188,57 @@ fi
 
 # --- Custom Prompt (PS1) ---
 if [ "$color_prompt" = yes ]; then
-    # Colors (Adjust as needed)
-    L_GREEN="\[\e[1;92m\]" # Light/Bright Green
-    D_GREEN="\[\e[0;32m\]" # Darker Green
-    WHITE="\[\e[1;97m\]"
-    RESET="\[\e[0m\]"     # Reset color
-
-    # Prompt Symbol (# for root, $ for user)
-    if [ "$(id -u)" -eq 0 ]; then
-       P_SYMBOL="#"
-    else
-       P_SYMBOL="$"
-    fi
-
-    # PS1 Structure: [User]@[Host]:[Path][Symbol]
-    # Simple Green Theme:
-    # PS1="${L_GREEN}\u@\h${D_GREEN}:\w${L_GREEN}${P_SYMBOL}${RESET} "
-
-    # Glitchy/Minimalist Theme (User:Path Symbol): -> THIS ONE IS ACTIVE
-    PS1="${L_GREEN}\u${D_GREEN}:> ${L_GREEN}\w ${L_GREEN}${P_SYMBOL}${RESET} "
-
-    # Glitchy Theme with Hostname Abbreviation (e.g., first letter):
-    # HOST_ABBREV=$(hostname | cut -c1)
-    # PS1="${L_GREEN}\u@${HOST_ABBREV}${D_GREEN}:> ${L_GREEN}\w ${L_GREEN}${P_SYMBOL}${RESET} "
-
+    L_GREEN="\[\e[1;92m\]"
+    D_GREEN="\[\e[0;32m\]"
+    GREY="\[\e[0;90m\]"
+    RESET="\[\e[0m\]"
+    if [ "$(id -u)" -eq 0 ]; then P_SYMBOL="#"; else P_SYMBOL="$"; fi
+    PS1="${L_GREEN}\u${GREY}@${L_GREEN}\h${D_GREEN}:${L_GREEN}\w ${L_GREEN}${P_SYMBOL}${RESET} "
 else
-    # Standard prompt if no color
     PS1='\u@\h:\w\$ '
 fi
-# Unset color variables
-unset color_prompt force_color_prompt L_GREEN D_GREEN WHITE RESET P_SYMBOL HOST_ABBREV
+unset color_prompt force_color_prompt L_GREEN D_GREEN GREY RESET P_SYMBOL
 
 # --- Aliases ---
-# Common shortcuts
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
 alias cls='clear'
-alias path='echo -e ${PATH//:/\\n}' # Print $PATH nicely
-
-# ls aliases
+alias path='echo -e ${PATH//:/\\n}'
 alias l='ls -CF'
 alias la='ls -A'
-alias ll='ls -alFh' # Human readable sizes, show all, classify
-alias ls='ls --color=auto' # Ensure ls is always colorized if available
-
-# grep aliases
-alias grep='grep --color=auto'
-alias egrep='egrep --color=auto'
-alias fgrep='fgrep --color=auto'
-
-# Debian/Apt aliases (use with caution, especially -y)
+alias ll='ls -alFh'
 alias update='sudo apt update && sudo apt full-upgrade -y'
 alias search='apt search'
 alias install='sudo apt install -y'
 alias remove='sudo apt remove -y'
 alias autoremove='sudo apt autoremove -y'
 alias clean='sudo apt clean'
-
-# Network aliases
-alias ports='sudo netstat -tulnp' # Listening ports (requires net-tools)
-alias ports-ss='sudo ss -tulnp'   # Listening ports (modern alternative)
+alias ports='sudo netstat -tulnp'
+alias ports-ss='sudo ss -tulnp'
 alias myip-local='ip -4 addr show | grep inet | grep -v "127.0.0.1" | awk "{print \$2}" | cut -d "/" -f 1'
-alias myip-public='curl -s ifconfig.me || curl -s api.ipify.org || echo "Cannot fetch public IP"'
-
-# Security/Misc aliases
+alias myip-public='fastfetch --structure title:publicip' # Simpler fallback alias
 alias sha256='sha256sum'
 alias md5='md5sum'
-# Add more custom aliases relevant to gLiTcH Linux tools here
+alias glitch='exec $SHELL' # Custom alias to refresh shell
 
 # --- Functions ---
-# Create a directory and cd into it
-mkcd() {
-    mkdir -p "$@" && cd "$@" || return
-}
-
-# Extract various archive types
+mkcd() { mkdir -p "$@" && cd "$@" || return 1; }
 extract() {
-    if [ -z "$1" ]; then
-        echo "Usage: extract <filename>"
-        return 1
-    fi
-
+    if [ -z "$1" ]; then echo "Usage: extract <filename>"; return 1; fi
     if [ -f "$1" ] ; then
         case "$1" in
-            *.tar.bz2) tar xvjf "$1" ;;
-            *.tar.gz)  tar xvzf "$1" ;;
-            *.tar.xz)  tar xvJf "$1" ;;
-            *.bz2)     bunzip2 "$1" ;;
-            *.rar)     unrar x "$1" ;; # Requires unrar package
-            *.gz)      gunzip "$1" ;;
-            *.tar)     tar xvf "$1" ;;
-            *.tbz2)    tar xvjf "$1" ;;
-            *.tgz)     tar xvzf "$1" ;;
-            *.zip)     unzip "$1" ;;
-            *.Z)       uncompress "$1" ;;
-            *.7z)      7z x "$1" ;;     # Requires p7zip-full package
-            *.deb)     dpkg -x "$1" "${1%.deb}" ;; # Extract deb to dir
-            *)         echo "'$1' cannot be extracted via extract()" ;;
+            *.tar.bz2) tar xvjf "$1" ;; *.tar.gz) tar xvzf "$1" ;; *.tar.xz) tar xvJf "$1" ;;
+            *.bz2) bunzip2 "$1" ;; *.rar) unrar x "$1" ;; *.gz) gunzip "$1" ;;
+            *.tar) tar xvf "$1" ;; *.tbz2) tar xvjf "$1" ;; *.tgz) tar xvzf "$1" ;;
+            *.zip) unzip "$1" ;; *.Z) uncompress "$1" ;; *.7z) 7z x "$1" ;;
+            *.deb) dpkg -x "$1" "${1%.deb}" ;;
+            *) echo "'$1' cannot be extracted via extract()" ;;
         esac
-    else
-        echo "'$1' is not a valid file"
-    fi
+    else echo "'$1' is not a valid file"; fi
 }
 
 # --- Bash Completion ---
-# Enable bash completion in interactive shells
 if ! shopt -oq posix; then
   if [ -f /usr/share/bash-completion/bash_completion ]; then
     . /usr/share/bash-completion/bash_completion
@@ -197,50 +247,49 @@ if ! shopt -oq posix; then
   fi
 fi
 
-# --- Optional Welcome Message ---
-# Uncomment the following lines to show a message on terminal start
-# if [ -z "$DISPLAY" ]; then # Only show in TTY/non-graphical? Or remove check to always show
-#     L_GREEN="\e[1;92m"
-#     RESET="\e[0m"
-#     echo -e "${L_GREEN}"
-#     echo '  ________.__    .___ .__   __.   .__     '
-#     echo ' /  _____/|  |__ |   ||__|_/_ |   |__| ____   ____  '
-#     echo '/   \  ___|  |  \|   ||  |\  ||   |  |/    \_/ __ \ '
-#     echo '\    \_\  \   Y  \   ||  | \ ||   |  |   |  \  ___/ '
-#     echo ' \______  /___|  /___||__|  \__\ /\|__|___|  /\___  >'
-#     echo '        \/     \/                 \/       \/     \/ '
-#     echo '        :: Security Through Obscurity ::            '
-#     echo -e "${RESET}"
-# fi
-# unset L_GREEN RESET # Clean up temp vars
-
 # --- Set Default Editor ---
-export EDITOR=nano # Or vim, emacs, etc.
-# export VISUAL="$EDITOR" # Often good to set VISUAL too
+export EDITOR=nano
 
 # --- User Customizations ---
 # Add any other personal aliases, functions, or settings below this line
 
-
-# End of gLiTcH Linux .bashrc
 EOF
 
-# Check if write was successful (simple check: file exists and is not empty)
-if [ -s "$BASHRC_FILE" ]; then
-  echo "[SUCCESS] New .bashrc configuration written successfully."
-else
-  echo "[ERROR] Failed to write new .bashrc configuration."
-  echo "[INFO] Your original .bashrc might still be available as $BACKUP_FILE (if backup was created)."
-  exit 1
+# Append the fastfetch execution block
+cat >> "$BASHRC_FILE" << 'EOF'
+
+# --- Run Fastfetch on Login ---
+# Check if command exists and shell is interactive and stdout is a tty
+if command -v fastfetch &> /dev/null && [ -t 1 ] && [[ $- == *i* ]]; then
+    fastfetch --config "$HOME/.config/fastfetch/config.jsonc"
 fi
 
-echo "--- Installation Complete ---"
+# End of .bashrc ---
+EOF
+
+# Final check and completion message
+if [ -s "$BASHRC_FILE" ] && grep -q "# --- Run Fastfetch on Login ---" "$BASHRC_FILE" && grep -q "alias glitch='exec \$SHELL'" "$BASHRC_FILE"; then
+    print_success "New .bashrc configuration written successfully."
+else
+    print_error "Failed to write new .bashrc configuration."
+    print_info "Your original .bashrc might still be available as $BACKUP_FILE (if backup was created)."
+    exit 1
+fi
+echo ""
+print_success "--- Installation Complete ---"
 echo ""
 echo "To apply the new settings, please either:"
 echo "  1. Close this terminal and open a new one."
 echo "  2. Run the command: source ~/.bashrc"
+echo "  3. Run the new alias: glitch"
 echo ""
-echo "Your previous configuration was backed up to: $BACKUP_FILE"
+if [ -f "$BACKUP_FILE" ]; then
+    echo "Your previous configuration was backed up to: $BACKUP_FILE"
+fi
+echo "Remember to install a Nerd Font and set it in your terminal for icons!"
+echo "[INFO] Logo color is now embedded in the logo file."
+echo "[INFO] Most stats formats are now using defaults for compatibility."
+echo "[INFO] Please provide 'fastfetch --version' output and the default 'display' config section"
+echo "[INFO] if you want to customize separators or key/value colors further."
 echo ""
-
 exit 0
