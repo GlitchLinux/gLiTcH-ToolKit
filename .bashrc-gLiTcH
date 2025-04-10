@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script to install fastfetch, configure it with an Owl/DDoS logo theme (v8),
+# Script to install fastfetch, configure it with a Text Banner logo theme (v9),
 # setup .bashrc to run it (including 'glitch' alias), and backup the existing .bashrc.
 # NOTE: This version embeds ANSI colors in the logo file and uses default formats.
 
@@ -9,10 +9,10 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="${BASHRC_FILE}.bak_ff_glitch_${TIMESTAMP}"
 CONFIG_DIR="$HOME/.config/fastfetch"
 # Using a descriptive name for the logo file
-ASCII_FILE="$CONFIG_DIR/owl_ddos_logo.txt"
+ASCII_FILE="$CONFIG_DIR/text_banner_logo.txt"
 CONFIG_FILE="$CONFIG_DIR/config.jsonc"
 
-echo "--- Owl/DDoS Logo Fastfetch .bashrc Installer (v8) ---"
+echo "--- Text Banner Logo Fastfetch .bashrc Installer (v9) ---"
 echo "[WARN] This script requires Nerd Fonts for icons to display correctly."
 echo "[INFO] Will attempt to install 'fastfetch'."
 
@@ -61,19 +61,14 @@ else
     exit 1
 fi
 
-# 4. Create Owl/DDoS ASCII art file WITH ANSI COLORS
+# 4. Create Text Banner ASCII art file WITH ANSI COLORS
 # Using cat + heredoc; LG=Light Green, GR=Gray, R=Reset
 print_info "Creating/Updating custom ASCII art file with ANSI colors: $ASCII_FILE ..."
 LG='\e[1;92m' GR='\e[0;90m' R='\e[0m' # Define colors
 cat > "$ASCII_FILE" << EOF_ASCII
-${GR}           . - .${R}
-${LG}          (o o)${R}
-${GR}         /${LG}|_${GR}|_${LG}\\${R}
-${GR}        / /${LG}   ${GR}\\ \\${R}
-${GR}       ( |${LG}     ${GR}| )${R}
-${GR}        '\\_=${LG}_${GR}/'${R}
-${LG}    DDoS attack inbound.${R}
-${LG}     Prepare for chaos.${R}
+${GR} -+-+-+-+-+-+-+-+-+-+-+-+${R}
+${GR} |${LG}g${GR}|${LG}L${GR}|${LG}i${GR}|${LG}T${GR}|${LG}c${GR}|${LG}H${GR}|${LG}-${GR}|${LG}L${GR}|${LG}I${GR}|${LG}N${GR}|${LG}U${GR}|${LG}X${GR}|${R}
+${GR} -+-+-+-+-+-+-+-+-+-+-+-+${R}
 EOF_ASCII
 # Check status after cat
 if [ $? -eq 0 ]; then
@@ -85,10 +80,10 @@ else
 fi
 
 
-# 5. Create fastfetch config file (v8 - Owl Logo Path)
+# 5. Create fastfetch config file (v9 - Text Banner Logo Path)
 print_info "Creating/Updating fastfetch config file: $CONFIG_FILE ..."
 cat > "$CONFIG_FILE" << EOF
-// ~/.config/fastfetch/config.jsonc (v8 - Owl Logo & Default Formats)
+// ~/.config/fastfetch/config.jsonc (v9 - Text Banner Logo & Default Formats)
 {
   "\$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
   "logo": {
@@ -285,7 +280,7 @@ if [ -f "$BACKUP_FILE" ]; then
     echo "Your previous configuration was backed up to: $BACKUP_FILE"
 fi
 echo "Remember to install a Nerd Font and set it in your terminal for icons!"
-echo "[INFO] Logo is now Owl/DDoS with embedded ANSI colors."
+echo "[INFO] Logo is now Text Banner with embedded ANSI colors."
 echo "[INFO] Still recommend providing 'fastfetch --version' and default 'display' config"
 echo "[INFO] if further customization of keys/separators/colors is needed."
 echo ""
