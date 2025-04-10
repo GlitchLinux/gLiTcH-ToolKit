@@ -124,6 +124,11 @@ menuentry "$NAME - Encrypted Persistence" {
     linux /live/$VMLINUZ boot=live components quiet splash noeject findiso=\${iso_path} persistent=cryptsetup persistence-encryption=luks persistence
     initrd /live/$INITRD
 }
+
+menuentry "GRUBFM (UEFI)" {
+    chainloader /EFI/GRUB-FM/E2B-bootx64.efi
+}
+
 EOF
 
 # Create isolinux directory if it doesn't exist
