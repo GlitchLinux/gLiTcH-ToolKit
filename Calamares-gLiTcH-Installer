@@ -1,0 +1,11 @@
+#/bin/bash
+
+sudo apt update && sudo apt install -y calamares calamares-settings-debian cryptsetup xterm xorg
+sudo rm -r /etc/calamares/
+
+cd /tmp 
+git clone https://github.com/GlitchLinux/gLiTcH-Calamares.git
+mv /tmp/gLiTcH-Calamares /tmp/calamares
+cp -r /tmp/calamares /etc/
+
+startx calamares
