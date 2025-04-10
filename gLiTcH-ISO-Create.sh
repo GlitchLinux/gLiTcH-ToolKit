@@ -1,4 +1,6 @@
 #!/bin/bash
+# Exit immediately if a command exits with a non-zero status.
+set -e
 
 # Combined ISO Creation Script with Bootfile Download
 # Creates BIOS+UEFI bootable ISO from directory structure
@@ -89,21 +91,23 @@ regenerate_host_initramfs() {
     local pm
     pm=$(detect_pkg_manager)
 
+    # Use '|| true' temporarily if you want to continue even if regeneration fails
+    # Remove '|| true' for stricter error checking with 'set -e'
     case "$pm" in
         apt)
             echo "Running update-initramfs..."
-            sudo update-initramfs -u -k all
+            sudo update-initramfs -u -k all # || true
             ;;
         dnf | yum)
             echo "Running dracut..."
             # Ensure /etc/dracut.conf or /etc/dracut.conf.d/ includes needed modules
             # e.g., add_dracut_modules+=" dmsquash-live "
-            sudo dracut --force --regenerate-all
+            sudo dracut --force --regenerate-all # || true
             ;;
         pacman)
             echo "Running mkinitcpio..."
             # Ensure /etc/mkinitcpio.conf HOOKS line includes 'archiso' or similar
-            sudo mkinitcpio -P
+            sudo mkinitcpio -P # || true
             ;;
         *)
             echo "WARNING: Cannot automatically regenerate initramfs for this system."
@@ -111,23 +115,26 @@ regenerate_host_initramfs() {
             read -p "Press Enter to continue anyway, or Ctrl+C to abort."
             ;;
     esac
-    local result=$?
-    if [ $result -ne 0 ]; then
-         echo "ERROR: Failed to regenerate initramfs. The ISO might not boot correctly."
-         # Decide whether to exit or continue
-         read -p "Press Enter to continue despite the error, or Ctrl+C to abort."
-    fi
+    # Removed explicit result check as 'set -e' handles failures unless '|| true' is used
     echo "Initramfs regeneration attempted."
 }
 
 
 create_squashfs() {
     local iso_name="$1"
-    local iso_dir="/home/$iso_name" # Consider using /tmp or a build specific dir
+    # *** FIX: Use $HOME for the build directory ***
+    local iso_dir="$HOME/$iso_name"
     echo "Creating filesystem.squashfs..."
 
     # Create target directory if it doesn't exist
+    # *** FIX: Added error checking after mkdir ***
+    echo "Creating build directory structure: $iso_dir/live"
     mkdir -p "$iso_dir/live"
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Failed to create build directory structure: $iso_dir/live"
+        echo "[ERROR] Check permissions or path. Aborting."
+        exit 1
+    fi
 
     # --- Improved Exclusions ---
     # Add more host-specific things and potentially large/unneeded data
@@ -154,7 +161,7 @@ create_squashfs() {
         /home/*/.local/share/Trash/*
         /root/.local/share/Trash/*
         "$iso_dir"             # Exclude the build directory itself!
-        /home/*.iso            # Exclude any existing ISOs
+        "$HOME/*.iso"          # Exclude any existing ISOs in user's home
         /usr/src/* # Kernel sources/headers often large
         /boot/*rescue*
         /boot/System.map*
@@ -178,26 +185,21 @@ create_squashfs() {
     done
 
     echo "Creating filesystem.squashfs from / (this may take a while)..."
-    echo "Excluding: ${exclusions[*]}"
+    echo "Excluding items matching patterns (first few shown): ${exclusions[@]:0:10} ..."
 
+    # Run mksquashfs - set -e will cause script exit on failure
     sudo mksquashfs / "$iso_dir/live/filesystem.squashfs" \
         -comp xz \
         -b 1048576 \
         -noappend \
         "${mksquashfs_opts[@]}"
 
-    local squashfs_result=$?
-    if [ $squashfs_result -ne 0 ]; then
-        echo "Error creating squashfs filesystem"
-        # Consider cleaning up $iso_dir here
-        exit 1
-    fi
+    echo "mksquashfs completed." # Will only be reached if successful
 
-    # Verify the squashfs file
+    # Verify the squashfs file (optional, but good practice)
     echo "Verifying squashfs file..."
     if ! unsquashfs -s "$iso_dir/live/filesystem.squashfs" > /dev/null; then
         echo "Error: Created squashfs file appears invalid"
-        # Consider cleaning up $iso_dir here
         exit 1
     fi
 
@@ -206,7 +208,8 @@ create_squashfs() {
 
 copy_kernel_initrd() {
     local iso_name="$1"
-    local iso_dir="/home/$iso_name"
+    # *** FIX: Use $HOME for the build directory ***
+    local iso_dir="$HOME/$iso_name"
 
     echo "Copying kernel and initrd files from host /boot..."
     echo "Ensure the initramfs contains live-boot support!" # Added reminder
@@ -263,29 +266,20 @@ download_bootfiles() {
 
     echo "Downloading bootfiles from $bootfiles_url..."
 
-    if ! wget --progress=bar:force:noscroll "$bootfiles_url" -O "$temp_dir/BOOTFILES.tar.gz"; then
-        echo "Error: Failed to download bootfiles"
-        rm -rf "$temp_dir"
-        exit 1
-    fi
+    # Run wget - set -e will cause script exit on failure
+    wget --progress=bar:force:noscroll "$bootfiles_url" -O "$temp_dir/BOOTFILES.tar.gz"
 
     echo "Extracting bootfiles to $iso_dir..."
-    if ! tar -xzf "$temp_dir/BOOTFILES.tar.gz" -C "$iso_dir/"; then
-       echo "Error: Failed to extract bootfiles into $iso_dir"
-       # Check if files were partially extracted and clean up if necessary
-       rm -rf "$temp_dir"
-       exit 1
-    fi
+    # Run tar - set -e will cause script exit on failure
+    tar -xzf "$temp_dir/BOOTFILES.tar.gz" -C "$iso_dir/"
 
     # Clean up downloaded tarball and temp dir
-    # Note: Tar extraction might place files directly in $iso_dir, check tar contents
-    # Assuming extraction places files in $iso_dir, not a subdirectory
-    # rm -f "$iso_dir/BOOTFILES.tar.gz" # Might not be needed if extracted directly
     rm -rf "$temp_dir"
 
     # Verify essential boot files exist now
     if [ ! -d "$iso_dir/isolinux" ] || [ ! -d "$iso_dir/boot/grub" ]; then
         echo "Warning: Expected boot directories (isolinux, boot/grub) not found after extracting BOOTFILES.tar.gz"
+        # Continue anyway, maybe the user provides them manually
     fi
 
     echo "Bootfiles processed."
@@ -294,7 +288,7 @@ download_bootfiles() {
 
 configure_efi_boot() {
     local iso_dir="$1"
-    local iso_name="$2" # iso_name is unused here, consider removing param
+    # iso_name param was unused, removing
     echo "Configuring EFI boot..."
 
     # Ensure base directories exist from downloaded bootfiles or create them
@@ -324,41 +318,28 @@ configure_efi_boot() {
         if command -v grub-mkimage &>/dev/null; then
             # Ensure required grub modules are installed (e.g., grub-efi-amd64-bin on Debian)
             # Modules needed depend heavily on what grub.cfg does (filesystem support, gfx, etc.)
+            # set -e handles failure here
             grub-mkimage \
                 -o "$grub_efi_target" \
                 -O x86_64-efi \
                 -p "/boot/grub" \
-                # Add necessary modules. This list is a guess and might need adjustment.
                 part_gpt part_msdos fat iso9660 \
                 ntfs ext2 linuxefi chain boot \
                 configfile normal search search_fs_uuid search_fs_file search_label \
                 gfxterm gfxterm_background png jpeg gettext \
                 echo videotest videoinfo ls keystatus \
-                all_video # Usually safe bet for video
-
-            if [ $? -ne 0 ]; then
-                echo "ERROR: grub-mkimage failed. EFI boot might not work."
-                # Don't exit, maybe user wants BIOS only or will fix manually
-            else
-                 echo "GRUB EFI binary generated."
-            fi
+                all_video
+            echo "GRUB EFI binary generated."
         else
             echo "ERROR: Cannot find existing GRUB EFI binary and grub-mkimage command is not found."
             echo "EFI boot will likely fail. Please install GRUB EFI tools (e.g., grub-efi-amd64-bin, grub2-efi-x64-modules)."
-             # Decide whether to exit or just warn
-             # exit 1
+            exit 1 # Exit because EFI boot is expected to work
         fi
     fi
 
     # --- EFI Boot Image (El Torito Boot Catalog Entry) ---
-    # This 'efi.img' is used for the El Torito specification.
-    # It doesn't necessarily contain the kernel/initrd itself for GRUB's default config,
-    # but it *must* contain the EFI bootloader that GRUB will load.
-    # The approach here creates a small FAT image just for the bootloader.
-    # GRUB then uses its config file (on the main ISO filesystem) to find kernel/initrd.
-
     local efi_img_path="$iso_dir/EFI/boot/efi.img"
-    local efi_img_size=64 # Size in MiB, adjust if needed (e.g., if storing more files)
+    local efi_img_size=64 # Size in MiB
     local efi_mount_point
     efi_mount_point=$(mktemp -d /tmp/efi_mount_XXXXXX)
 
@@ -368,12 +349,8 @@ configure_efi_boot() {
     mkfs.vfat -F 32 -n "EFI_BOOT" "$efi_img_path"
 
     echo "Mounting EFI image and copying bootloader..."
-    if ! sudo mount -o loop "$efi_img_path" "$efi_mount_point"; then
-        echo "ERROR: Failed to mount EFI image loop device."
-        rm -rf "$efi_mount_point"
-        # Consider removing $efi_img_path
-        exit 1
-    fi
+    # set -e handles mount failure
+    sudo mount -o loop "$efi_img_path" "$efi_mount_point"
 
     sudo mkdir -p "$efi_mount_point/EFI/BOOT"
 
@@ -382,12 +359,12 @@ configure_efi_boot() {
         sudo cp "$grub_efi_target" "$efi_mount_point/EFI/BOOT/BOOTX64.EFI" # Standard path UEFI looks for
         echo "Copied $grub_efi_target to EFI image."
     else
-        echo "WARNING: GRUB EFI binary ($grub_efi_target) not found to copy into EFI image. EFI boot will fail."
+        # This case should ideally not be reached due to earlier checks/exit
+        echo "ERROR: GRUB EFI binary ($grub_efi_target) not found to copy into EFI image. EFI boot will fail."
+        sudo umount "$efi_mount_point" # Attempt cleanup before exiting
+        rm -rf "$efi_mount_point"
+        exit 1
     fi
-
-    # Optionally copy grub.cfg here too if GRUB is configured to look inside the ESP first
-    # sudo mkdir -p "$efi_mount_point/boot/grub"
-    # sudo cp "$iso_dir/boot/grub/grub.cfg" "$efi_mount_point/boot/grub/grub.cfg"
 
     sudo umount "$efi_mount_point"
     rm -rf "$efi_mount_point"
@@ -403,66 +380,51 @@ create_iso() {
 
     # --- Pre-checks ---
     echo "Verifying required files for ISO creation..."
-    local missing_files=0
-    if [ ! -f "$source_dir/isolinux/isolinux.bin" ]; then
-        echo "ERROR: Required BIOS boot file isolinux/isolinux.bin not found in $source_dir"
-        missing_files=1
-    fi
-     # isohdpfx.bin is used for MBR boot on USB sticks (isohybrid)
-    if [ ! -f "$source_dir/isolinux/isohdpfx.bin" ]; then
-        echo "WARNING: isohybrid MBR file isolinux/isohdpfx.bin not found. USB boot might be affected."
-        # Depending on the source of BOOTFILES.tar.gz, this might be elsewhere or included in syslinux package
-        # Try to find it from the system if missing
+    local check_failed=0
+    local required_files=(
+        "$source_dir/isolinux/isolinux.bin"
+        "$source_dir/EFI/boot/efi.img"
+        "$source_dir/live/vmlinuz"
+        "$source_dir/live/initrd.img"
+        "$source_dir/live/filesystem.squashfs"
+        "$source_dir/isolinux/isolinux.cfg"
+        "$source_dir/boot/grub/grub.cfg"
+    )
+    for file in "${required_files[@]}"; do
+        if [ ! -f "$file" ]; then
+            echo "ERROR: Required file not found: $file"
+            check_failed=1
+        fi
+    done
+
+    # Check for isohybrid MBR file separately, try to copy if missing
+    local isohybrid_mbr_path="$source_dir/isolinux/isohdpfx.bin"
+    if [ ! -f "$isohybrid_mbr_path" ]; then
+        echo "WARNING: isohybrid MBR file isolinux/isohdpfx.bin not found."
         local syslinux_mbr_path=$(find /usr/lib/syslinux/mbr /usr/share/syslinux -name 'isohdpfx.bin' -print -quit)
         if [ -n "$syslinux_mbr_path" ] && [ -f "$syslinux_mbr_path" ]; then
              echo "Found isohdpfx.bin at $syslinux_mbr_path, copying..."
-             cp "$syslinux_mbr_path" "$source_dir/isolinux/isohdpfx.bin"
+             mkdir -p "$source_dir/isolinux" # Ensure dir exists
+             cp "$syslinux_mbr_path" "$isohybrid_mbr_path"
+             if [ ! -f "$isohybrid_mbr_path" ]; then # Verify copy worked
+                echo "ERROR: Failed to copy isohdpfx.bin. Cannot create isohybrid MBR."
+                check_failed=1
+             fi
          else
-             echo "Could not find isohdpfx.bin on the system either."
-             # Decide whether to stop or continue with warning
+             echo "ERROR: Could not find isohdpfx.bin on the system either. Cannot create isohybrid MBR."
+             check_failed=1
         fi
     fi
-    if [ ! -f "$source_dir/EFI/boot/efi.img" ]; then
-        echo "ERROR: Required EFI boot image EFI/boot/efi.img not found in $source_dir"
-         missing_files=1
-    fi
-    if [ ! -f "$source_dir/live/vmlinuz" ]; then
-        echo "ERROR: Kernel file live/vmlinuz not found in $source_dir"
-        missing_files=1
-    fi
-     if [ ! -f "$source_dir/live/initrd.img" ]; then
-        echo "ERROR: Initrd file live/initrd.img not found in $source_dir"
-         missing_files=1
-    fi
-     if [ ! -f "$source_dir/live/filesystem.squashfs" ]; then
-        echo "ERROR: Root filesystem live/filesystem.squashfs not found in $source_dir"
-         missing_files=1
-    fi
-     if [ ! -f "$source_dir/isolinux/isolinux.cfg" ]; then
-        echo "ERROR: ISOLINUX config file isolinux/isolinux.cfg not found in $source_dir"
-         missing_files=1
-    fi
-      if [ ! -f "$source_dir/boot/grub/grub.cfg" ]; then
-        echo "ERROR: GRUB config file boot/grub/grub.cfg not found in $source_dir"
-         missing_files=1
-    fi
 
-    if [ "$missing_files" -eq 1 ]; then
+    if [ "$check_failed" -eq 1 ]; then
         echo "Aborting ISO creation due to missing essential files."
-        return 1
+        exit 1 # Use exit 1 for error
     fi
-    echo "All essential files found."
+    echo "All essential files seem present."
 
     echo "Creating hybrid ISO image ($output_file)..."
 
-    # Ensure isohdpfx.bin path is correct for the -isohybrid-mbr option
-    local isohybrid_mbr_path="$source_dir/isolinux/isohdpfx.bin"
-    if [ ! -f "$isohybrid_mbr_path" ]; then
-         # Fallback if warning was ignored or copy failed
-         echo "ERROR: isohdpfx.bin still missing. Cannot create isohybrid MBR."
-         return 1
-    fi
-
+    # set -e handles xorriso failure
     xorriso -as mkisofs \
         -iso-level 3 \
         -full-iso9660-filenames \
@@ -493,11 +455,7 @@ create_iso() {
         `# Source Directory` \
         "$source_dir"
 
-    local iso_result=$?
-    if [ $iso_result -ne 0 ]; then
-        echo "Error creating ISO image (xorriso exit code: $iso_result)"
-        return 1
-    fi
+    echo "xorriso completed."
 
     # Optional: Add checksum
     echo "Generating MD5 checksum..."
@@ -508,7 +466,7 @@ create_iso() {
     echo "Output: $output_file"
     echo "MD5   : $output_file.md5"
     echo "-------------------------------------"
-    return 0
+    return 0 # Explicitly return 0 on success
 }
 
 # Generate boot configurations
@@ -518,7 +476,6 @@ generate_boot_configs() {
     # These filenames are now fixed based on copy_kernel_initrd
     local VMLINUZ_NAME="vmlinuz"
     local INITRD_NAME="initrd.img"
-    # SQUASHFS_NAME="filesystem.squashfs" # This wasn't actually used in the configs
 
     echo "Generating bootloader configuration files..."
 
@@ -527,9 +484,6 @@ generate_boot_configs() {
     mkdir -p "$ISO_DIR/isolinux"
 
     # --- Generate grub.cfg ---
-    # Note: The 'search' command might be slow on large ISOs.
-    # Consider using UUID or LABEL if the filesystem label is reliably set.
-    # Ensure the theme/font paths are correct relative to the extracted BOOTFILES.
     cat > "$ISO_DIR/boot/grub/grub.cfg" <<EOF
 # GRUB configuration for $NAME Live ISO
 
@@ -658,17 +612,18 @@ EOF
 cleanup() {
     local iso_dir=$1
     echo "Cleaning up build directory: $iso_dir"
-    # Be careful with sudo rm -rf! Double check the path.
-    if [[ -n "$iso_dir" && "$iso_dir" != "/" && "$iso_dir" =~ ^/home/ ]]; then # Safety check
+    # Updated safety check for $HOME path
+    if [[ -n "$iso_dir" && "$iso_dir" != "/" && "$iso_dir" == "$HOME/"* && -d "$iso_dir" ]]; then
        read -p "Confirm cleanup of $iso_dir? (y/N): " confirm_cleanup
        if [[ "$confirm_cleanup" =~ ^[Yy]$ ]]; then
-           sudo rm -rf "$iso_dir"
+           # No sudo needed now
+           rm -rf "$iso_dir"
            echo "Build directory removed."
        else
             echo "Cleanup skipped."
        fi
     else
-        echo "Skipping cleanup due to potentially unsafe path: $iso_dir"
+        echo "Skipping cleanup due to potentially unsafe or non-existent path: $iso_dir"
     fi
 }
 
@@ -689,14 +644,16 @@ main() {
     fi
 
     # Check and install dependencies FIRST
-    # Check a few key commands before trying full install
      if ! command -v xorriso &>/dev/null || ! command -v mksquashfs &>/dev/null || ! command -v wget &>/dev/null; then
         echo "Core dependencies might be missing."
         install_dependencies
     else
-        echo "Basic dependencies seem present. Skipping initial check/install."
-        # Optionally, still run install_dependencies to ensure *all* are there
-        # install_dependencies
+        echo "Basic dependencies seem present. Skipping initial dependency check/install."
+        # You might still want to run install_dependencies to ensure live tools are present
+        # read -p "Run dependency check/install anyway? (y/N): " confirm_deps
+        # if [[ "$confirm_deps" =~ ^[Yy]$ ]]; then
+        #    install_dependencies
+        # fi
     fi
 
     # Regenerate host initramfs (WARNING!)
@@ -716,9 +673,10 @@ main() {
     # Sanitize name slightly (replace spaces, limit chars if needed)
     iso_name=$(echo "$iso_name" | tr -s ' ' '_')
 
-    # Define directories and files based on name
-    local iso_build_dir="/home/$iso_name" # Build directory
-    local output_iso_file="/home/${iso_name}.iso" # Final ISO path
+    # *** FIX: Define directories and files using $HOME ***
+    local iso_build_dir="$HOME/$iso_name" # Build directory in user's home
+    local output_iso_file="$HOME/${iso_name}.iso" # Final ISO path in user's home
+
     # Create a sanitized volume label (uppercase, alphanumeric/underscore/hyphen, max 32 chars)
     local iso_vol_label=$(echo "$iso_name" | tr '[:lower:]' '[:upper:]' | tr -cd '[:alnum:]_-' | cut -c1-32)
     if [ -z "$iso_vol_label" ]; then
@@ -734,21 +692,21 @@ main() {
 
 
     # --- Build Steps ---
+    # 'set -e' ensures script stops if any step fails
 
     # 1. Create SquashFS (from host root '/')
-    create_squashfs "$iso_name" # Uses $iso_name to determine $iso_build_dir inside
+    create_squashfs "$iso_name" # Uses $iso_name to determine $iso_build_dir inside (now uses $HOME)
 
     # 2. Copy Kernel and Initrd (from host /boot)
-    copy_kernel_initrd "$iso_name" # Uses $iso_name to determine $iso_build_dir inside
+    copy_kernel_initrd "$iso_name" # Uses $iso_name to determine $iso_build_dir inside (now uses $HOME)
 
     # 3. Download and Extract Boot Files (ISOLINUX, GRUB base, etc.)
     download_bootfiles "$iso_build_dir"
 
     # 4. Configure EFI Boot specifics (bootloader binary, EFI ESP image)
-    configure_efi_boot "$iso_build_dir" "$iso_name" # iso_name currently unused here
+    configure_efi_boot "$iso_build_dir"
 
     # 5. Generate Bootloader Config Files (grub.cfg, isolinux.cfg)
-    # Uses fixed names 'vmlinuz' and 'initrd.img' as copied earlier
     generate_boot_configs "$iso_build_dir" "$iso_name"
 
 
@@ -757,7 +715,9 @@ main() {
     read -p "Review the steps above. Proceed with ISO creation? (y/N): " confirm_create
     if [[ "$confirm_create" =~ ^[Yy]$ ]]; then
         create_iso "$iso_build_dir" "$output_iso_file" "$iso_vol_label"
-        local create_status=$?
+        local create_status=$? # Capture exit status *before* other commands if not using set -e
+
+        # Check status explicitly even with set -e for cleanup logic
         if [ $create_status -eq 0 ]; then
              # Optional: Ask to clean up build directory
              read -p "ISO created successfully. Clean up the build directory ($iso_build_dir)? (y/N): " confirm_final_cleanup
@@ -767,9 +727,9 @@ main() {
                  echo "Build directory preserved at $iso_build_dir"
              fi
         else
-             echo "ISO creation failed."
+             echo "ISO creation failed. (Exit code: $create_status)"
              echo "Build directory preserved at $iso_build_dir for inspection."
-             exit 1
+             exit 1 # Ensure script exits with error status
         fi
     else
         echo "ISO creation cancelled."
@@ -780,11 +740,13 @@ main() {
          else
              echo "Build directory preserved at $iso_build_dir"
          fi
-        exit 0
+        exit 0 # Exit cleanly on cancellation
     fi
 
-    echo "Script finished."
+    echo "Script finished successfully."
+    exit 0
 }
 
 # --- Run Main Function ---
+# Pass any script arguments to main (though it doesn't use them currently)
 main "$@"
