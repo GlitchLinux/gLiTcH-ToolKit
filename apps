@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Function to create the 'apps' alias
+create_apps_alias() {
+    if [ -f ~/.bashrc ]; then
+        # Check if alias already exists
+        if ! grep -q "alias apps=\"bash /home/\$USER/apps\"" ~/.bashrc; then
+            echo "alias apps=\"bash /home/\$USER/apps\"" >> ~/.bashrc
+            echo "Alias 'apps' created in ~/.bashrc"
+            # Source the .bashrc to make it available in current session
+            source ~/.bashrc
+        else
+            echo "Alias 'apps' already exists in ~/.bashrc"
+        fi
+    else
+        echo "Could not create alias - ~/.bashrc not found"
+    fi
+}
+
+# Main script
+cd /home/$USER/ && sudo rm -f apps && sudo rm -rf /tmp/ToolKit-Listing.sh
+cd /tmp && git clone https://github.com/GlitchLinux/ToolKit-Listing.sh.git
+cd ToolKit-Listing.sh
+sudo mv ToolKit-Listing.sh /home/$USER/apps
+cd /home/$USER/
+sudo chmod +x apps && chmod +x apps
+sudo rm -rf /tmp/ToolKit-Listing.sh
+
+# Create the alias
+create_apps_alias
+
+# Run the apps script
+./apps
