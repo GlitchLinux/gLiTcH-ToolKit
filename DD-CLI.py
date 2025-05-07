@@ -8,7 +8,9 @@ sudo rm -rf /etc/dd_cli/
 sudo mkdir -p /etc/dd_cli/
 
 # 3. Download the script
-echo "Downloading DD-CLI..."
+echo " "
+echo "Downloading DD-CLI"
+echo " "
 sudo curl -sLo /etc/dd_cli/DD-CLI.py \
     https://raw.githubusercontent.com/GlitchLinux/dd_py_CLI/main/DD-CLI.py || {
     echo "Download failed!"
