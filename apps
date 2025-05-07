@@ -29,5 +29,8 @@ sudo rm -rf /tmp/ToolKit-Listing.sh
 # Create the alias
 create_apps_alias
 
+# refresh bashrc
+source ~/.bashrc
+
 # Run the apps script
-./apps
+apps
