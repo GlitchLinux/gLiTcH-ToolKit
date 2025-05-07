@@ -36,4 +36,4 @@ sudo chmod +x /etc/profile.d/dd_cli.sh
 source ~/.bashrc 2>/dev/null || true
 
 # Verify installation
-echo "Installation complete. Run "DD" to execute
+echo "Installation complete. Run DD to execute
