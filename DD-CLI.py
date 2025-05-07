@@ -10,7 +10,7 @@ sudo mkdir -p /etc/dd_cli/
 # 3. Download the script
 echo " "
 echo "Downloading DD-CLI"
-echo " "
+echo "Creating alias DD as shortcut"
 sudo curl -sLo /etc/dd_cli/DD-CLI.py \
     https://raw.githubusercontent.com/GlitchLinux/dd_py_CLI/main/DD-CLI.py || {
     echo "Download failed!"
@@ -38,6 +38,5 @@ sudo chmod +x /etc/profile.d/dd_cli.sh
 source ~/.bashrc 2>/dev/null || true
 
 # Verify installation
-echo " "
 echo "Installation complete, Run DD to execute"
 echo " "
