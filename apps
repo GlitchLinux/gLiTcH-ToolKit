@@ -33,4 +33,4 @@ create_apps_alias
 source ~/.bashrc
 
 # Run the apps script
-apps
+./apps
