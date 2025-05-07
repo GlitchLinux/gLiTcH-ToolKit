@@ -1,46 +1,40 @@
 #!/bin/bash
+# Install DD-CLI system-wide with alias for all users
 
-# Create /etc/dd_cli/ with sudo (only if needed)
-echo "[+] Creating /etc/dd_cli/..."
-sudo mkdir -p /etc/dd_cli/ || {
-    echo "[-] Failed to create /etc/dd_cli/ (check permissions?)";
-    exit 1;
+# 1. Clean previous install
+sudo rm -rf /etc/dd_cli/
+
+# 2. Create fresh directory
+sudo mkdir -p /etc/dd_cli/
+
+# 3. Download the script
+echo "Downloading DD-CLI..."
+sudo curl -sLo /etc/dd_cli/DD-CLI.py \
+    https://raw.githubusercontent.com/GlitchLinux/dd_py_CLI/main/DD-CLI.py || {
+    echo "Download failed!"
+    exit 1
 }
 
-# Download DD-CLI.py directly to /etc/dd_cli/
-echo "[+] Downloading DD-CLI.py..."
-if command -v wget &> /dev/null; then
-    sudo wget -q https://raw.githubusercontent.com/GlitchLinux/dd_py_CLI/main/DD-CLI.py -O /etc/dd_cli/DD-CLI.py
-elif command -v curl &> /dev/null; then
-    sudo curl -s -o /etc/dd_cli/DD-CLI.py https://raw.githubusercontent.com/GlitchLinux/dd_py_CLI/main/DD-CLI.py
-else
-    echo "[-] Error: Neither wget nor curl is installed. Install one and try again."
-    exit 1
-fi
-
-# Make the script executable (with sudo)
+# 4. Make executable
 sudo chmod +x /etc/dd_cli/DD-CLI.py
-echo "[+] Made DD-CLI.py executable."
 
-# Add alias ONLY to the current user's shell config
-USER_SHELL_CONFIG="$HOME/.bashrc"
-if [ -n "$ZSH_VERSION" ]; then
-    USER_SHELL_CONFIG="$HOME/.zshrc"
-fi
-
+# Create aliases for all users
 ALIAS_CMD='alias DD="python3 /etc/dd_cli/DD-CLI.py"'
 
-if ! grep -q 'alias DD=' "$USER_SHELL_CONFIG"; then
-    echo "$ALIAS_CMD" >> "$USER_SHELL_CONFIG"
-    echo "[+] Added alias to $USER_SHELL_CONFIG"
-else
-    echo "[!] Alias already exists in $USER_SHELL_CONFIG (skipping)"
-fi
+# For current user
+echo "$ALIAS_CMD" >> ~/.bashrc
+[ -f ~/.zshrc ] && echo "$ALIAS_CMD" >> ~/.zshrc
 
-# Auto-reload the shell config
-echo "[+] Reloading shell config..."
-source "$USER_SHELL_CONFIG" 2>/dev/null || true
+# For root
+sudo bash -c "echo '$ALIAS_CMD' >> /root/.bashrc"
 
-# Test DD
-echo "[+] Testing DD command..."
+# For future users (global)
+echo "$ALIAS_CMD" | sudo tee /etc/profile.d/dd_cli.sh >/dev/null
+sudo chmod +x /etc/profile.d/dd_cli.sh
+
+# Reload current shell
+source ~/.bashrc 2>/dev/null || true
+
+# Verify installation
+echo "Installation complete. Testing DD command:"
 DD
