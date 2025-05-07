@@ -39,4 +39,3 @@ source ~/.bashrc 2>/dev/null || true
 
 # Verify installation
 echo "Installation complete, Run DD to execute"
-echo " "
