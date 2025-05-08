@@ -50,7 +50,7 @@ for cmd in wget rsync mount umount mktemp unsquashfs md5sum dpkg apt update-init
 done
 
 # Configuration variables
-ISO_URL="https://glitchlinux.wtf/gLiTcH-Linux-KDE-v9.0.iso"
+ISO_URL="https://glitchlinux.wtf/gLiTcH-Linux-KDE-v11.0.iso"
 ISO_FILE="/tmp/glitch-linux.iso"
 ISO_MOUNT="/mnt/glitch-iso"
 SQUASHFS_MOUNT="/mnt/glitch-squashfs"
