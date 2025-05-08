@@ -8,10 +8,6 @@ COMPRESS_INITRAMFS=true # Set to true to compress initramfs (saves a little spac
 REMOVE_IPV6_XTABLES=false # EXTREMELY CAREFUL! Set to true only if you are ABSOLUTELY sure.
 
 # Packages to explicitly KEEP (add any others you need)
-# openssh-server is critical for headless access
-# cryptsetup is needed if you use encrypted volumes
-# Essential networking tools like iproute2 (provides `ip`) or net-tools (provides `ifconfig`) should be kept.
-# systemd and essential boot components will be protected by apt's essential/required tags.
 PACKAGES_TO_KEEP=(
     "bash"
     "coreutils"
@@ -26,8 +22,8 @@ PACKAGES_TO_KEEP=(
     "passwd"
     "dpkg"
     "apt"
-    "libc6"
-    "libgcc-s1" # Or similar depending on arch
+    "libc6" # Essential C library
+    # libgcc-s1 is usually a dependency of libc6 or other essential packages, apt handles it.
     "login"
     "grep"
     "sed"
@@ -40,12 +36,12 @@ PACKAGES_TO_KEEP=(
     "git" # User requested
     "wget" # User requested
     "openssh-server" # User requested - CRITICAL for headless
-    "grub-pc" # Or grub-efi-amd64 depending on your boot
+    "grub-pc" # Or grub-efi-amd64 depending on your boot. grub-common will be a dep.
     "grub-common"
     "cryptsetup" # User requested
-    "cryptsetup-initramfs"
-    "iproute2" # Modern networking tools
-    "isc-dhcp-client" # Or other DHCP client if needed
+    "cryptsetup-initramfs" # For unlocking encrypted root during boot
+    "iproute2" # Modern networking tools (ip command)
+    "isc-dhcp-client" # Or other DHCP client like dhcpcd5 if used
     "ca-certificates" # For HTTPS
     "ssh" # SSH client often useful even on servers
     "man-db" # If you want man pages
@@ -99,16 +95,13 @@ echo -e "${YELLOW}User home directory backup: ${GREEN}${BACKUP_USER_HOMES}${NC}"
 if [ "$BACKUP_USER_HOMES" = true ]; then
     echo -e "${YELLOW}Backup location: ${GREEN}${BACKUP_DIR}${NC}"
 fi
-echo -e "${YELLOW}Remove non-root users: ${GREEN}!${SKIP_USER_REMOVAL}${NC}" # Note: This output might be confusing, better to show the actual effect.
-echo
 
-# Corrected user removal display logic
 if [ "$SKIP_USER_REMOVAL" = false ]; then
     echo -e "${YELLOW}Non-root user removal: ${GREEN}ENABLED${NC}"
 else
     echo -e "${YELLOW}Non-root user removal: ${RED}DISABLED${NC}"
 fi
-
+echo
 
 read -r -p "$(echo -e ${YELLOW}"Type 'YESIDOACCEPT' to proceed, or anything else to abort: "${NC})" CONFIRMATION
 
@@ -172,8 +165,6 @@ if [ "$SKIP_USER_REMOVAL" = false ]; then
             mkdir -p "$BACKUP_DIR"
             if [ $? -ne 0 ]; then
                 log_error "Could not create backup directory $BACKUP_DIR. User home directories may not be backed up."
-                # Decide if you want to exit or continue without backups
-                # For now, we'll log error and continue, user was warned about backups.
             else
                 for user in "${USERS_TO_PROCESS[@]}"; do
                     USER_HOME=$(getent passwd "$user" | cut -d: -f6)
@@ -192,7 +183,8 @@ if [ "$SKIP_USER_REMOVAL" = false ]; then
         fi
 
         log_action "Proceeding with user removal..."
-        for user in "${USERS_TO_PROCESS[@]}"; do
+        for user in "${USERS_TO_PROCESS[@]}";
+        do
             log_action "Attempting to remove user $user..."
             if pgrep -u "$user" > /dev/null; then
                 log_warning "User $user has running processes. Attempting to kill them."
@@ -205,27 +197,41 @@ if [ "$SKIP_USER_REMOVAL" = false ]; then
             
             USER_HOME_DIR=$(getent passwd "$user" | cut -d: -f6)
             SHOULD_REMOVE_HOME=false
-            if [ "$BACKUP_USER_HOMES" = true ] && [ -f "$BACKUP_DIR/${user}_home_backup.tar.gz" ]; then
-                # Backup exists and was requested
-                SHOULD_REMOVE_HOME=true
-            elif [ "$BACKUP_USER_HOMES" = false ] && [ -n "$USER_HOME_DIR" ] && [ -d "$USER_HOME_DIR" ]; then
-                # No backup requested, but home exists - ask user for this specific case if desired, or default to not removing
-                log_warning "User $user home directory $USER_HOME_DIR exists, and backups were not enabled. Home will NOT be removed by default."
-            elif [ -z "$USER_HOME_DIR" ] || [ ! -d "$USER_HOME_DIR" ]; then
-                # Home doesn't exist or not specified
-                SHOULD_REMOVE_HOME=false # No home to remove effectively
-            fi
-
+            # Determine if home directory should be removed
+            if [ -n "$USER_HOME_DIR" ] && [ -d "$USER_HOME_DIR" ]; then # Home exists
+                if [ "$BACKUP_USER_HOMES" = true ] && [ -f "$BACKUP_DIR/${user}_home_backup.tar.gz" ]; then
+                    # Backup was requested and successful
+                    SHOULD_REMOVE_HOME=true
+                elif [ "$BACKUP_USER_HOMES" = false ]; then
+                    # Backup not requested, but home exists. For aggressive debloat, we can choose to remove it.
+                    # Or, to be safer, prompt or default to not remove.
+                    # Current script's goal is aggressive. Let's make it an option or remove if no backup.
+                    log_warning "User $user home directory $USER_HOME_DIR exists, and backups were NOT enabled. Removing home as part of debloat."
+                    SHOULD_REMOVE_HOME=true # Aggressive removal
+                else
+                    # Backup was requested but failed, or other conditions
+                    log_warning "User $user home directory $USER_HOME_DIR will NOT be removed (backup might have failed or other reason)."
+                    SHOULD_REMOVE_HOME=false
+                fi
+            fi # else: no home dir or not a directory, so no explicit removal needed with deluser
 
             if $SHOULD_REMOVE_HOME ; then
-                 log_action "Removing user $user and their group (and home directory $USER_HOME_DIR as backup was made or not needed)."
-                 if ! deluser --remove-home "$user"; then # Added error check
-                     log_error "Failed to remove user $user with --remove-home. Trying without."
-                     deluser "$user" || log_error "Failed to remove user $user even without --remove-home."
+                 log_action "Removing user $user and their group (and home directory $USER_HOME_DIR)."
+                 if ! deluser --remove-home "$user"; then 
+                     log_error "Failed to remove user $user with --remove-home. Trying without --remove-home."
+                     if ! deluser "$user"; then
+                        log_error "Failed to remove user $user even without --remove-home."
+                     fi
+                 else
+                    log_action "User $user and home directory removed."
                  fi
             else
-                 log_warning "Removing user $user WITHOUT removing home directory (home: $USER_HOME_DIR)."
-                 deluser "$user" || log_error "Failed to remove user $user."
+                 log_action "Removing user $user WITHOUT removing home directory (home: $USER_HOME_DIR)."
+                 if ! deluser "$user"; then
+                    log_error "Failed to remove user $user."
+                 else
+                    log_action "User $user removed (without home dir)."
+                 fi
             fi
         done
     fi
@@ -306,12 +312,12 @@ PACKAGES_TO_PURGE=(
     "xauth"
     "xinit"
     "libx11-*"
-    "libgtk-*" 
+    "libgtk-*" # GTK libraries (many versions like libgtk2.0-*, libgtk-3-*, libgtk-4-*)
     "libgdk-*"
     "libcairo*" 
     "libpango-*" 
     "libatk-*"   
-    "libglib2.0-*" 
+    "libglib2.0-*" # Core library for GTK and GNOME (libglib2.0-bin, libglib2.0-data etc.)
     
     # --- GNOME specific libraries (often pulled in by XFCE or other apps) ---
     "libgnome-*"
@@ -343,10 +349,10 @@ PACKAGES_TO_PURGE=(
     "google-chrome-stable" 
     "epiphany-browser*"
     "konqueror*"
-    "w3m" 
+    "w3m" # Terminal browser, removing for "ultimate". Can be kept if desired.
 
     # --- Office Suites ---
-    "libreoffice*"
+    "libreoffice*" # libreoffice-core, libreoffice-common, etc.
     "libobasis*" 
     "calligra*"
     "gnumeric*"
@@ -376,7 +382,7 @@ PACKAGES_TO_PURGE=(
     "swell-foop"
     "tali"
     "gnome-games" 
-    "*game*" 
+    "*game*" # Risky wildcard, but for "ultimate". Review carefully.
 
     # --- Graphics & Image Editors/Viewers ---
     "gimp*"
@@ -398,6 +404,11 @@ PACKAGES_TO_PURGE=(
     "transmission-gtk*"
     "transmission-common" 
     "filezilla*"
+    "exim4*" # <<< Added to fix boot issue
+    "mutt" # Text-based email client (can be kept if desired)
+
+    # --- Editors (keeping nano as per request) ---
+    "vim*" # <<< Added as nano is preferred
 
     # --- Input Method Editors (IME) & Language specific ---
     "anthy*"
@@ -432,35 +443,32 @@ PACKAGES_TO_PURGE=(
     # --- "Non-critical" packages from user's list (reviewing and selecting) ---
     "acpi" 
     "acpid" 
-    "at" 
+    "at" # Job scheduler, cron is usually preferred or systemd timers
     "aspell*" 
     "avahi-daemon*" 
-    "bash-completion" 
-    "bc" 
+    "bash-completion" # Can be large, optional for minimal
+    "bc" # CLI calculator
     "debian-faq*" 
     "doc-debian"
     "doc-linux-text"
     "eject"
-    "fdutils" 
+    "fdutils" # Floppy disk utils
     "finger"
-    "gettext-base" 
-    "groff" 
-    "gnupg" 
+    "gettext-base" # Internationalization utilities
+    "groff" # Typesetting
+    "gnupg" # GNU Privacy Guard - often useful, but if space is ultra-critical and not used
     "laptop-detect"
-    "libgpmg1" 
-    "manpages*" 
-    "mtools" 
-    "mtr-tiny" 
-    "mutt" 
-    "ncurses-term" 
-    "ppp*" 
+    "libgpmg1" # General Purpose Mouse interface - for console mouse
+    "manpages*" # Manual pages (can be removed if space is tight, but often useful - keeping man-db)
+    "mtools" # Utilities for MS-DOS disks
+    "mtr-tiny" # Traceroute tool
+    "ncurses-term" # Additional terminal definitions
+    "ppp*" # Point-to-Point Protocol (dial-up, some VPNs)
     "pppoe*"
-    "read-edid" 
+    "read-edid" # Monitor information
     "unzip"
-    "usbutils" 
-    "vim-common"
-    "vim-tiny" 
-    "wamerican" 
+    "usbutils" # lsusb etc. (can be useful for debugging)
+    "wamerican" # Word lists & other languages
     "wbrazilian"
     "witalian"
     "wfrench"
@@ -475,71 +483,71 @@ PACKAGES_TO_PURGE=(
     "whois"
     "zeroinstall-injector"
     "zip"
-    "plymouth" 
+    "plymouth" # Boot splash screen
     "plymouth-themes"
     "gnome-desktop3-data"
     "gnome-firmware"
     "gnome-icon-theme*" 
     "xdg-desktop-portal*"
     "xdg-user-dirs*" 
-    "xdg-utils" 
-    "firebird*" 
+    "xdg-utils" # Utilities for desktop integration
+    "firebird*" # Database, if not explicitly used
     "libfbclient2*"
     "libib-util*"
-    "espeak*" 
+    "espeak*" # Speech synthesizer
     "speech-dispatcher*"
     "gnome-logs"
-    "gnome-software" 
-    "malcontent" 
-    "mlterm*" 
+    "gnome-software" # Software center
+    "malcontent" # Parental controls
+    "mlterm*" # Terminal emulator
     "xiterm+thai"
-    "xterm" 
+    "xterm" # Basic X terminal
 )
 
 PACKAGES_TO_ACTUALLY_PURGE=()
 for pkg_candidate_raw in "${PACKAGES_TO_PURGE[@]}"; do
-    # Remove any trailing wildcards for essential/kept checks if the base name is what matters
-    pkg_candidate_base="${pkg_candidate_raw//\*}"
-    pkg_candidate_for_dpkg_check="$pkg_candidate_raw" # Use raw for dpkg check to handle wildcards
+    pkg_candidate_base="${pkg_candidate_raw//\*}" 
+    pkg_candidate_for_dpkg_check="$pkg_candidate_raw"
 
     is_essential_or_kept=false
     for kept_pkg in "${PACKAGES_TO_KEEP[@]}"; do
+        # If the candidate (or its base) is an exact match for a kept package
         if [[ "$pkg_candidate_base" == "$kept_pkg" ]] || [[ "$pkg_candidate_raw" == "$kept_pkg" ]]; then
-            is_essential_or_kept=true
-            log_warning "Skipping '$pkg_candidate_raw' from purge: explicitly in PACKAGES_TO_KEEP."
-            break
+            # Additional check: if kept_pkg is nano, and candidate is nano*, don't expand nano* to purge nano.
+            # This logic is tricky with wildcards. The primary goal is to protect exact matches in PACKAGES_TO_KEEP.
+            if [[ "$pkg_candidate_raw" == "$kept_pkg"* && "$pkg_candidate_raw" != "$kept_pkg" ]]; then
+                # e.g. kept_pkg="nano", candidate="nano*", allow "nano*" to proceed if other nano packages exist
+                # but if candidate is exactly "nano", it's skipped.
+                : # Let it pass for further checks if it's a wildcard expanding beyond the kept package
+            else
+                is_essential_or_kept=true
+                log_warning "Skipping '$pkg_candidate_raw' from purge: explicitly in PACKAGES_TO_KEEP."
+                break
+            fi
         fi
     done
 
     if $is_essential_or_kept; then
         continue
     fi
-
-    # Check essential/required status for the base package if it's a wildcard, 
-    # or the full package name if not.
-    # This is a heuristic; a non-essential wildcard pattern can still match essential sub-packages.
-    # `apt` itself is the final arbiter of what can be removed.
+    
     check_pkg_for_essential="$pkg_candidate_base"
-    if [[ "$pkg_candidate_raw" != *"*"* ]]; then # Not a wildcard
+    if [[ "$pkg_candidate_raw" != *"*"* ]]; then 
         check_pkg_for_essential="$pkg_candidate_raw"
     fi
     
     status_output=$(dpkg-query -W -f='${Package}\t${Essential}\t${Priority}\n' "$check_pkg_for_essential" 2>/dev/null | head -n 1)
-    if echo "$status_output" | grep -q -E "\s(yes|required)$"; then # essential=yes or priority=required
-         # If the base of a wildcard is essential (e.g. "libc6" for "libc6*"), we are more careful.
-         # However, patterns like "xserver-xorg-*" are intended to be purged even if some sub-packages are important (but not essential).
-         # This check primarily protects exact matches that are essential/required.
-        if [[ "$pkg_candidate_raw" != *"*"* ]]; then # Only skip if it's an exact match and essential/required
+    if echo "$status_output" | grep -q -E "\s(yes|required)$"; then 
+        if [[ "$pkg_candidate_raw" != *"*"* ]]; then 
             log_warning "Skipping '$pkg_candidate_raw' from purge: marked essential/required by dpkg."
             continue
+        # else: it's a wildcard, let apt decide if sub-packages are truly essential and unremovable.
         fi
     fi
     
-    # Check if package or wildcard matches any installed package
     if dpkg-query -W -f='${Status}' "${pkg_candidate_for_dpkg_check}" 2>/dev/null | grep -q "ok installed"; then
         PACKAGES_TO_ACTUALLY_PURGE+=("$pkg_candidate_raw")
     else
-        # This is where the corrected log_action call is
         log_action "Pattern '$pkg_candidate_raw' does not match any installed packages or is already removed. Skipping."
     fi
 done
@@ -554,14 +562,15 @@ if [ ${#PACKAGES_TO_ACTUALLY_PURGE[@]} -gt 0 ]; then
     read -r -p "$(echo -e ${YELLOW}"Confirm purging these packages/patterns? (yes/NO): "${NC})" CONFIRM_PURGE
     if [[ "$CONFIRM_PURGE" =~ ^([yY][eE][sS])$ ]]; then
         log_action "Purging packages..."
+        # It's often better to pass all packages to a single apt-get call if possible,
+        # but wildcards can behave differently. Looping ensures each pattern is processed.
         for pkg_to_purge in "${PACKAGES_TO_ACTUALLY_PURGE[@]}"; do
             log_action "Attempting to purge: $pkg_to_purge"
-            apt-get purge -y "$pkg_to_purge"
-            if [ $? -ne 0 ]; then
-                log_warning "Issues encountered purging '$pkg_to_purge'. It might have already been removed, be part of a metapackage, or protected. Apt handles this."
-            fi
+            # Using "|| true" to prevent script exit if a single purge fails (apt might have already removed it as a dependency)
+            apt-get purge -y "$pkg_to_purge" || log_warning "Purge command for '$pkg_to_purge' had a non-zero exit. This might be okay if already removed."
         done
-        log_action "Finished initial purge attempt."
+        log_action "Finished initial purge attempt. Running autoremove again."
+        apt-get autoremove --purge -y # Run autoremove again after manual purges
     else
         log_warning "Package purge aborted by user."
     fi
@@ -572,7 +581,7 @@ fi
 # --- System Cleanup ---
 log_section "System Cleanup"
 
-log_action "Removing orphaned dependencies..."
+log_action "Removing orphaned dependencies (final pass)..."
 apt-get autoremove --purge -y
 if [ $? -ne 0 ]; then log_warning "Autoremove encountered issues. This is sometimes normal if packages were already removed."; fi
 
@@ -581,10 +590,15 @@ apt-get clean -y
 if [ $? -ne 0 ]; then log_warning "Apt clean encountered issues."; fi
 
 log_action "Removing residual configuration files (apt purge should handle most)..."
-if [ -d "/etc/libreoffice" ]; then
+if [ -d "/etc/libreoffice" ]; then # Example, apt purge should get this
     log_action "Removing /etc/libreoffice..."
     rm -rf /etc/libreoffice
 fi
+if [ -d "/etc/exim4" ]; then # Ensure exim4 configs are gone if purge missed anything
+    log_action "Removing /etc/exim4..."
+    rm -rf /etc/exim4
+fi
+
 
 log_action "Removing temporary files..."
 rm -rf /tmp/*
@@ -603,7 +617,9 @@ if [ "$COMPRESS_INITRAMFS" = true ]; then
             sed -i 's/MODULES=most/MODULES=dep/g' /etc/initramfs-tools/initramfs.conf
             log_action "Changed MODULES=most to MODULES=dep."
         elif ! grep -q "MODULES=dep" /etc/initramfs-tools/initramfs.conf; then
-            log_action "MODULES setting not 'most', not changing to 'dep'. Current config preserved or MODULES=dep already set."
+            # If MODULES is not 'most' and not 'dep', it might be 'netboot' or custom.
+            # Only change if it's 'most'.
+            log_action "MODULES setting not 'most', not changing to 'dep'. Current config preserved."
         else
              log_action "MODULES=dep already set or 'most' not found."
         fi
@@ -626,47 +642,36 @@ if [ "$REMOVE_IPV6_XTABLES" = true ]; then
     log_warning "DO NOT DO THIS if you use IPv6 or plan to use it."
     read -r -p "$(echo -e ${RED}"Confirm removing IPv6 xtables files? (yes/NO): "${NC})" CONFIRM_IPV6_REMOVE
     if [[ "$CONFIRM_IPV6_REMOVE" =~ ^([yY][eE][sS])$ ]]; then
-        IPV6_XTABLES_FILES=(
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_ah.so" # Paths can vary, check your system
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_dst.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_eui64.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_frag.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_hbh.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_hl.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_HL.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_icmp6.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_ipv6header.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_LOG.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_mh.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_REJECT.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_rt.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_DNAT.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_DNPT.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_MASQUERADE.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_NETMAP.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_REDIRECT.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_SNAT.so"
-            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_SNPT.so"
-            # Add paths for /lib/xtables if they exist on your system version
-            "/lib/xtables/libip6t_ah.so"
-            "/lib/xtables/libip6t_dst.so"
-            # ... (repeat for all files in /lib/xtables if needed)
+        # Common paths for xtables. Adjust if your system uses different locations.
+        XTABLES_BASE_PATHS=("/usr/lib/x86_64-linux-gnu/xtables" "/usr/lib/xtables" "/lib/xtables")
+        IPV6_XTABLES_LIBS=(
+            "libip6t_ah.so" "libip6t_dst.so" "libip6t_eui64.so" "libip6t_frag.so"
+            "libip6t_hbh.so" "libip6t_hl.so" "libip6t_HL.so" "libip6t_icmp6.so"
+            "libip6t_ipv6header.so" "libip6t_LOG.so" "libip6t_mh.so" "libip6t_REJECT.so"
+            "libip6t_rt.so" "libip6t_DNAT.so" "libip6t_DNPT.so" "libip6t_MASQUERADE.so"
+            "libip6t_NETMAP.so" "libip6t_REDIRECT.so" "libip6t_SNAT.so" "libip6t_SNPT.so"
         )
-        log_action "Removing specified IPv6 xtables files..."
         REMOVED_COUNT=0
-        for xt_file in "${IPV6_XTABLES_FILES[@]}"; do
-            if [ -f "$xt_file" ]; then
-                if rm -f "$xt_file"; then
-                    echo "Removed $xt_file"
-                    ((REMOVED_COUNT++))
-                else
-                    log_warning "Could not remove $xt_file (permission issue?)"
-                fi
-            else
-                 : # File not found, silently ignore for this specific cleanup
+        log_action "Removing specified IPv6 xtables files..."
+        for base_path in "${XTABLES_BASE_PATHS[@]}"; do
+            if [ -d "$base_path" ]; then
+                for lib_name in "${IPV6_XTABLES_LIBS[@]}"; do
+                    xt_file="$base_path/$lib_name"
+                    if [ -f "$xt_file" ]; then
+                        if rm -f "$xt_file"; then
+                            echo "Removed $xt_file"
+                            ((REMOVED_COUNT++))
+                        else
+                            log_warning "Could not remove $xt_file (permission issue?)"
+                        fi
+                    fi
+                done
             fi
         done
         log_action "Removed $REMOVED_COUNT IPv6 xtables files."
+        if [ "$REMOVED_COUNT" -eq 0 ]; then
+            log_warning "No IPv6 xtables files were found/removed. Check paths if expected."
+        fi
     else
         log_action "Skipping IPv6 xtables file removal."
     fi
