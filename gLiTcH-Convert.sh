@@ -384,7 +384,7 @@ show_progress() {
 }
 
 # Start of main execution
-#log "=== gLiTcH Linux KDE v9.0 Installation Script ==="
+#log "=== gLiTcH Linux KDE v11.0 Installation Script ==="
 #log "Starting conversion from Debian to gLiTcH Linux..."
 echo -e "${GREEN}  ${NC}"
 echo -e "${GREEN}  ${NC}"
