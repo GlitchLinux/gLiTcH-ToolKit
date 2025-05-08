@@ -10,7 +10,7 @@ if [ ! -d "$dir_path" ]; then
 fi
 
 # Output file
-output_file="/tmp/directory.listing"
+output_file="/tmp/directory-listing.txt"
 
 # Generate a sorted list of files by size (largest first)
 echo "Listing files in '$dir_path' (sorted by size, largest first):" > "$output_file"
@@ -28,3 +28,7 @@ else
 fi
 
 echo "Done! Output saved to: $output_file"
+
+sleep 350
+
+sudo rm /tmp/directory-listing.txt
