@@ -2,7 +2,7 @@
 #!/bin/bash
 
 # Enhanced Debian to gLiTcH Linux Converter
-# This script converts a running Debian installation to gLiTcH Linux KDE v9.0
+# This script converts a running Debian installation to gLiTcH Linux KDE v11.0
 # WARNING: This script modifies system files and should be used with caution
 
 set -e  # Exit immediately if a command exits with a non-zero status
