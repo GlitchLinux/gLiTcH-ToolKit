@@ -1,484 +1,694 @@
 #!/bin/bash
 
 # --- Configuration ---
-BACKUP_USER_HOMES=false # Set to true to attempt to backup user home directories to /opt/user_backups
-BACKUP_DIR="/opt/user_backups"
-LOG_FILE="/var/log/debloat_script.log"
-KEEP_USERS=("root" "your_admin_user_if_any") # Add any other users you explicitly want to keep
+BACKUP_USER_HOMES=false # Set to true to back up user home directories. Set to false to skip.
+BACKUP_DIR="/opt/user_backups_$(date +%Y%m%d_%H%M%S)"
+SKIP_USER_REMOVAL=false # Set to true to skip removing non-root users
+COMPRESS_INITRAMFS=true # Set to true to compress initramfs (saves a little space)
+REMOVE_IPV6_XTABLES=false # EXTREMELY CAREFUL! Set to true only if you are ABSOLUTELY sure.
 
-# --- Script Setup ---
-start_time=$SECONDS
-now=$(date +"%Y-%m-%d_%A_%H:%M:%S")
-script_pid=$$
+# Packages to explicitly KEEP (add any others you need)
+# openssh-server is critical for headless access
+# cryptsetup is needed if you use encrypted volumes
+# Essential networking tools like iproute2 (provides `ip`) or net-tools (provides `ifconfig`) should be kept.
+# systemd and essential boot components will be protected by apt's essential/required tags.
+PACKAGES_TO_KEEP=(
+    "bash"
+    "coreutils"
+    "debian-archive-keyring"
+    "gpgv"
+    "init"
+    "systemd"
+    "systemd-sysv"
+    "sysvinit-utils"
+    "mount"
+    "util-linux"
+    "passwd"
+    "dpkg"
+    "apt"
+    "libc6"
+    "libgcc-s1" # Or similar depending on arch
+    "login"
+    "grep"
+    "sed"
+    "awk"
+    "tar"
+    "gzip"
+    "bzip2"
+    "xz-utils"
+    "nano" # User requested
+    "git" # User requested
+    "wget" # User requested
+    "openssh-server" # User requested - CRITICAL for headless
+    "grub-pc" # Or grub-efi-amd64 depending on your boot
+    "grub-common"
+    "cryptsetup" # User requested
+    "cryptsetup-initramfs"
+    "iproute2" # Modern networking tools
+    "isc-dhcp-client" # Or other DHCP client if needed
+    "ca-certificates" # For HTTPS
+    "ssh" # SSH client often useful even on servers
+    "man-db" # If you want man pages
+    "less" # For viewing files
+    "procps" # For ps, top etc.
+    "netbase" # For /etc/services, /etc/protocols
+    "kmod" # For kernel module management
+    "udev" # For device management
+    # Add your kernel package(s) here if you want to be super explicit, though apt should protect it
+    # e.g. "linux-image-amd64" or the specific version like "linux-image-6.1.0-18-amd64"
+)
+
+# --- Script Initialization ---
+export DEBIAN_FRONTEND=noninteractive # Suppress interactive prompts from apt
+SECONDS=0 # Start timer
 
 # Colors
-red=$(tput setaf 1)
-green=$(tput setaf 2)
-yellow=$(tput setaf 11)
-blue=$(tput setaf 12)
-reset=$(tput sgr0)
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-# Ensure running as root
-if [ "$(id -u)" -ne 0 ]; then
-  echo "${red}This script must be run as root. Please use sudo.${reset}" >&2
-  exit 1
-fi
+# Window resize (mostly for interactive feel, less relevant for true headless prep)
+printf '\033[8;40;120t'
 
-# Logging function
-log_action() {
-  echo "$(date +"%Y-%m-%d %H:%M:%S") - $1" | tee -a "$LOG_FILE"
-}
-
-# Section header function
-print_section() {
-  echo
-  log_action "-------------------------===== $1 =====-------------------------"
-  echo
-}
-
-# --- Initial Display and Warning ---
-clear
-printf '\033[8;40;120t' # Resize window
-
-echo "${yellow}================================================================================"
-echo "                DEBIAN XFCE TO MINIMAL HEADLESS DEBLOATER"
-echo "================================================================================"
-echo "${red}                           *** EXTREME CAUTION ***"
-echo "${yellow}This script will:"
-echo "  - Remove XFCE, LightDM, X.Org, and all associated GUI components."
-echo "  - Purge games, browsers, office suites, media players, and many other apps."
-echo "  - Potentially remove all non-root users and their home directories."
-echo "  - Aggressively clean up system files and configurations."
-echo ""
-echo "  ${red}MAKE ABSOLUTELY SURE YOU ARE RUNNING THIS ON THE CORRECT SYSTEM"
-echo "  ${red}AND HAVE BACKUPS OF ANY IMPORTANT DATA."
-echo ""
-echo "  ${blue}Packages to be explicitly kept (if present):"
-echo "    openssh-server, git, wget, bash, nano, grub, networking components,"
-echo "    cryptsetup, sudo, apt, dpkg, core system utilities, kernel."
-echo ""
-echo "  Log file will be: $LOG_FILE"
-echo "${yellow}================================================================================"${reset}
+echo -e "${BLUE}-------------------------===== Start of Ultimate Debian Debloater ====-------------------------${NC}"
+echo -e "${YELLOW}Current Time: $(date +"%Y-%m-%d_%A_%H:%M:%S")${NC}"
+echo -e "${YELLOW}Running as: $(whoami)${NC}"
+echo -e "${YELLOW}Script PID: $$${NC}"
 echo
-read -p "${yellow}Type 'PROCEED' to continue, or anything else to abort: ${reset}" confirmation
 
-if [ "$confirmation" != "PROCEED" ]; then
-  log_action "User aborted script."
-  echo "${red}Aborted by user.${reset}"
-  exit 1
-fi
-
-log_action "Debloat script started by UID $(id -u) at $now. PID: $script_pid"
-log_action "WARNING: This script is highly destructive and configured to make significant changes."
-
-# --- Variables from User Scripts ---
-part=0
-primeerror=0
-error=0
-automatic=0
-debug=0
-noquit=0 # Will be set to 1 at the end for final message if preferred
-
-# --- User Management ---
-print_section "User Management"
-
-if $BACKUP_USER_HOMES; then
-  log_action "Attempting to backup user home directories to $BACKUP_DIR"
-  mkdir -p "$BACKUP_DIR"
-  if [ $? -ne 0 ]; then
-    log_action "${red}Error creating backup directory $BACKUP_DIR. Skipping backups.${reset}"
-    echo "${red}Error creating backup directory $BACKUP_DIR. Skipping backups.${reset}"
-  else
-    for user_home in /home/*; do
-      if [ -d "$user_home" ]; then
-        username=$(basename "$user_home")
-        keep_this_user=false
-        for kept_user in "${KEEP_USERS[@]}"; do
-          if [ "$username" == "$kept_user" ]; then
-            keep_this_user=true
-            break
-          fi
-        done
-
-        if ! $keep_this_user; then
-          log_action "Backing up /home/$username to $BACKUP_DIR/$username-$(date +%F_%H%M%S).tar.gz"
-          tar -czf "$BACKUP_DIR/$username-$(date +%F_%H%M%S).tar.gz" -C /home "$username"
-          if [ $? -eq 0 ]; then
-            log_action "Backup of $username successful."
-          else
-            log_action "${yellow}Warning: Backup of $username failed.${reset}"
-          fi
-        else
-          log_action "Skipping backup for explicitly kept user: $username"
-        fi
-      fi
-    done
-  fi
-fi
-
-log_action "Removing non-essential users..."
-getent passwd | awk -F: '$3 >= 1000 && $3 != 65534 {print $1}' | while read -r username; do
-  keep_this_user=false
-  for kept_user in "${KEEP_USERS[@]}"; do
-    if [ "$username" == "$kept_user" ]; then
-      keep_this_user=true
-      break
-    fi
-  done
-
-  if ! $keep_this_user; then
-    log_action "Removing user: $username and their home directory."
-    # Kill processes by this user first
-    # pkill -u "$username" # More gentle
-    killall -KILL -u "$username" # More forceful
-    sleep 1
-    deluser --remove-home "$username"
-    if [ $? -eq 0 ]; then
-      log_action "Successfully removed user $username and their home directory."
-    else
-      log_action "${yellow}Warning: Could not remove user $username or their home directory fully.${reset}"
-    fi
-    # Remove user from any groups they might be primary in (deluser should handle this)
-    # groupdel "$username" 2>/dev/null
-  else
-    log_action "Keeping user: $username"
-  fi
+# --- WARNING AND CONFIRMATION ---
+echo -e "${RED}!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! WARNING !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!${NC}"
+echo -e "${RED}This script will attempt to remove a significant number of packages,${NC}"
+echo -e "${RED}including the XFCE desktop environment, all GUI applications, display managers,${NC}"
+echo -e "${RED}and potentially non-root user accounts and their data.${NC}"
+echo -e "${RED}This is intended to create a MINIMAL HEADLESS system.${NC}"
+echo -e "${RED}Ensure you have SSH access configured and working if this is a remote machine.${NC}"
+echo -e "${RED}ALL XFCE, GUI applications, browsers, office suites, games will be PURGED.${NC}"
+echo -e "${YELLOW}It is STRONGLY recommended to run this in a VM or test environment first.${NC}"
+echo -e "${YELLOW}MAKE SURE YOU HAVE BACKUPS OF ALL IMPORTANT DATA.${NC}"
+echo -e "${RED}!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!${NC}"
+echo
+echo -e "${YELLOW}Packages explicitly marked to KEEP:${NC}"
+for pkg_keep in "${PACKAGES_TO_KEEP[@]}"; do
+    echo -e "${GREEN}  - $pkg_keep${NC}"
 done
-log_action "User cleanup finished."
+echo
+echo -e "${YELLOW}User home directory backup: ${GREEN}${BACKUP_USER_HOMES}${NC}"
+if [ "$BACKUP_USER_HOMES" = true ]; then
+    echo -e "${YELLOW}Backup location: ${GREEN}${BACKUP_DIR}${NC}"
+fi
+echo -e "${YELLOW}Remove non-root users: ${GREEN}!${SKIP_USER_REMOVAL}${NC}" # Note: This output might be confusing, better to show the actual effect.
+echo
 
-# --- Stop GUI Services ---
-print_section "Stopping GUI and Related Services"
-log_action "Stopping LightDM, Xorg, and other potential display managers..."
-systemctl stop lightdm.service || log_action "LightDM was not running or failed to stop."
-systemctl disable lightdm.service || log_action "Failed to disable LightDM."
+# Corrected user removal display logic
+if [ "$SKIP_USER_REMOVAL" = false ]; then
+    echo -e "${YELLOW}Non-root user removal: ${GREEN}ENABLED${NC}"
+else
+    echo -e "${YELLOW}Non-root user removal: ${RED}DISABLED${NC}"
+fi
 
-# Add other display managers if they might exist
-systemctl stop gdm.service gdm3.service sddm.service 2>/dev/null
-systemctl disable gdm.service gdm3.service sddm.service 2>/dev/null
 
-# Stop other potentially problematic services before removal
-log_action "Stopping other services that might interfere..."
-systemctl stop bluetooth.service || log_action "Bluetooth service not running or failed to stop."
-systemctl stop cups.service || log_action "CUPS service not running or failed to stop."
-systemctl stop avahi-daemon.service || log_action "Avahi service not running or failed to stop."
-systemctl stop ModemManager.service || log_action "ModemManager service not running or failed to stop."
-systemctl stop speech-dispatcherd.service || log_action "Speech Dispatcher not running or failed to stop."
+read -r -p "$(echo -e ${YELLOW}"Type 'YESIDOACCEPT' to proceed, or anything else to abort: "${NC})" CONFIRMATION
 
-systemctl disable bluetooth.service || log_action "Failed to disable Bluetooth."
-systemctl disable cups.service || log_action "Failed to disable CUPS."
-systemctl disable avahi-daemon.service || log_action "Failed to disable Avahi."
-systemctl disable ModemManager.service || log_action "Failed to disable ModemManager."
-systemctl disable speech-dispatcherd.service || log_action "Failed to disable Speech Dispatcher."
+if [ "$CONFIRMATION" != "YESIDOACCEPT" ]; then
+    echo -e "${RED}Aborted by user.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}Proceeding with debloating process... You have been warned!${NC}"
+sleep 3
+
+# --- Helper Functions ---
+log_section() {
+    echo
+    echo -e "${BLUE}-------------------------===== $1 =====-------------------------${NC}"
+    echo
+}
+
+log_action() {
+    echo -e "${GREEN}>>> $1${NC}"
+}
+
+log_warning() {
+    echo -e "${YELLOW}!!! $1${NC}"
+}
+
+log_error() {
+    echo -e "${RED}!!! ERROR: $1${NC}"
+}
+
+# --- Check if running as root ---
+if [ "$(id -u)" -ne 0 ]; then
+    log_error "This script must be run as root. Use 'sudo ./debloater.sh'."
+    exit 1
+fi
+
+# --- User Removal ---
+if [ "$SKIP_USER_REMOVAL" = false ]; then
+    log_section "User Account Removal"
+    log_action "Identifying non-root, non-system users (UID >= 1000)..."
+    
+    SUDO_USER_REAL=""
+    if [ -n "$SUDO_USER" ]; then
+        SUDO_USER_REAL=$(getent passwd "$SUDO_USER" | awk -F: '{print $1}')
+    fi
+
+    mapfile -t USERS_TO_PROCESS < <(getent passwd | awk -F: -v sudo_user="$SUDO_USER_REAL" '
+        $3 >= 1000 && $1 != "root" && $1 != sudo_user {print $1}')
+
+    if [ ${#USERS_TO_PROCESS[@]} -eq 0 ]; then
+        log_action "No non-root users (UID >= 1000) found to remove (excluding current sudo user if any)."
+    else
+        log_action "Found users to potentially remove:"
+        for user in "${USERS_TO_PROCESS[@]}"; do
+            echo "  - $user (Home: $(getent passwd "$user" | cut -d: -f6))"
+        done
+        echo
+
+        if [ "$BACKUP_USER_HOMES" = true ]; then
+            log_action "Backing up home directories to $BACKUP_DIR..."
+            mkdir -p "$BACKUP_DIR"
+            if [ $? -ne 0 ]; then
+                log_error "Could not create backup directory $BACKUP_DIR. User home directories may not be backed up."
+                # Decide if you want to exit or continue without backups
+                # For now, we'll log error and continue, user was warned about backups.
+            else
+                for user in "${USERS_TO_PROCESS[@]}"; do
+                    USER_HOME=$(getent passwd "$user" | cut -d: -f6)
+                    if [ -d "$USER_HOME" ]; then
+                        log_action "Backing up $USER_HOME for user $user..."
+                        if tar czf "$BACKUP_DIR/${user}_home_backup.tar.gz" -C "$(dirname "$USER_HOME")" "$(basename "$USER_HOME")"; then
+                            log_action "Backup for $user successful."
+                        else
+                            log_warning "Backup for $user FAILED. Home directory for $user may not be removed safely."
+                        fi
+                    else
+                        log_warning "Home directory $USER_HOME for user $user not found. Skipping backup."
+                    fi
+                done
+            fi
+        fi
+
+        log_action "Proceeding with user removal..."
+        for user in "${USERS_TO_PROCESS[@]}"; do
+            log_action "Attempting to remove user $user..."
+            if pgrep -u "$user" > /dev/null; then
+                log_warning "User $user has running processes. Attempting to kill them."
+                killall -KILL -u "$user"
+                sleep 2 
+                if pgrep -u "$user" > /dev/null; then
+                     log_warning "Could not kill all processes for $user. Manual intervention might be needed. User removal might fail or be incomplete."
+                fi
+            fi
+            
+            USER_HOME_DIR=$(getent passwd "$user" | cut -d: -f6)
+            SHOULD_REMOVE_HOME=false
+            if [ "$BACKUP_USER_HOMES" = true ] && [ -f "$BACKUP_DIR/${user}_home_backup.tar.gz" ]; then
+                # Backup exists and was requested
+                SHOULD_REMOVE_HOME=true
+            elif [ "$BACKUP_USER_HOMES" = false ] && [ -n "$USER_HOME_DIR" ] && [ -d "$USER_HOME_DIR" ]; then
+                # No backup requested, but home exists - ask user for this specific case if desired, or default to not removing
+                log_warning "User $user home directory $USER_HOME_DIR exists, and backups were not enabled. Home will NOT be removed by default."
+            elif [ -z "$USER_HOME_DIR" ] || [ ! -d "$USER_HOME_DIR" ]; then
+                # Home doesn't exist or not specified
+                SHOULD_REMOVE_HOME=false # No home to remove effectively
+            fi
+
+
+            if $SHOULD_REMOVE_HOME ; then
+                 log_action "Removing user $user and their group (and home directory $USER_HOME_DIR as backup was made or not needed)."
+                 if ! deluser --remove-home "$user"; then # Added error check
+                     log_error "Failed to remove user $user with --remove-home. Trying without."
+                     deluser "$user" || log_error "Failed to remove user $user even without --remove-home."
+                 fi
+            else
+                 log_warning "Removing user $user WITHOUT removing home directory (home: $USER_HOME_DIR)."
+                 deluser "$user" || log_error "Failed to remove user $user."
+            fi
+        done
+    fi
+else
+    log_action "Skipping non-root user removal as per configuration."
+fi
+
+
+# --- Stop Display Manager and Desktop Services ---
+log_section "Stopping GUI Services"
+log_action "Attempting to stop display manager and related services..."
+SYSTEMD_SERVICES_TO_STOP=(
+    "lightdm"
+    "gdm3"
+    "sddm"
+    "lxdm"
+    "xfce4-session" 
+)
+for service in "${SYSTEMD_SERVICES_TO_STOP[@]}"; do
+    if systemctl is-active --quiet "$service"; then
+        log_action "Stopping $service..."
+        systemctl stop "$service" || log_warning "Failed to stop $service (it might not be running or exist)."
+    else
+        log_action "Service $service is not active. Skipping stop."
+    fi
+done
+log_action "Attempting to kill any remaining X server processes..."
+pkill -9 Xorg || true 
+pkill -9 Xwayland || true
 
 
 # --- Package Removal ---
-# Define packages to remove. Wildcards are used.
-# This is a very extensive list. Be careful.
+log_section "Package Removal"
 
 PACKAGES_TO_PURGE=(
-    # --- XFCE Desktop Environment and Core GUI ---
-    "task-xfce-desktop"
-    "xfce4*" "libxfce4*" "xfwm4*" "libxfce4ui*" "libxfce4util*"
-    "thunar*" "mousepad*" "parole*" "ristretto*" "xfburn*" "xfce4-appfinder*"
-    "xfce4-notifyd*" "xfce4-panel*" "xfce4-session*" "xfce4-settings*"
-    "xfce4-terminal" # Removing this, assuming console/SSH access is primary
-    "catfish*" "engrampa*" "orage*" "xfdesktop4*"
-    "gtk2-engines*" "gtk3-engines*" "gtk+*-*" "libgtk-*" "libgtk2.0-*" "libgtk-3-*" "libgtk-4-*"
-    "libqt5*" "libqt6*" "qt5-*" "qt6-*" # Careful with Qt if any desired CLI tools depend on it
-    "lightdm*" "xserver-xorg-core*" "xserver-xorg" "xorg" "x11-common" "x11-apps" "x11-session-utils"
-    "x11-utils" "x11-xkb-utils" "x11-xserver-utils" "xinit" "xinput" "xfonts-*"
-    "gnome-icon-theme" "tango-icon-theme" "elementary-xfce-icon-theme" "adwaita-icon-theme"
-    "desktop-file-utils" # For .desktop files
-    "xdg-user-dirs" "xdg-utils" # XDG utilities often for GUI context
-    "libglib2.0-data" # often with GUI
-    "shared-mime-info" # Mime types, mostly for GUI
+    # --- XFCE Desktop Environment & Core Components ---
+    "xfce4*"
+    "xfwm4*"
+    "thunar*"
+    "xfdesktop4*"
+    "xfce4-panel*"
+    "xfce4-session*"
+    "xfce4-settings*"
+    "xfce4-terminal*" 
+    "mousepad"
+    "ristretto"
+    "parole"
+    "xfburn"
+    "xfce4-appfinder"
+    "xfce4-notifyd"
+    "xfce4-power-manager*"
+    "xfce4-pulseaudio-plugin" 
+    "xfce4-screenshooter"
+    "xfce4-taskmanager"
+    "libxfce4util*"
+    "libxfce4ui*"
+    "libxfconf*"
+    "tumbler*" 
 
-    # --- Games (Comprehensive List) ---
-    "aisleriot" "five-or-more" "four-in-a-row" "gnome-2048" "gnome-chess"
-    "gnome-klotski" "gnome-mahjongg" "gnome-mines" "gnome-nibbles" "gnome-robots"
-    "gnome-sudoku" "gnome-taquin" "gnome-tetravex" "hitori" "iagno" "lightsoff"
-    "quadrapassel" "swell-foop" "tali" "*game*" # Generic wildcard, be cautious
+    # --- Display Managers & Greeters ---
+    "lightdm*"
+    "gdm3*"
+    "sddm*"
+    "lxdm*"
+    "slick-greeter*"
+    "gtk-greeter" 
+
+    # --- X.Org Server and common X11 Libraries (BE VERY CAREFUL HERE) ---
+    "xserver-xorg-core"
+    "xserver-xorg"
+    "xorg"
+    "xserver-xorg-input-*"
+    "xserver-xorg-video-*"
+    "xwayland"
+    "x11-common"
+    "x11-utils"
+    "x11-xserver-utils"
+    "xauth"
+    "xinit"
+    "libx11-*"
+    "libgtk-*" 
+    "libgdk-*"
+    "libcairo*" 
+    "libpango-*" 
+    "libatk-*"   
+    "libglib2.0-*" 
+    
+    # --- GNOME specific libraries (often pulled in by XFCE or other apps) ---
+    "libgnome-*"
+    "libgnomeui-*"
+    "libbonobo*"
+    "libbonoboui*"
+    
+    # --- Sound & Multimedia ---
+    "pulseaudio*"
+    "pipewire*" 
+    "alsa-utils" 
+    "libcanberra*" 
+    "brasero*"
+    "cheese*"
+    "gnome-sound-recorder"
+    "sound-juicer"
+    "totem*"
+    "rhythmbox*"
+    "vlc*"
+    "smplayer*"
+    "lxmusic*"
+    "audacious*"
+    "pavucontrol" 
 
     # --- Browsers ---
-    "firefox*" "firefox-esr*" "chromium*" "epiphany-browser*" "surf" "netsurf-*"
+    "firefox*"
+    "firefox-esr*" 
+    "chromium*"
+    "google-chrome-stable" 
+    "epiphany-browser*"
+    "konqueror*"
+    "w3m" 
 
     # --- Office Suites ---
-    "libreoffice*" "libobasis*" "gnumeric*" "abiword*" "calligra-*"
+    "libreoffice*"
+    "libobasis*" 
+    "calligra*"
+    "gnumeric*"
+    "abiword*"
+    "evince*" 
+    "okular*"
+    "atril*" 
 
-    # --- Multimedia ---
-    "brasero*" "cheese*" "gnome-sound-recorder*" "sound-juicer*" "totem*" "vlc*"
-    "rhythmbox*" "pavucontrol*" "pulseaudio*" "alsa-utils*" "alsa-tools*" # alsa-utils contains alsamixer which can be useful even headless
-    "mpv" "mplayer" "smplayer" "lxmusic*" "audacious*" "exaile*" "pitivi*" "kdenlive*" "openshot*"
-    "pipewire*" # Modern audio/video server, might replace pulseaudio
+    # --- Games ---
+    "aisleriot"
+    "five-or-more"
+    "four-in-a-row"
+    "gnome-2048"
+    "gnome-chess"
+    "gnome-klotski"
+    "gnome-mahjongg"
+    "gnome-mines"
+    "gnome-nibbles"
+    "gnome-robots"
+    "gnome-sudoku"
+    "gnome-taquin"
+    "gnome-tetravex"
+    "hitori"
+    "iagno"
+    "lightsoff"
+    "quadrapassel"
+    "swell-foop"
+    "tali"
+    "gnome-games" 
+    "*game*" 
 
-    # --- Graphics Applications ---
-    "gimp*" "eog*" "shotwell*" "simple-scan*" "inkscape*" "krita*" "darktable*"
-    "ristretto" # Already in XFCE list, but ensure it's caught
+    # --- Graphics & Image Editors/Viewers ---
+    "gimp*"
+    "inkscape*"
+    "eog" 
+    "shotwell*" 
+    "simple-scan*"
+    "xsane*"
+    "kolourpaint*"
+    "krita*"
 
-    # --- Internet & Communication (Non-Browser) ---
-    "deluge*" "hexchat*" "pidgin*" "remmina*" "thunderbird*" "transmission-gtk*" "transmission-cli" "evolution*"
-    "filezilla*" "xchat*"
+    # --- Internet & Communication (excluding ssh/wget which are kept) ---
+    "deluge*"
+    "hexchat*"
+    "pidgin*"
+    "remmina*"
+    "thunderbird*"
+    "evolution*"
+    "transmission-gtk*"
+    "transmission-common" 
+    "filezilla*"
 
-    # --- PDF/Document Viewers (GUI) ---
-    "evince*" "atril*" "okular*" "xpdf*" "zathura*" # Zathura can be CLI but often with GUI deps
+    # --- Input Method Editors (IME) & Language specific ---
+    "anthy*"
+    "kasumi*"
+    "im-config"
+    "mozc-*"
+    "uim*"
+    "fcitx*"
+    "ibus*"
+    "scim*"
+    "debian-reference-common"
+    "debian-reference-es"
+    "debian-reference-it"
+    "yelp*" 
+    "yelp-xsl"
 
-    # --- Input Methods ---
-    "anthy*" "kasumi*" "mozc-*" "uim-*" "fcitx*" "ibus*" "im-config"
+    # --- Other Accessories & Utilities often part of desktop installs ---
+    "deja-dup*" 
+    "gnote*"
+    "goldendict*"
+    "baobab" 
+    "gnome-disk-utility"
+    "gnome-system-monitor"
+    "gnome-calculator"
+    "file-roller" 
+    "seahorse" 
+    "lxtask"
+    "tasksel" 
+    "reportbug"
+    "popularity-contest" 
 
-    # --- Other Accessories & System Tools (GUI or non-essential for headless) ---
-    "deja-dup*" "gnote*" "goldendict*" "yelp*" "debian-reference-*" "eject" "id3*"
-    "mdadm" # Remove if NOT using software RAID
-    "vino*" # VNC server
-    "gnome-logs*" "gnome-software*" "malcontent*" "mlterm*" "xiterm*" "xterm" # xterm is a fallback, but for minimal headless, not strictly needed
-    "synaptic*" # GUI package manager
-    "gnome-disk-utility" "gparted" # GUI disk managers
-    "baobab" # Disk usage analyzer (GUI)
-    "seahorse" # Passwords and keys (GUI)
-    "system-config-printer*" "cups*" # Printing system
-    "bluetooth" "bluez*" "blueman*" # Bluetooth
-    "modemmanager"
-    "network-manager" "network-manager-gnome" # Using systemd-networkd or ifupdown for headless
-    "plymouth*" # Bootsplash
-    "xsane*" # Scanning
-    "speech-dispatcher*" "espeak*" # Text-to-speech
-    "gnome-firmware" "gnome-desktop3-data"
-    "sound-theme-freedesktop"
-    "dconf-gsettings-backend" "dconf-service" # often GUI config related
-    "gvfs-*" # GNOME Virtual File System, mostly for GUI integration
-    "policykit-1-gnome" # Polkit GUI agent
-    "zeitgeist-*" # Activity logging, often desktop related
-    "tracker-*" # File indexing, desktop related
-    "colord*" # Color management, mostly for GUI
-
-    # --- From user-provided "non-critical" list (selectively chosen) ---
-    "aptitude" # CLI alternative to apt, can go
-    "acpi" "acpid" # Can be useful for power events, but optional for bare server
-    "at" # Job scheduler, cron is usually sufficient
-    "aspell*" "ispell*" "hunspell-*" "mythes-*" "hyphen-*" # Spell checking and dictionaries
-    "console-setup*" "console-data" "console-tools" # If default console is fine
-    "dc" "bc" # CLI calculators
-    "debian-faq*" "doc-debian" "doc-linux-text" "manpages-dev" # Docs
-    "dictionaries-common"
-    # "eject" # Already listed
-    "fdutils" # Floppy utils
-    # "file" # 'file' command is quite useful, consider keeping
+    # --- "Non-critical" packages from user's list (reviewing and selecting) ---
+    "acpi" 
+    "acpid" 
+    "at" 
+    "aspell*" 
+    "avahi-daemon*" 
+    "bash-completion" 
+    "bc" 
+    "debian-faq*" 
+    "doc-debian"
+    "doc-linux-text"
+    "eject"
+    "fdutils" 
     "finger"
-    "foomatic-filters" "hplip" # Printing
-    "gettext" # Often useful for i18n in CLI tools too, but -base is usually enough
-    "groff" "groff-base" # For man pages, if removing man-db
-    # "info" # GNU info reader
+    "gettext-base" 
+    "groff" 
+    "gnupg" 
     "laptop-detect"
-    "libgpm2" "gpm" # Console mouse support
-    # "man-db" "manpages" # Removing man pages saves space, but makes troubleshooting harder. Consider keeping.
-    "mtools" # DOS FS utils
-    "mtr-tiny" # Network diagnostic, consider keeping if 'traceroute' is removed
-    "mutt" # CLI email
-    "ncurses-term" # Additional terminal definitions
-    "pidentd" # IDENT server
-    "ppp*" # Dial-up
-    "read-edid" # Monitor info
-    "reportbug" # Debian bug reporter
-    # "tasksel" # Initial installer tool, safe to remove
-    "tcsh" # C-shell
-    "traceroute" # Consider keeping for network diagnostics
-    # "usbutils" # lsusb is useful. Keep?
-    "wamerican*" "wbritish*" "wbritish*" "wcatalan*" "wdanish*" # etc. wordlists
-    "w3m" # Text browser
+    "libgpmg1" 
+    "manpages*" 
+    "mtools" 
+    "mtr-tiny" 
+    "mutt" 
+    "ncurses-term" 
+    "ppp*" 
+    "pppoe*"
+    "read-edid" 
+    "unzip"
+    "usbutils" 
+    "vim-common"
+    "vim-tiny" 
+    "wamerican" 
+    "wbrazilian"
+    "witalian"
+    "wfrench"
+    "wspanish"
+    "wswedish"
+    "wcatalan"
+    "wbulgarian"
+    "wdanish"
+    "wngerman"
+    "wpolish"
+    "wportuguese"
     "whois"
     "zeroinstall-injector"
-    "lsof" # Can be useful, but often not essential for basic server
-    "psmisc" # Provides pstree, fuser, killall. 'killall' is used by this script. Ensure an alternative or handle its absence if removed.
-    "sudo" # Explicitly KEEPING
-    "vim" "vim-tiny" "vim-common" # User wants nano
-
-    # --- Font packages (many will be caught by xfonts-*) ---
-    "fonts-*" "ttf-*" "otf-*" "fontconfig" "fontconfig-config" # Fontconfig can be a deep dependency
-
-    # --- From "Gnome but maybe valid" list ---
-    "grub-firmware-qemu" # Only if you know you don't need it for QEMU/virtualization
-    "xdg-desktop-portal*" "xdg-desktop-portal-gtk"
-
-    # --- Cleanup libraries that might be left ---
-    # Be very careful with these, only if they are truly orphaned. Autoremove should get most.
-    # "libxft2" "libxrender1" "libxfixes3" "libxcursor1" "libxdamage1" "libxinerama1"
-    # "libxrandr2" "libxcomposite1" "libxi6" "libxkbcommon0" "libwayland-client0" "libdrm2"
-    # "libpango-1.0-0" "libpangocairo-1.0-0" "libpangoft2-1.0-0" "libcairo2" "libgdk-pixbuf-2.0-0" "libgdk-pixbuf2.0-common"
-    # "libatk1.0-0" "libatk-bridge2.0-0"
+    "zip"
+    "plymouth" 
+    "plymouth-themes"
+    "gnome-desktop3-data"
+    "gnome-firmware"
+    "gnome-icon-theme*" 
+    "xdg-desktop-portal*"
+    "xdg-user-dirs*" 
+    "xdg-utils" 
+    "firebird*" 
+    "libfbclient2*"
+    "libib-util*"
+    "espeak*" 
+    "speech-dispatcher*"
+    "gnome-logs"
+    "gnome-software" 
+    "malcontent" 
+    "mlterm*" 
+    "xiterm+thai"
+    "xterm" 
 )
 
-print_section "Purging Identified Packages"
-log_action "Starting main package purge operation. This may take a long time."
+PACKAGES_TO_ACTUALLY_PURGE=()
+for pkg_candidate_raw in "${PACKAGES_TO_PURGE[@]}"; do
+    # Remove any trailing wildcards for essential/kept checks if the base name is what matters
+    pkg_candidate_base="${pkg_candidate_raw//\*}"
+    pkg_candidate_for_dpkg_check="$pkg_candidate_raw" # Use raw for dpkg check to handle wildcards
 
-# Convert array to space-separated string for apt
-packages_to_purge_string="${PACKAGES_TO_PURGE[*]}"
+    is_essential_or_kept=false
+    for kept_pkg in "${PACKAGES_TO_KEEP[@]}"; do
+        if [[ "$pkg_candidate_base" == "$kept_pkg" ]] || [[ "$pkg_candidate_raw" == "$kept_pkg" ]]; then
+            is_essential_or_kept=true
+            log_warning "Skipping '$pkg_candidate_raw' from purge: explicitly in PACKAGES_TO_KEEP."
+            break
+        fi
+    done
 
-# It's safer to remove in chunks or let apt handle complex dependencies.
-# Using one large command can sometimes be problematic for apt's resolver.
-# However, for a full purge, it's often effective.
-sudo apt-get purge -y $packages_to_purge_string
-if [ $? -ne 0 ]; then
-    log_action "${yellow}Warning: Some packages in the main list could not be purged. Check apt logs.${reset}"
-    # Attempt to remove problematic packages individually or in smaller groups if needed (more complex logic)
-else
-    log_action "Main package purge command completed."
-fi
-
-# --- Autoremove and Clean ---
-print_section "Autoremoving Orphaned Packages and Cleaning Up"
-log_action "Running apt-get autoremove --purge -y"
-sudo apt-get autoremove --purge -y
-if [ $? -ne 0 ]; then
-    log_action "${yellow}Warning: Autoremove encountered issues.${reset}"
-else
-    log_action "Autoremove completed."
-fi
-
-log_action "Running apt-get clean -y and autoclean -y"
-sudo apt-get clean -y
-sudo apt-get autoclean -y
-log_action "Apt cache cleaned."
-
-# --- Further System Configuration Cleanup ---
-print_section "System Configuration Cleanup"
-
-# Remove residual X11 configuration (if any and if safe)
-if [ -d "/etc/X11" ] && [ ! -L "/etc/X11" ]; then # Check if it's a directory and not a symlink
-    # Check if it's empty or only contains symlinks before removing
-    if [ -z "$(find /etc/X11 -mindepth 1 -not -type l -print -quit)" ]; then
-        log_action "Removing /etc/X11 as it seems to contain only symlinks or is empty post-purge."
-        rm -rf /etc/X11
-    else
-        log_action "/etc/X11 still contains files/directories. Not removing automatically. Please review."
+    if $is_essential_or_kept; then
+        continue
     fi
-else
-    log_action "/etc/X11 not found or is a symlink."
-fi
 
-
-# Clean user-specific GUI configs for any remaining users (including root)
-log_action "Cleaning user-specific GUI configuration files..."
-for user_home_dir in /root /home/*; do
-  if [ -d "$user_home_dir" ]; then
-    log_action "Cleaning configs in $user_home_dir"
-    rm -rf "$user_home_dir/.config/xfce4"
-    rm -rf "$user_home_dir/.config/gtk-*"
-    rm -rf "$user_home_dir/.config/qt5ct"
-    rm -rf "$user_home_dir/.config/Trolltech.conf"
-    rm -rf "$user_home_dir/.config/pulse" # PulseAudio client config
-    rm -rf "$user_home_dir/.local/share/xfce4"
-    rm -rf "$user_home_dir/.local/share/gvfs-metadata"
-    rm -rf "$user_home_dir/.local/share/zeitgeist"
-    rm -rf "$user_home_dir/.local/share/tracker"
-    rm -rf "$user_home_dir/.cache/xfce4"
-    rm -rf "$user_home_dir/.cache/thumbnails"
-    rm -rf "$user_home_dir/.cache/fontconfig"
-    # LibreOffice specific (from user script, good to have here too)
-    rm -rf "$user_home_dir/.config/libreoffice"
-    rm -rf "$user_home_dir/.local/share/libreoffice"
-  fi
+    # Check essential/required status for the base package if it's a wildcard, 
+    # or the full package name if not.
+    # This is a heuristic; a non-essential wildcard pattern can still match essential sub-packages.
+    # `apt` itself is the final arbiter of what can be removed.
+    check_pkg_for_essential="$pkg_candidate_base"
+    if [[ "$pkg_candidate_raw" != *"*"* ]]; then # Not a wildcard
+        check_pkg_for_essential="$pkg_candidate_raw"
+    fi
+    
+    status_output=$(dpkg-query -W -f='${Package}\t${Essential}\t${Priority}\n' "$check_pkg_for_essential" 2>/dev/null | head -n 1)
+    if echo "$status_output" | grep -q -E "\s(yes|required)$"; then # essential=yes or priority=required
+         # If the base of a wildcard is essential (e.g. "libc6" for "libc6*"), we are more careful.
+         # However, patterns like "xserver-xorg-*" are intended to be purged even if some sub-packages are important (but not essential).
+         # This check primarily protects exact matches that are essential/required.
+        if [[ "$pkg_candidate_raw" != *"*"* ]]; then # Only skip if it's an exact match and essential/required
+            log_warning "Skipping '$pkg_candidate_raw' from purge: marked essential/required by dpkg."
+            continue
+        fi
+    fi
+    
+    # Check if package or wildcard matches any installed package
+    if dpkg-query -W -f='${Status}' "${pkg_candidate_for_dpkg_check}" 2>/dev/null | grep -q "ok installed"; then
+        PACKAGES_TO_ACTUALLY_PURGE+=("$pkg_candidate_raw")
+    else
+        # This is where the corrected log_action call is
+        log_action "Pattern '$pkg_candidate_raw' does not match any installed packages or is already removed. Skipping."
+    fi
 done
 
-# LibreOffice system-wide (from user script)
-log_action "Removing LibreOffice system-wide configuration files..."
-rm -rf /etc/libreoffice
-# rm -rf /usr/lib/libreoffice # Should be handled by purge
-# rm -rf /usr/share/libreoffice # Should be handled by purge
 
-# Clean temporary files (LibreOffice specific and general)
+if [ ${#PACKAGES_TO_ACTUALLY_PURGE[@]} -gt 0 ]; then
+    log_action "The following packages/patterns and their configurations will be attempted for PURGE:"
+    for pkg in "${PACKAGES_TO_ACTUALLY_PURGE[@]}"; do
+        echo "  - $pkg"
+    done
+    echo
+    read -r -p "$(echo -e ${YELLOW}"Confirm purging these packages/patterns? (yes/NO): "${NC})" CONFIRM_PURGE
+    if [[ "$CONFIRM_PURGE" =~ ^([yY][eE][sS])$ ]]; then
+        log_action "Purging packages..."
+        for pkg_to_purge in "${PACKAGES_TO_ACTUALLY_PURGE[@]}"; do
+            log_action "Attempting to purge: $pkg_to_purge"
+            apt-get purge -y "$pkg_to_purge"
+            if [ $? -ne 0 ]; then
+                log_warning "Issues encountered purging '$pkg_to_purge'. It might have already been removed, be part of a metapackage, or protected. Apt handles this."
+            fi
+        done
+        log_action "Finished initial purge attempt."
+    else
+        log_warning "Package purge aborted by user."
+    fi
+else
+    log_action "No packages identified for purging after filtering, or all matched patterns are not installed."
+fi
+
+# --- System Cleanup ---
+log_section "System Cleanup"
+
+log_action "Removing orphaned dependencies..."
+apt-get autoremove --purge -y
+if [ $? -ne 0 ]; then log_warning "Autoremove encountered issues. This is sometimes normal if packages were already removed."; fi
+
+log_action "Cleaning up apt cache..."
+apt-get clean -y
+if [ $? -ne 0 ]; then log_warning "Apt clean encountered issues."; fi
+
+log_action "Removing residual configuration files (apt purge should handle most)..."
+if [ -d "/etc/libreoffice" ]; then
+    log_action "Removing /etc/libreoffice..."
+    rm -rf /etc/libreoffice
+fi
+
 log_action "Removing temporary files..."
-rm -rf /tmp/libreoffice*
-rm -rf /var/tmp/libreoffice*
 rm -rf /tmp/*
 rm -rf /var/tmp/*
 
-# --- Initramfs Reduction (from user notes) ---
-print_section "Optimizing Initramfs"
-log_action "Setting initramfs compression to xz."
-echo "COMPRESS=xz" | sudo tee /etc/initramfs-tools/conf.d/compress_xz.conf > /dev/null
-log_action "Setting initramfs modules to 'dep'."
-if grep -q "MODULES=most" /etc/initramfs-tools/initramfs.conf; then
-    sudo sed -i 's/MODULES=most/MODULES=dep/g' /etc/initramfs-tools/initramfs.conf
-    log_action "Changed MODULES=most to MODULES=dep."
-else
-    log_action "MODULES=most not found, attempting to ensure MODULES=dep."
-    if ! grep -q "MODULES=dep" /etc/initramfs-tools/initramfs.conf; then
-        echo "MODULES=dep" | sudo tee -a /etc/initramfs-tools/initramfs.conf > /dev/null
-    fi
-fi
-log_action "Updating initramfs. This may take some time..."
-sudo update-initramfs -u -k all
-if [ $? -ne 0 ]; then
-    log_action "${yellow}Warning: update-initramfs failed. Check for errors.${reset}"
-else
-    log_action "Initramfs update completed."
-fi
 
-# --- Remove Unnecessary IPv6 Files (from user notes) - VERY AGGRESSIVE ---
-# This is generally not recommended. Disabling IPv6 via sysctl or GRUB is safer.
-# Proceed with extreme caution. This might break things if not fully understood.
-REMOVE_IPV6_XTABLES=false # Set to true to enable this dangerous section
+# --- Initramfs Reduction (Optional) ---
+if [ "$COMPRESS_INITRAMFS" = true ]; then
+    log_section "Initramfs Reduction"
+    log_action "Setting initramfs compression to xz..."
+    echo "COMPRESS=xz" > /etc/initramfs-tools/conf.d/compress.conf
 
-if $REMOVE_IPV6_XTABLES; then
-  print_section "Removing IPv6 xtables Files (Aggressive)"
-  log_action "${yellow}WARNING: Attempting to remove IPv6 xtables files. This is risky.${reset}"
-  IPV6_XTABLES_FILES=(
-    "/lib/xtables/libip6t_ah.so" "/lib/xtables/libip6t_dst.so" "/lib/xtables/libip6t_eui64.so"
-    "/lib/xtables/libip6t_frag.so" "/lib/xtables/libip6t_hbh.so" "/lib/xtables/libip6t_hl.so"
-    "/lib/xtables/libip6t_HL.so" "/lib/xtables/libip6t_icmp6.so" "/lib/xtables/libip6t_ipv6header.so"
-    "/lib/xtables/libip6t_LOG.so" "/lib/xtables/libip6t_mh.so" "/lib/xtables/libip6t_REJECT.so"
-    "/lib/xtables/libip6t_rt.so" "/lib/xtables/libip6t_DNAT.so" "/lib/xtables/libip6t_DNPT.so"
-    "/lib/xtables/libip6t_MASQUERADE.so" "/lib/xtables/libip6t_NETMAP.so"
-    "/lib/xtables/libip6t_REDIRECT.so" "/lib/xtables/libip6t_SNAT.so" "/lib/xtables/libip6t_SNPT.so"
-  )
-  for xt_file in "${IPV6_XTABLES_FILES[@]}"; do
-    if [ -f "$xt_file" ]; then
-      log_action "Removing $xt_file"
-      rm -f "$xt_file"
+    log_action "Setting MODULES=dep in initramfs.conf..."
+    if [ -f /etc/initramfs-tools/initramfs.conf ]; then
+        if grep -q "MODULES=most" /etc/initramfs-tools/initramfs.conf; then
+            sed -i 's/MODULES=most/MODULES=dep/g' /etc/initramfs-tools/initramfs.conf
+            log_action "Changed MODULES=most to MODULES=dep."
+        elif ! grep -q "MODULES=dep" /etc/initramfs-tools/initramfs.conf; then
+            log_action "MODULES setting not 'most', not changing to 'dep'. Current config preserved or MODULES=dep already set."
+        else
+             log_action "MODULES=dep already set or 'most' not found."
+        fi
     else
-      log_action "$xt_file not found, skipping."
+        log_warning "/etc/initramfs-tools/initramfs.conf not found. Skipping MODULES=dep."
     fi
-  done
-else
-  log_action "Skipping IPv6 xtables file removal (REMOVE_IPV6_XTABLES is false)."
-  log_action "Consider disabling IPv6 via GRUB: GRUB_CMDLINE_LINUX_DEFAULT=\"ipv6.disable=1\" in /etc/default/grub then update-grub."
+
+    log_action "Updating initramfs (this may take a moment)..."
+    if update-initramfs -u -k all; then
+        log_action "Initramfs updated successfully."
+    else
+        log_error "Failed to update initramfs. The system might not boot correctly if kernel modules were removed without this."
+    fi
 fi
 
-# --- Final System State Check & Journal Cleanup ---
-print_section "Final System State"
-log_action "Listing installed packages (first 50)..."
-dpkg -l | head -n 50 | tee -a "$LOG_FILE"
+# --- Remove unnecessary IPv6 xtables files (EXTREME CAUTION) ---
+if [ "$REMOVE_IPV6_XTABLES" = true ]; then
+    log_section "IPv6 xtables Removal (Optional - CAUTION)"
+    log_warning "This step removes IPv6 netfilter/iptables library files."
+    log_warning "DO NOT DO THIS if you use IPv6 or plan to use it."
+    read -r -p "$(echo -e ${RED}"Confirm removing IPv6 xtables files? (yes/NO): "${NC})" CONFIRM_IPV6_REMOVE
+    if [[ "$CONFIRM_IPV6_REMOVE" =~ ^([yY][eE][sS])$ ]]; then
+        IPV6_XTABLES_FILES=(
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_ah.so" # Paths can vary, check your system
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_dst.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_eui64.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_frag.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_hbh.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_hl.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_HL.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_icmp6.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_ipv6header.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_LOG.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_mh.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_REJECT.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_rt.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_DNAT.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_DNPT.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_MASQUERADE.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_NETMAP.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_REDIRECT.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_SNAT.so"
+            "/usr/lib/x86_64-linux-gnu/xtables/libip6t_SNPT.so"
+            # Add paths for /lib/xtables if they exist on your system version
+            "/lib/xtables/libip6t_ah.so"
+            "/lib/xtables/libip6t_dst.so"
+            # ... (repeat for all files in /lib/xtables if needed)
+        )
+        log_action "Removing specified IPv6 xtables files..."
+        REMOVED_COUNT=0
+        for xt_file in "${IPV6_XTABLES_FILES[@]}"; do
+            if [ -f "$xt_file" ]; then
+                if rm -f "$xt_file"; then
+                    echo "Removed $xt_file"
+                    ((REMOVED_COUNT++))
+                else
+                    log_warning "Could not remove $xt_file (permission issue?)"
+                fi
+            else
+                 : # File not found, silently ignore for this specific cleanup
+            fi
+        done
+        log_action "Removed $REMOVED_COUNT IPv6 xtables files."
+    else
+        log_action "Skipping IPv6 xtables file removal."
+    fi
+fi
 
-log_action "Disk space usage:"
-df -h | tee -a "$LOG_FILE"
+# --- Final Messages ---
+log_section "Debloating Process Finished"
+echo -e "${GREEN}The debloating script has completed its operations.${NC}"
+echo -e "${YELLOW}Please review any error messages or warnings above.${NC}"
+echo -e "${YELLOW}It is STRONGLY recommended to REBOOT the system now.${NC}"
+echo -e "${RED}Ensure you can access the system via SSH or console after reboot!${NC}"
 
-log_action "Memory usage:"
-free -h | tee -a "$LOG_FILE"
+duration=$SECONDS
+echo -e "${GREEN}Total script execution time: $(($duration / 60)) minutes and $(($duration % 60)) seconds.${NC}"
 
-log_action "Cleaning journal logs older than 3 days..."
-sudo journalctl --vacuum-time=3d | tee -a "$LOG_FILE"
-
-# --- Completion ---
-end_time=$SECONDS
-duration=$((end_time - start_time))
-date_duration=$(date -d@$duration -u +%H:%M:%S)
-
-print_section "Debloat Script Finished"
-log_action "Script finished."
-log_action "Total execution time: $date_duration ($duration seconds)."
-
-echo "${green}================================================================================"
-echo "                  DEBLOAT SCRIPT COMPLETED"
-echo "================================================================================"${reset}
-echo "Execution time: ${blue}$date_duration${reset}"
-echo "Log file: ${blue}$LOG_FILE${reset}"
-echo ""
-echo "${yellow}The system has been significantly altered."
-echo "It is highly recommended to REBOOT now to ensure all changes take effect"
-echo "and that the system boots correctly into a headless state."${reset}
-echo ""
-echo "${red}Ensure you have SSH access configured and working before rebooting if this is a remote machine!${reset}"
-echo ""
-
-read -p "Press ENTER to exit. Consider rebooting soon."
+read -r -p "$(echo -e ${YELLOW}"Reboot now? (yes/NO): "${NC})" REBOOT_CONFIRM
+if [[ "$REBOOT_CONFIRM" =~ ^([yY][eE][sS])$ ]]; then
+    log_action "Rebooting system in 5 seconds..."
+    sleep 5
+    reboot
+else
+    log_action "Please reboot the system manually when ready."
+fi
 
 exit 0
