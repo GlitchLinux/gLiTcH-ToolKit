@@ -716,7 +716,7 @@ EOF
 fi
 
 log "=== Installation Complete ==="
-log "Your system has been converted to gLiTcH Linux KDE v9.0."
+log "Your system has been converted to gLiTcH Linux KDE v11.0."
 log "A backup of critical system files has been saved to $BACKUP_DIR"
 log "A recovery script has been created at $BACKUP_DIR/recovery.sh"
 echo -e "${GREEN}  ${NC}"
