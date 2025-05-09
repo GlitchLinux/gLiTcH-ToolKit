@@ -1,0 +1,10 @@
+cd ~/.config/Thunar/
+rm -f uca.xml
+rm -f accels.scm
+
+sudo rm -f ~/.config/Thunar/accels.scm
+cd /tmp && git clone https://github.com/GlitchLinux/Thunar-Right-Click-Scripts.git
+cd Thunar-Right-Click-Scripts
+sudo mv -f uca.xml ~/.config/Thunar/uca.xml
+sudo mv -f accels.scm ~/.config/Thunar/accels.scm
+sudo rm -r Thunar-Right-Click-Scripts
