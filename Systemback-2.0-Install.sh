@@ -18,6 +18,4 @@ cd /tmp && sudo rm -r systemback
 
 echo"Systemback 2.0 Have Been Sucessfully Installed!"
 
-sleep 3
-
-cd && exit
+sleep 3 && cd && exit
