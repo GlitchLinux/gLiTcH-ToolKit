@@ -8,13 +8,11 @@ sudo wget https://github.com/GlitchLinux/systemback-2.0/raw/refs/heads/main/Syst
 
 sudo tar xvf SystemBack_2_Deb+Source.tar
 
-cd Install && sudo apt update
+cd Install && sudo apt update && sudo apt upgrade -y
 
 sudo dpkg --force-all -i systemback-cli_2.0_amd64.deb systemback_2.0_amd64.deb  systemback-locales_2.0_all.deb systemback-efiboot-amd64_2.0_all.deb libsystemback_2.0_amd64.deb
 
 sudo apt install -f -y
-
-sudo dpkg --force-all -i systemback-cli_2.0_amd64.deb systemback_2.0_amd64.deb  systemback-locales_2.0_all.deb systemback-efiboot-amd64_2.0_all.deb libsystemback_2.0_amd64.deb
 
 cd /tmp && sudo rm -r systemback
 
