@@ -10,4 +10,6 @@ cd .. && sudo rm -r Thunar-Right-Click-Scripts
 sudo chmod +x ~/.config/Thunar/accels.scm
 sudo chmod +x ~/.config/Thunar/uca.xml
 
+sudo apt update && sudo apt install ffmpeg libnotify-bin libnotify-bin tree xclip -y
+
 exit
