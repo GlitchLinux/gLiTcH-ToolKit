@@ -5,4 +5,4 @@ cd QEMU-QuickBoot
 sudo rm -f /home/x/txt.and.sh/BASH-SCRIPTS/QEMU-QuickBoot-NAS.sh
 sudo cp QEMU-QuickBoot.sh /home/x/txt.and.sh/BASH-SCRIPTS/QEMU-QuickBoot-NAS.sh 
 sudo rm -r /tmp/QEMU-QuickBoot
-sudo bash QEMU-QuickBoot-NAS.sh
+sudo bash /home/x/txt.and.sh/BASH-SCRIPTS/QEMU-QuickBoot-NAS.sh
