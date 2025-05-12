@@ -10,6 +10,27 @@ cd .. && sudo rm -r Thunar-Right-Click-Scripts
 sudo chmod +x ~/.config/Thunar/accels.scm
 sudo chmod +x ~/.config/Thunar/uca.xml
 
-sudo apt update && sudo apt install ffmpeg libnotify-bin libnotify-bin tree xclip -y
+# DEPENDENCIES
 
-exit
+sudo apt update
+
+# Install core dependencies
+sudo apt install -y \
+    bash \
+    coreutils \
+    xclip \
+    tree \
+    p7zip-full \
+    qemu-system-x86 \
+    ovmf \
+    ark \
+    kdialog \
+    zenity \
+    nano \
+    thunar \
+    xfce4-terminal \
+    python3 \
+    shred \
+    ffmpeg \
+    libnotify-bin \
+    exo-utils 
