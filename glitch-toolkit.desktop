@@ -1,0 +1,18 @@
+[Desktop Entry]
+Comment[en_US]=
+Comment=
+Exec=xfce4-terminal --maximize --command 'bash -c '\\''/home/$USER/apps; read -p \\Enter to Exit\\'\\'''
+GenericName[en_US]=
+GenericName=
+Icon=pk-package-sources
+MimeType=
+Name[en_US]=gLiTcH ToolKit
+Name=gLiTcH ToolKit
+Path=
+StartupNotify=true
+Terminal=false
+TerminalOptions=
+Type=Application
+Version=1.0
+X-KDE-SubstituteUID=false
+X-KDE-Username=
