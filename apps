@@ -17,6 +17,15 @@ create_apps_alias() {
     fi
 }
 
+# Function to open xfce4-terminal maximized
+open_maximized_terminal() {
+    # Open xfce4-terminal maximized (windowed fullscreen)
+    xfce4-terminal --maximize --command="./apps"
+    
+    # Alternative method if the above doesn't work well
+    # xfce4-terminal --geometry 100%x100% --command="./apps"
+}
+
 # Main script
 cd /home/$USER/ && sudo rm -f apps && sudo rm -rf /tmp/ToolKit-Listing.sh
 cd /tmp && git clone https://github.com/GlitchLinux/ToolKit-Listing.sh.git
@@ -32,5 +41,5 @@ create_apps_alias
 # refresh bashrc
 source ~/.bashrc
 
-# Run the apps script
-./apps
+# Run the apps script in maximized terminal
+open_maximized_terminal
