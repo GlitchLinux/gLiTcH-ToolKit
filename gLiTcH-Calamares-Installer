@@ -1,0 +1,14 @@
+#/bin/bash
+
+sudo apt update && sudo apt install -y calamares calamares-settings-debian
+sudo rm -rf /tmp/gLiTcH-Calamares/
+sudo rm -rf /etc/calamares/
+sudo mkdir /etc/calamares/
+sudo mkdir /etc/calamares/branding/
+cd /tmp
+git clone https://github.com/GlitchLinux/gLiTcH-Calamares.git
+sudo mv /tmp/gLiTcH-Calamares/branding/ /etc/calamares
+sudo mv /tmp/gLiTcH-Calamares/modules/ /etc/calamares
+sudo mv /tmp/gLiTcH-Calamares/settings.conf /etc/calamares
+sudo rm -rf /tmp/gLiTcH-Calamares/
+sudo calamares
