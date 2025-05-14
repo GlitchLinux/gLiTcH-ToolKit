@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# Check if running as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root (use sudo)." >&2
+    exit 1
+fi
+
+# Select .img file
+echo "Available .img files in current directory:"
+ls *.img 2>/dev/null || echo "No .img files found in current directory."
+
+read -p "Enter the name of the .img file (or full path): " IMG_FILE
+
+if [ ! -f "$IMG_FILE" ]; then
+    echo "Error: File '$IMG_FILE' not found!" >&2
+    exit 1
+fi
+
+# Check if the image has partitions
+PARTITION_INFO=$(fdisk -l "$IMG_FILE" | grep -E 'img[0-9]|img[1-9]')
+if [ -z "$PARTITION_INFO" ]; then
+    echo "Mounting as a single-filesystem image..."
+    MOUNT_OPTIONS="-o loop,rw"
+else
+    echo "Image contains partitions."
+    fdisk -l "$IMG_FILE"
+    read -p "Enter partition number to mount (e.g., 1, 2): " PART_NUM
+    OFFSET=$(fdisk -l "$IMG_FILE" | grep -E "img$PART_NUM" | awk '{print $2*512}')
+    if [ -z "$OFFSET" ]; then
+        echo "Error: Could not calculate partition offset." >&2
+        exit 1
+    fi
+    MOUNT_OPTIONS="-o loop,offset=$OFFSET,rw"
+fi
+
+# Create a mount point
+MOUNT_DIR="/mnt/img_mount"
+mkdir -p "$MOUNT_DIR"
+
+# Mount the image
+echo "Mounting $IMG_FILE (R/W) at $MOUNT_DIR..."
+mount $MOUNT_OPTIONS "$IMG_FILE" "$MOUNT_DIR"
+
+if [ $? -eq 0 ]; then
+    echo "Successfully mounted $IMG_FILE at $MOUNT_DIR (Read/Write)."
+    echo "You can now modify files in $MOUNT_DIR."
+    echo "When done, unmount with: sudo umount $MOUNT_DIR"
+else
+    echo "Failed to mount $IMG_FILE." >&2
+    rmdir "$MOUNT_DIR" 2>/dev/null
+    exit 1
+fi
