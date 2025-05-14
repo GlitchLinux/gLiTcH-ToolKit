@@ -132,6 +132,8 @@ echo "5. Perform other system maintenance"
 echo ""
 echo "When finished, exit the chroot and unmount with:"
 echo "exit"
-echo "umount -R /mnt"
+echo "umount -R /mnt""
 
-exit 0
+echo "GRUB_PURGE_PACKAGES.txt is saved here, use it to fully remove grub before re-install"
+echo "GOOD LUCK!"
+echo "sudo dpkg --force-all --purge grub-common grub-pc grub-efi grub-efi-amd64 grub-efi-amd64-signed grub-efi-amd64-bin grub-efi-amd64-unsigned grub-pc-bin grub2-common penguins-eggs grub-imageboot" > GRUB_PURGE_PACKAGES.txt
