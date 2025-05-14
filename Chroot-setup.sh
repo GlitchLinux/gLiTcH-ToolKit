@@ -1,88 +1,88 @@
 #!/bin/bash
 
-# Define ANSI color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+# Check if script is run as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root. Try with 'sudo'."
+    exit 1
+fi
 
-# Function to display partition information
-show_partitions() {
-    clear
-    echo -e "${CYAN}┌───────────────────────────────────────────────────────┐"
-    echo -e "│ ${YELLOW}Chroot Setup Utility ${CYAN}                              │"
-    echo -e "└───────────────────────────────────────────────────────┘${NC}"
-    echo ""
-    
-    echo -e "${YELLOW}Available partitions:${NC}"
-    lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT,LABEL | grep -v "loop"
-    echo ""
-}
+# Detect UEFI or BIOS
+if [ -d "/sys/firmware/efi" ]; then
+    echo "UEFI system detected"
+    BOOT_MODE="uefi"
+else
+    echo "BIOS system detected"
+    BOOT_MODE="bios"
+fi
 
-show_partitions
+# List available disks and partitions
+echo "Available disks and partitions:"
+lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE
 
 # Prompt for root partition
-while true; do
-    echo -e "${GREEN}Enter root partition (e.g., sda2, nvme0n1p3):${NC} "
-    read -r root_part
-    
-    if [[ -e "/dev/$root_part" ]]; then
-        break
-    else
-        echo -e "${RED}Partition /dev/$root_part does not exist!${NC}"
+read -p "Enter the root partition (e.g., /dev/sda1): " ROOT_PART
+
+# Verify root partition exists
+if [ ! -b "$ROOT_PART" ]; then
+    echo "Error: $ROOT_PART does not exist or is not a block device."
+    exit 1
+fi
+
+# Mount root partition
+echo "Mounting root partition..."
+mount "$ROOT_PART" /mnt || { echo "Failed to mount root partition"; exit 1; }
+
+# Handle boot partition
+if [ "$BOOT_MODE" = "uefi" ]; then
+    read -p "Enter the EFI system partition (e.g., /dev/sda2): " BOOT_PART
+    if [ ! -b "$BOOT_PART" ]; then
+        echo "Error: $BOOT_PART does not exist or is not a block device."
+        exit 1
     fi
-done
-
-# Ask if they want to mount a separate boot partition
-echo -e "${YELLOW}Do you have a separate boot partition? (y/n):${NC} "
-read -r has_boot
-
-if [[ "$has_boot" == "y" ]]; then
-    while true; do
-        echo -e "${GREEN}Enter boot partition (e.g., sda1, nvme0n1p1):${NC} "
-        read -r boot_part
-        
-        if [[ -e "/dev/$boot_part" ]]; then
-            break
-        else
-            echo -e "${RED}Partition /dev/$boot_part does not exist!${NC}"
+    
+    # Create and mount EFI directory
+    mkdir -p /mnt/boot/efi
+    mount "$BOOT_PART" /mnt/boot/efi || { echo "Failed to mount EFI partition"; exit 1; }
+else
+    read -p "Enter the boot partition (e.g., /dev/sda2) or press Enter if none: " BOOT_PART
+    if [ -n "$BOOT_PART" ]; then
+        if [ ! -b "$BOOT_PART" ]; then
+            echo "Error: $BOOT_PART does not exist or is not a block device."
+            exit 1
         fi
-    done
+        mkdir -p /mnt/boot
+        mount "$BOOT_PART" /mnt/boot || { echo "Failed to mount boot partition"; exit 1; }
+    fi
 fi
 
-# Mount the partitions
-echo -e "\n${YELLOW}Mounting partitions...${NC}"
-sudo umount /mnt 2>/dev/null
-sudo mount "/dev/$root_part" /mnt
+# Mount necessary directories for chroot
+echo "Mounting necessary directories..."
+mount -t proc /proc /mnt/proc
+mount --rbind /sys /mnt/sys
+mount --rbind /dev /mnt/dev
+mount --rbind /run /mnt/run
 
-if [[ "$has_boot" == "y" ]]; then
-    sudo mkdir -p /mnt/boot
-    sudo mount "/dev/$boot_part" /mnt/boot
+# Check if we should bind /tmp
+read -p "Do you want to bind mount /tmp? (y/n): " BIND_TMP
+if [ "$BIND_TMP" = "y" ] || [ "$BIND_TMP" = "Y" ]; then
+    mount --rbind /tmp /mnt/tmp
 fi
 
-# Mount necessary directories
-echo -e "${YELLOW}Mounting system directories...${NC}"
-sudo mount --bind /dev /mnt/dev
-sudo mount --bind /proc /mnt/proc
-sudo mount --bind /sys /mnt/sys
-sudo mount --bind /run /mnt/run
+# Chroot instructions
+echo ""
+echo "Chroot environment is ready!"
+echo "You can now chroot into the system with:"
+echo "sudo chroot /mnt"
+echo ""
+echo "After chrooting, you may need to:"
+echo "1. Set up your locale"
+echo "2. Set your timezone"
+echo "3. Configure your bootloader"
+echo "4. Set root password"
+echo "5. Perform other system maintenance"
+echo ""
+echo "When finished, exit the chroot and unmount with:"
+echo "exit"
+echo "umount -R /mnt"
 
-# Display final instructions
-clear
-echo -e "${CYAN}┌───────────────────────────────────────────────────────┐"
-echo -e "│ ${YELLOW}Chroot Setup Complete ${CYAN}                              │"
-echo -e "└───────────────────────────────────────────────────────┘${NC}"
-echo -e "${GREEN}Your system is ready for chroot. Use this command:${NC}\n"
-echo -e "${RED}sudo chroot /mnt${NC}\n"
-echo -e "${YELLOW}When finished, exit chroot and run:${NC}"
-echo -e "${BLUE}sudo umount -R /mnt${NC}\n"
-
-# Offer to enter chroot directly
-echo -e "${YELLOW}Do you want to enter chroot now? (y/n):${NC} "
-read -r enter_chroot
-
-if [[ "$enter_chroot" == "y" ]]; then
-    sudo chroot /mnt
-fi
+exit 0
