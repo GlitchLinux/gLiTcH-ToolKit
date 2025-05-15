@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Check if running as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "ERROR: This script must be run as root (use sudo)." >&2
+    exit 1
+fi
+
+# Show available .img files
+echo "Available .img files in current directory:"
+ls *.img 2>/dev/null || echo "No .img files found here."
+
+# Ask user for .img file path
+read -p "Enter the .img file name (or full path): " IMG_FILE
+if [ ! -f "$IMG_FILE" ]; then
+    echo "ERROR: File '$IMG_FILE' not found!" >&2
+    exit 1
+fi
+
+# Attach image as writable loop device (no mount attempt)
+echo "Attaching $IMG_FILE as writable loop device..."
+LOOP_DEV=$(sudo losetup -fP --show "$IMG_FILE")
+if [ -z "$LOOP_DEV" ]; then
+    echo "ERROR: Failed to attach loop device!" >&2
+    exit 1
+fi
+
+# Success message
+echo "---------------------------------------------"
+echo "SUCCESS: $IMG_FILE attached as $LOOP_DEV (R/W)"
+echo "You can now modify the disk directly (e.g., with fdisk, dd)."
+echo ""
+echo "To detach later, run:"
+echo "  sudo losetup -d $LOOP_DEV"
+echo "---------------------------------------------"
+echo ""
