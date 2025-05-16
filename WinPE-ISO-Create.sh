@@ -1,18 +1,18 @@
 #!/bin/bash
 
-# WinPE ISO Creation Script (Fixed)
-# Creates BIOS+UEFI bootable WinPE ISO
+# WinPE ISO Creation Script (Fixed for your structure)
+# Creates UEFI bootable WinPE ISO
 
 install_dependencies() {
     echo "Installing required packages..."
     if [ -x "$(command -v apt-get)" ]; then
-        sudo apt-get install -y xorriso wimtools
+        sudo apt-get install -y xorriso wimtools p7zip-full
     elif [ -x "$(command -v dnf)" ]; then
-        sudo dnf install -y xorriso wimlib-utils
+        sudo dnf install -y xorriso wimlib-utils p7zip
     elif [ -x "$(command -v yum)" ]; then
-        sudo yum install -y xorriso wimlib-utils
+        sudo yum install -y xorriso wimlib-utils p7zip
     elif [ -x "$(command -v pacman)" ]; then
-        sudo pacman -S --noconfirm xorriso wimlib
+        sudo pacman -S --noconfirm xorriso wimlib p7zip
     else
         echo "ERROR: Could not detect package manager to install dependencies."
         exit 1
@@ -23,29 +23,19 @@ prepare_bootfiles() {
     local iso_dir="$1"
     
     echo "Preparing WinPE boot files..."
-    mkdir -p "$iso_dir"/{sources,boot,efi/boot}
+    mkdir -p "$iso_dir"/{sources,EFI/Boot}
     
+    # Verify boot.wim exists
     if [ ! -f "$iso_dir/sources/boot.wim" ]; then
         echo "Error: boot.wim not found in $iso_dir/sources/"
         exit 1
     fi
-    
-    # Download UEFI bootloader if missing
-    if [ ! -f "$iso_dir/efi/boot/bootx64.efi" ]; then
-        echo "Downloading UEFI bootloader..."
-        if wget -q "https://github.com/pbatard/rufus/raw/master/res/uefi/uefi-ntfs.img" -O /tmp/uefi-ntfs.img; then
-            7z e -y -o"$iso_dir/efi/boot/" /tmp/uefi-ntfs.img "efi/boot/bootx64.efi" >/dev/null 2>&1 || {
-                echo "Warning: Could not extract UEFI bootloader"
-            }
-            rm /tmp/uefi-ntfs.img
-        else
-            echo "Warning: Could not download UEFI bootloader"
-        fi
-    fi
-    
-    # Check for BIOS boot files
-    if [ ! -f "$iso_dir/bootmgr" ]; then
-        echo "Warning: bootmgr not found. BIOS boot may not work."
+
+    # Verify UEFI bootloader exists
+    if [ ! -f "$iso_dir/EFI/Boot/bootx64.efi" ]; then
+        echo "Error: bootx64.efi not found in $iso_dir/EFI/Boot/"
+        echo "Please ensure you have UEFI boot files in EFI/Boot/"
+        exit 1
     fi
 }
 
@@ -59,12 +49,9 @@ create_winpe_iso() {
     xorriso -as mkisofs \
         -iso-level 4 \
         -volid "$iso_label" \
-        -b boot/etfsboot.com \
+        -eltorito-boot EFI/Boot/bootx64.efi \
         -no-emul-boot \
         -boot-load-size 8 \
-        -eltorito-alt-boot \
-        -e efi/boot/bootx64.efi \
-        -no-emul-boot \
         -o "$output_file" \
         "$source_dir"
     
@@ -108,6 +95,7 @@ main() {
     echo "Volume Label: $iso_label"
     echo -e "\nRequired files:"
     echo "- $WINPE_DIR/sources/boot.wim [✔]"
+    echo "- $WINPE_DIR/EFI/Boot/bootx64.efi [✔]"
     
     read -p "Proceed with WinPE ISO creation? (y/n): " confirm
     [[ "$confirm" =~ ^[Yy]$ ]] && create_winpe_iso "$WINPE_DIR" "$output_file" "$iso_label"
