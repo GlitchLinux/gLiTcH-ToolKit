@@ -7,13 +7,13 @@
 install_dependencies() {
     echo "Installing required packages..."
     if [ -x "$(command -v apt-get)" ]; then
-        sudo apt-get install -y xorriso isolinux syslinux-utils mtools wget
+        sudo apt-get install -y xorriso isolinux syslinux-utils mtools wget grub-efi-amd64-bin
     elif [ -x "$(command -v dnf)" ]; then
-        sudo dnf install -y xorriso syslinux mtools wget
+        sudo dnf install -y xorriso syslinux mtools wget grub2-efi-x64-modules
     elif [ -x "$(command -v yum)" ]; then
-        sudo yum install -y xorriso syslinux mtools wget
+        sudo yum install -y xorriso syslinux mtools wget grub2-efi-x64-modules
     elif [ -x "$(command -v pacman)" ]; then
-        sudo pacman -S --noconfirm xorriso syslinux mtools wget
+        sudo pacman -S --noconfirm xorriso syslinux mtools wget grub
     else
         echo "ERROR: Could not detect package manager to install dependencies."
         exit 1
@@ -40,6 +40,10 @@ download_bootfiles() {
     rm -rf "$temp_dir"
     rm -f "$iso_dir/BOOTFILES.tar.gz"
     
+    # Ensure required UEFI directories exist
+    mkdir -p "$iso_dir/EFI/BOOT"
+    mkdir -p "$iso_dir/BOOT"
+    
     echo "Bootfiles installed successfully"
 }
 
@@ -55,12 +59,34 @@ create_iso() {
     mkfs.vfat "$source_dir/EFI/boot/efi.img"
     mmd -i "$source_dir/EFI/boot/efi.img" ::/EFI ::/EFI/BOOT
     
-    # Copy EFI files if they exist
+    # Copy or create required UEFI boot files
+    if [ -f "$source_dir/EFI/boot/grubx64.efi" ]; then
+        echo "Using existing grubx64.efi"
+    elif [ -x "$(command -v grub-mkimage)" ]; then
+        echo "Generating grubx64.efi..."
+        grub-mkimage -o "$source_dir/EFI/boot/grubx64.efi" -p /boot/grub -O x86_64-efi \
+            boot linux ext2 fat iso9660 part_gpt part_msdos normal configfile loopback chain efifwsetup \
+            efi_gop efi_uga ls search search_label search_fs_uuid search_fs_file gfxterm gfxmenu png
+    else
+        echo "Warning: grubx64.efi not found and couldn't generate it"
+    fi
+    
+    # Copy bootx64.efi (fallback)
+    if [ -f "$source_dir/EFI/boot/grubx64.efi" ]; then
+        cp "$source_dir/EFI/boot/grubx64.efi" "$source_dir/EFI/boot/bootx64.efi"
+        cp "$source_dir/EFI/boot/grubx64.efi" "$source_dir/BOOT/bootx64.efi"
+    fi
+    
+    # Copy files to EFI image
     if [ -f "$source_dir/EFI/boot/bootx64.efi" ]; then
         mcopy -i "$source_dir/EFI/boot/efi.img" "$source_dir/EFI/boot/bootx64.efi" ::/EFI/BOOT/
+        mcopy -i "$source_dir/EFI/boot/efi.img" "$source_dir/EFI/boot/bootx64.efi" ::/EFI/BOOT/grubx64.efi
     fi
-    if [ -f "$source_dir/EFI/boot/grubx64.efi" ]; then
-        mcopy -i "$source_dir/EFI/boot/efi.img" "$source_dir/EFI/boot/grubx64.efi" ::/EFI/BOOT/
+    
+    # Ensure BOOT/bootx64.efi exists
+    mkdir -p "$source_dir/BOOT"
+    if [ -f "$source_dir/EFI/boot/bootx64.efi" ]; then
+        cp "$source_dir/EFI/boot/bootx64.efi" "$source_dir/BOOT/bootx64.efi"
     fi
 
     echo "Creating hybrid ISO image..."
@@ -77,6 +103,7 @@ create_iso() {
         -e EFI/boot/efi.img \
         -no-emul-boot \
         -isohybrid-gpt-basdat \
+        -append_partition 2 0xEF "$source_dir/EFI/boot/efi.img" \
         -o "$output_file" \
         "$source_dir"
 
@@ -98,7 +125,7 @@ generate_boot_configs() {
     cat > "$ISO_DIR/boot/grub/grub.cfg" <<EOF
 # GRUB.CFG 
 
-if loadfont $prefix/font.pf2 ; then
+if loadfont \$prefix/font.pf2 ; then
   set gfxmode=800x600
   set gfxpayload=keep
   insmod efi_gop
