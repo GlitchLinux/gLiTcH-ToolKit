@@ -13,6 +13,7 @@ TEMP_DIR="/tmp/refind-install"
 ISO_FILE="refind-cd-${REFIND_VERSION}.iso"
 GRUB_ENTRY_FILE="/etc/grub.d/40_refind"
 BOOT_DIR="/boot/refind"
+EFI_TARGET="/boot/efi/EFI/refind"  # Standard EFI partition location
 
 # Create temp directory
 mkdir -p "$TEMP_DIR"
@@ -38,30 +39,28 @@ if [ ! -f "$ISO_FILE" ]; then
     exit 1
 fi
 
-# Create boot directory
+# Create directories
 mkdir -p "$BOOT_DIR"
+mkdir -p "$EFI_TARGET"
 
-# Mount the ISO to copy EFI files
-echo "Mounting ISO to copy EFI files..."
+# Mount the ISO to copy files
+echo "Mounting ISO to copy files..."
 MOUNT_POINT=$(mktemp -d)
 mount -o loop "$ISO_FILE" "$MOUNT_POINT" || {
     echo "Failed to mount ISO" >&2
     exit 1
 }
 
-# Copy EFI files
-echo "Copying EFI files..."
-cp -r "$MOUNT_POINT/EFI" "$BOOT_DIR" || {
-    echo "Failed to copy EFI files" >&2
-    umount "$MOUNT_POINT"
-    exit 1
-}
+# Copy files to both locations for redundancy
+echo "Copying files..."
+cp -r "$MOUNT_POINT/EFI/boot/"* "$BOOT_DIR" || echo "Warning: Could not copy to $BOOT_DIR"
+cp -r "$MOUNT_POINT/EFI/boot/"* "$EFI_TARGET" || echo "Warning: Could not copy to $EFI_TARGET"
 
 # Unmount ISO
 umount "$MOUNT_POINT"
 rmdir "$MOUNT_POINT"
 
-# Create GRUB custom entry with "rEFInd (UEFI)" label
+# Create GRUB custom entry with proper paths
 echo "Creating GRUB custom entry..."
 cat > "$GRUB_ENTRY_FILE" <<EOF
 #!/bin/sh
@@ -70,14 +69,31 @@ exec tail -n +3 \$0
 # menu entries you want to add after this comment.  Be careful not to change
 # the 'exec tail' line above.
 
-menuentry "rEFInd (UEFI)" {
-    search --file --no-floppy --set=root /refind/EFI/boot/bootx64.efi
-    chainloader /refind/EFI/boot/bootx64.efi
+menuentry "rEFInd (UEFI)" --class refind {
+    insmod part_gpt
+    insmod fat
+    insmod search_fs_uuid
+    insmod chain
+    search --file --no-floppy --set=root /EFI/refind/bootx64.efi
+    if [ -f /EFI/refind/bootx64.efi ]; then
+        chainloader /EFI/refind/bootx64.efi
+    elif [ -f /boot/refind/bootx64.efi ]; then
+        chainloader /boot/refind/bootx64.efi
+    else
+        echo "rEFInd bootloader not found!"
+        sleep 5
+    fi
 }
 EOF
 
 # Make the grub entry executable
 chmod a+x "$GRUB_ENTRY_FILE"
+
+# Install rEFInd properly (additional step)
+if [ -f "$MOUNT_POINT/refind-install" ]; then
+    echo "Running rEFInd's own installer..."
+    "$MOUNT_POINT/refind-install" --alldrivers
+fi
 
 # Update GRUB
 echo "Updating GRUB..."
@@ -89,7 +105,9 @@ fi
 
 echo "rEFInd installation complete!"
 echo "You should see a 'rEFInd (UEFI)' option in your GRUB menu on next boot."
-echo "The rEFInd files have been installed to $BOOT_DIR"
+echo "Files have been installed to:"
+echo " - $BOOT_DIR"
+echo " - $EFI_TARGET"
 
 # Clean up
 rm -rf "$TEMP_DIR"
