@@ -1,0 +1,165 @@
+#!/bin/bash
+
+# A clean install script for Fastfetch, mybash, and Starship config
+# Ensures no privilege issues or permission problems for normal users
+
+set -e  # Exit on any error
+
+# Colors for output
+GREEN='\033[1;32m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}[*] Updating package lists...${NC}"
+sudo apt update
+
+echo -e "${GREEN}[*] Downloading Fastfetch package...${NC}"
+wget --no-check-certificate https://github.com/fastfetch-cli/fastfetch/releases/download/2.36.1/fastfetch-linux-amd64.deb
+
+echo -e "${GREEN}[*] Installing Fastfetch...${NC}"
+sudo dpkg -i fastfetch-linux-amd64.deb
+rm fastfetch-linux-amd64.deb
+
+# Create build directory and clone mybash safely in user space
+echo -e "${GREEN}[*] Cloning mybash repository...${NC}"
+mkdir -p ~/build
+cd ~/build
+git clone https://github.com/christitustech/mybash
+
+cd mybash
+
+# Run setup.sh as the current user to avoid affecting root configs
+echo -e "${GREEN}[*] Running mybash setup.sh...${NC}"
+bash ./setup.sh
+
+# Ensure .config directory exists
+mkdir -p ~/.config
+
+# Install Starship config safely
+echo -e "${GREEN}[*] Writing Starship configuration...${NC}"
+cat > ~/.config/starship.toml << 'EOF'
+format = """
+[](#3B4252)\
+$python\
+$username\
+[](bg:#434C5E fg:#3B4252)\
+$directory\
+[](fg:#434C5E bg:#5C6370)\
+$git_branch\
+$git_status\
+[](fg:#5C6370 bg:#7F848E)\
+$c\
+$elixir\
+$elm\
+$golang\
+$haskell\
+$java\
+$julia\
+$nodejs\
+$nim\
+$rust\
+[](fg:#7F848E bg:#5C6370)\
+$docker_context\
+[](fg:#5C6370 bg:#4C566A)\
+$time\
+[ ](fg:#4C566A)\
+"""
+command_timeout = 5000
+
+[username]
+show_always = true
+style_user = "bg:#3B4252"
+style_root = "bg:#3B4252"
+format = '[$user ]($style)'
+
+[directory]
+style = "bg:#434C5E"
+format = "[ $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[c]
+symbol = " "
+style = "bg:#7F848E"
+format = '[ $symbol ($version) ]($style)'
+
+[docker_context]
+symbol = " "
+style = "bg:#5C6370"
+format = '[ $symbol $context ]($style)$path'
+
+[elixir]
+symbol = " "
+style = "bg:#7F848E"
+format = '[ $symbol ($version) ]($style)'
+
+[elm]
+symbol = " "
+style = "bg:#7F848E"
+format = '[ $symbol ($version) ]($style)'
+
+[git_branch]
+symbol = ""
+style = "bg:#5C6370"
+format = '[ $symbol $branch ]($style)'
+
+[git_status]
+style = "bg:#5C6370"
+format = '[$all_status$ahead_behind ]($style)'
+
+[golang]
+symbol = " "
+style = "bg:#7F848E"
+format = '[ $symbol ($version) ]($style)'
+
+[haskell]
+symbol = " "
+style = "bg:#7F848E"
+format = '[ $symbol ($version) ]($style)'
+
+[java]
+symbol = " "
+style = "bg:#7F848E"
+format = '[ $symbol ($version) ]($style)'
+
+[julia]
+symbol = " "
+style = "bg:#7F848E"
+format = '[ $symbol ($version) ]($style)'
+
+[nodejs]
+symbol = ""
+style = "bg:#7F848E"
+format = '[ $symbol ($version) ]($style)'
+
+[nim]
+symbol = " "
+style = "bg:#7F848E"
+format = '[ $symbol ($version) ]($style)'
+
+[python]
+style = "bg:#3B4252"
+format = '[(\($virtualenv\) )]($style)'
+
+[rust]
+symbol = ""
+style = "bg:#7F848E"
+format = '[ $symbol ($version) ]($style)'
+
+[time]
+disabled = false
+time_format = "%R"
+style = "bg:#4C566A"
+format = '[ $time ]($style)'
+EOF
+
+# Confirm permissions on .bashrc
+if [ -f ~/.bashrc ]; then
+    echo -e "${GREEN}[*] Checking .bashrc ownership...${NC}"
+    OWNER=$(stat -c %U ~/.bashrc)
+    if [ "$OWNER" != "$USER" ]; then
+        echo -e "${GREEN}[*] Fixing .bashrc ownership...${NC}"
+        sudo chown "$USER":"$USER" ~/.bashrc
+    fi
+fi
+
+echo -e "${GREEN}[✔] Installation complete. Everything configured for user: $USER${NC}"
