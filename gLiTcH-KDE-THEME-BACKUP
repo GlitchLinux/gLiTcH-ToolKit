@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# Backup KDE theme settings with maximum gzip compression
+# Backup archive saved directly to Desktop with format: YYYYMMDD-HHMMSS-KDE-THEME-BACKUP.tar.gz
+
+DESKTOP_DIR="$HOME/Desktop"
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+BACKUP_NAME="${TIMESTAMP}-KDE-THEME-BACKUP.tar.gz"
+BACKUP_PATH="$DESKTOP_DIR/$BACKUP_NAME"
+
+# List of config files and directories related to KDE themes
+INCLUDE_ITEMS=(
+    "$HOME/.config/kdeglobals"
+    "$HOME/.config/plasmarc"
+    "$HOME/.config/kscreenlockerrc"
+    "$HOME/.config/kwinrc"
+    "$HOME/.config/color-scheme.*"
+    "$HOME/.local/share/plasma"
+    "$HOME/.local/share/plasma/look-and-feel"
+    "$HOME/.local/share/icons"
+    "$HOME/.local/share/wallpapers"
+    "$HOME/.local/share/color-schemes"
+    "$HOME/Pictures/Wallpapers"
+)
+
+# Create a temporary directory to gather files preserving home-relative structure
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
+
+echo "Gathering files for KDE theme backup..."
+
+for item in "${INCLUDE_ITEMS[@]}"; do
+    shopt -s nullglob
+    files=( $item )
+    shopt -u nullglob
+
+    if [ ${#files[@]} -eq 0 ]; then
+        # No matching files/folders found; skip
+        continue
+    fi
+
+    for file in "${files[@]}"; do
+        REL_PATH="${file#$HOME/}"
+        DEST_DIR="$TMPDIR/$(dirname "$REL_PATH")"
+        mkdir -p "$DEST_DIR"
+        cp -r "$file" "$DEST_DIR"
+    done
+done
+
+echo "Creating compressed backup archive on Desktop: $BACKUP_NAME"
+
+tar --use-compress-program="gzip -9" -cf "$BACKUP_PATH" -C "$TMPDIR" .
+
+echo "Backup complete!"
+echo "Backup archive location:"
+echo "$BACKUP_PATH"
