@@ -1,17 +1,15 @@
 #!/bin/bash
 
-# Enhanced GRUB Restore Script with Complete Video Support
-# Fixes load_video errors and ensures proper splash image restoration
+# Minimal GRUB Restore Script
+# Only restores files that exist in the backup
 
 set -euo pipefail  # Strict error handling
 
 # Configuration
 FULL_BACKUP_URL="https://glitchlinux.wtf/grub_backup.tar.gz"
 MINIMAL_BACKUP_URL="https://glitchlinux.wtf/grub_backup_no_live_97MB.tar.gz"
-SPLASH_URL="https://github.com/GlitchLinux/Grub-Custom-Files/raw/main/grub.d/splash.png"
 TEMP_DIR=$(mktemp -d)
 LOG_FILE="/var/log/grub_restore.log"
-SPLASH_PATH="/boot/grub/grub.png"  # Changed from splash.png to grub.png
 
 # Colors for output
 RED='\033[0;31m'
@@ -59,7 +57,7 @@ check_requirements() {
     log "Checking system requirements..."
     local missing=()
     
-    for cmd in curl tar sha256sum; do
+    for cmd in curl tar; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             missing+=("$cmd")
         fi
@@ -108,34 +106,16 @@ verify_backup() {
     log "${GREEN}Backup verification passed${NC}"
 }
 
-# Setup GRUB video properly
+# Setup GRUB video
 setup_grub_video() {
     log "Configuring GRUB video settings..."
     
-    # 1. Ensure all required video modules are available
-    log "Installing required GRUB modules..."
+    # Ensure font is available
     sudo mkdir -p /boot/grub/fonts
     sudo cp "${TEMP_DIR}/boot/grub/fonts/unicode.pf2" /boot/grub/fonts/ 2>/dev/null || true
     
-    # 2. Use splash image from backup if available
-    if [ ! -f "$SPLASH_PATH" ]; then
-        log "Looking for splash image in backup..."
-        if [ -f "${TEMP_DIR}/boot/grub/grub.png" ]; then
-            sudo cp "${TEMP_DIR}/boot/grub/grub.png" "$SPLASH_PATH"
-        elif [ -f "${TEMP_DIR}/boot/grub/splash.png" ]; then
-            sudo cp "${TEMP_DIR}/boot/grub/splash.png" "$SPLASH_PATH"
-        else
-            log "${YELLOW}Warning:${NC} No splash image found in backup"
-        fi
-    fi
-    
-    # Ensure proper permissions
-    if [ -f "$SPLASH_PATH" ]; then
-        sudo chmod 644 "$SPLASH_PATH"
-    fi
-    
-    # 3. Modify /etc/default/grub for proper video support
-    log "Configuring /etc/default/grub for video support..."
+    # Modify /etc/default/grub for proper video support
+    log "Configuring /etc/default/grub..."
     
     # Backup original file
     sudo cp /etc/default/grub /etc/default/grub.bak
@@ -149,15 +129,6 @@ setup_grub_video() {
     
     # Enable graphical terminal
     sudo sed -i 's/^#\?GRUB_TERMINAL=.*/GRUB_TERMINAL_OUTPUT=gfxterm/' /etc/default/grub
-    
-    # Set background image if it exists
-    if [ -f "$SPLASH_PATH" ]; then
-        if ! grep -q "^GRUB_BACKGROUND=" /etc/default/grub; then
-            echo "GRUB_BACKGROUND=\"$SPLASH_PATH\"" | sudo tee -a /etc/default/grub
-        else
-            sudo sed -i "s|^GRUB_BACKGROUND=.*|GRUB_BACKGROUND=\"$SPLASH_PATH\"|" /etc/default/grub
-        fi
-    fi
     
     # Enable required modules
     echo "GRUB_GFXPAYLOAD_LINUX=keep" | sudo tee -a /etc/default/grub
