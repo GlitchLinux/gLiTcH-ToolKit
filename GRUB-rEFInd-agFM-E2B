@@ -18,6 +18,7 @@ BIOS_TARGET="/boot/grubfm"
 
 # Create temp directory
 mkdir -p "$TEMP_DIR"
+sudo mkdir /tmp/bootmanager-install/refind-mount/
 cd "$TEMP_DIR" || exit
 
 # Function to install required tools
