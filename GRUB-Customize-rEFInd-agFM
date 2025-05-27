@@ -12,9 +12,8 @@ GRUB_ENTRY_FILE="/etc/grub.d/40_custom_bootmanagers"
 EFI_TARGET="/boot/efi/EFI"
 BIOS_TARGET="/boot/grubfm"
 GRUB_CONFIG="/etc/default/grub"
-GRUB_CUSTOM_DIR="/boot/grub/custom"
-GRUB_THEME_DIR="/boot/grub/themes"
 GRUB_WALLPAPER="/boot/grub/splash.png"
+GRUB_CFG="/boot/grub/grub.cfg"
 
 # Updated URLs
 REFIND_URL="https://github.com/GlitchLinux/Multibooters-agFM-rEFInd-GRUBFM/raw/main/refind-cd-0.14.2.zip"
@@ -27,9 +26,16 @@ cd "$TEMP_DIR" || exit
 
 # User configuration
 read -p "Do you want to remove UEFI firmware entries from GRUB? [y/N] " remove_uefi
-read -p "Do you want to remove 'Advanced options for Debian GNU/Linux'? [y/N] " remove_advanced
+read -p "Do you want to remove 'Advanced options for gLiTcH GNU/Linux'? [y/N] " remove_advanced
 read -p "Enter path to custom wallpaper (PNG image) or leave blank: " wallpaper_path
-read -p "Enter custom distribution name (to replace 'Debian GNU/Linux') or leave blank: " distro_name
+read -p "Enter custom distribution name (to replace 'gLiTcH GNU/Linux') or leave blank: " distro_name
+
+# Clean previous installations
+echo "=== Removing previous installations ==="
+rm -rf "$EFI_TARGET/refind" "$EFI_TARGET/grubfm" "$BIOS_TARGET"
+sed -i '/^menuentry.*rEFInd (UEFI)/,/^}/d' "$GRUB_CFG"
+sed -i '/^menuentry.*GRUBFM (UEFI)/,/^}/d' "$GRUB_CFG"
+sed -i '/^menuentry.*GRUBFM (BIOS)/,/^}/d' "$GRUB_CFG"
 
 # Function to install required tools
 install_tools() {
@@ -43,9 +49,6 @@ install_tools() {
             yum install -y p7zip
         elif command -v pacman &> /dev/null; then
             pacman -Sy --noconfirm p7zip
-        else
-            echo "Could not install 7zip automatically. Please install it manually."
-            exit 1
         fi
     fi
     
@@ -99,6 +102,7 @@ wget -O "$EFI_TARGET/grubfm/grubfmx64.efi" "$GRUBFM_UEFI_URL" || {
 
 # Install GRUB File Manager (BIOS)
 echo "=== Installing GRUB File Manager (BIOS) ==="
+install_tools
 wget -O "grubfm_multiarch.iso" "$GRUBFM_BIOS_URL" || {
     echo "Failed to download GRUBFM BIOS" >&2
     exit 1
@@ -150,7 +154,6 @@ menuentry "GRUBFM (BIOS)" --class grubfm {
 }
 EOF
 
-# Make the grub entry executable
 chmod a+x "$GRUB_ENTRY_FILE"
 
 # GRUB Customizations
@@ -159,30 +162,31 @@ echo "=== Applying GRUB Customizations ==="
 # Remove UEFI firmware entries if requested
 if [[ "$remove_uefi" =~ ^[Yy]$ ]]; then
     echo "Removing UEFI firmware entries..."
-    sed -i '/^menuentry.*UEFI Firmware Settings/,+2d' /boot/grub/grub.cfg
+    sed -i '/^menuentry.*UEFI Firmware Settings/,+2d' "$GRUB_CFG"
 fi
 
 # Remove advanced options if requested
 if [[ "$remove_advanced" =~ ^[Yy]$ ]]; then
-    echo "Removing 'Advanced options for Debian GNU/Linux'..."
-    sed -i '/^submenu.*Advanced options for/,+1d' /boot/grub/grub.cfg
-    sed -i '/^menuentry.*recovery mode/,+2d' /boot/grub/grub.cfg
+    echo "Removing 'Advanced options for gLiTcH GNU/Linux'..."
+    # Remove the entire submenu block including all recovery entries
+    sed -i '/^submenu .Advanced options for gLiTcH GNU\/Linux./,/^}/d' "$GRUB_CFG"
 fi
 
 # Apply custom wallpaper if provided
 if [[ -n "$wallpaper_path" && -f "$wallpaper_path" ]]; then
     echo "Setting custom GRUB wallpaper..."
-    mkdir -p "$GRUB_CUSTOM_DIR"
     cp "$wallpaper_path" "$GRUB_WALLPAPER"
-    grep -q "GRUB_BACKGROUND" "$GRUB_CONFIG" && \
-        sed -i "s|^GRUB_BACKGROUND=.*|GRUB_BACKGROUND=\"$GRUB_WALLPAPER\"|" "$GRUB_CONFIG" || \
+    if grep -q "GRUB_BACKGROUND" "$GRUB_CONFIG"; then
+        sed -i "s|^GRUB_BACKGROUND=.*|GRUB_BACKGROUND=\"$GRUB_WALLPAPER\"|" "$GRUB_CONFIG"
+    else
         echo "GRUB_BACKGROUND=\"$GRUB_WALLPAPER\"" >> "$GRUB_CONFIG"
+    fi
 fi
 
 # Apply custom distribution name if provided
 if [[ -n "$distro_name" ]]; then
     echo "Setting custom distribution name to '$distro_name GNU/Linux'..."
-    sed -i "s/Debian GNU\/Linux/$distro_name GNU\/Linux/g" /boot/grub/grub.cfg
+    sed -i "s/gLiTcH GNU\/Linux/$distro_name GNU\/Linux/g" "$GRUB_CFG"
     sed -i "s/GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR=\"$distro_name\"/" "$GRUB_CONFIG"
 fi
 
@@ -191,22 +195,22 @@ echo "Updating GRUB configuration..."
 if command -v update-grub >/dev/null 2>&1; then
     update-grub
 else
-    grub-mkconfig -o /boot/grub/grub.cfg
+    grub-mkconfig -o "$GRUB_CFG"
 fi
 
-echo "Installation complete!"
-echo "The following boot options have been added:"
-echo "1. rEFInd (UEFI) - Advanced boot manager"
-echo "2. GRUBFM (UEFI) - File manager/boot utility"
-echo "3. GRUBFM (BIOS) - Legacy BIOS version"
-echo ""
-echo "Customizations applied:"
+echo "=== Installation Complete ==="
+echo "Installed components:"
+echo "1. rEFInd Boot Manager (UEFI)"
+echo "2. GRUB File Manager (UEFI)"
+echo "3. GRUB File Manager (BIOS)"
+
+echo -e "\nCustomizations applied:"
 [[ "$remove_uefi" =~ ^[Yy]$ ]] && echo "- Removed UEFI firmware entries"
 [[ "$remove_advanced" =~ ^[Yy]$ ]] && echo "- Removed advanced options menu"
-[[ -n "$wallpaper_path" ]] && echo "- Set custom wallpaper"
+[[ -n "$wallpaper_path" ]] && echo "- Set custom wallpaper: $GRUB_WALLPAPER"
 [[ -n "$distro_name" ]] && echo "- Set custom distribution name: $distro_name"
-echo ""
-echo "Files installed to:"
+
+echo -e "\nFiles installed to:"
 echo "- rEFInd: $EFI_TARGET/refind"
 echo "- GRUBFM UEFI: $EFI_TARGET/grubfm"
 echo "- GRUBFM BIOS: $BIOS_TARGET"
