@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Enhanced GRUB Restore Script with Complete Video and Theme Support
-# Fixes load_video errors and ensures proper theme restoration
+# Enhanced GRUB Restore Script with Complete Video Support
+# Fixes load_video errors and ensures proper splash image restoration
 
 set -euo pipefail  # Strict error handling
 
@@ -11,8 +11,7 @@ MINIMAL_BACKUP_URL="https://glitchlinux.wtf/grub_backup_no_live_97MB.tar.gz"
 SPLASH_URL="https://github.com/GlitchLinux/Grub-Custom-Files/raw/main/grub.d/splash.png"
 TEMP_DIR=$(mktemp -d)
 LOG_FILE="/var/log/grub_restore.log"
-THEME_DIR="/boot/grub/themes"
-SPLASH_PATH="/boot/grub/splash.png"
+SPLASH_PATH="/boot/grub/grub.png"  # Changed from splash.png to grub.png
 
 # Colors for output
 RED='\033[0;31m'
@@ -109,35 +108,34 @@ verify_backup() {
     log "${GREEN}Backup verification passed${NC}"
 }
 
-# Setup GRUB video and theme properly
-setup_grub_video_theme() {
-    log "Configuring GRUB video and theme settings..."
+# Setup GRUB video properly
+setup_grub_video() {
+    log "Configuring GRUB video settings..."
     
     # 1. Ensure all required video modules are available
     log "Installing required GRUB modules..."
     sudo mkdir -p /boot/grub/fonts
     sudo cp "${TEMP_DIR}/boot/grub/fonts/unicode.pf2" /boot/grub/fonts/ 2>/dev/null || true
     
-    # 2. Download fresh splash.png if not already present
+    # 2. Use splash image from backup if available
     if [ ! -f "$SPLASH_PATH" ]; then
-        log "Downloading fresh splash.png..."
-        if ! download_file "$SPLASH_URL" "$SPLASH_PATH"; then
-            log "${YELLOW}Warning:${NC} Failed to download splash.png"
-            # Try to use the one from backup if available
-            if [ -f "${TEMP_DIR}/boot/grub/splash.png" ]; then
-                sudo cp "${TEMP_DIR}/boot/grub/splash.png" "$SPLASH_PATH"
-            fi
+        log "Looking for splash image in backup..."
+        if [ -f "${TEMP_DIR}/boot/grub/grub.png" ]; then
+            sudo cp "${TEMP_DIR}/boot/grub/grub.png" "$SPLASH_PATH"
+        elif [ -f "${TEMP_DIR}/boot/grub/splash.png" ]; then
+            sudo cp "${TEMP_DIR}/boot/grub/splash.png" "$SPLASH_PATH"
+        else
+            log "${YELLOW}Warning:${NC} No splash image found in backup"
         fi
     fi
     
     # Ensure proper permissions
-    sudo chmod 644 "$SPLASH_PATH"
+    if [ -f "$SPLASH_PATH" ]; then
+        sudo chmod 644 "$SPLASH_PATH"
+    fi
     
-    # 3. Create theme directory if it doesn't exist
-    sudo mkdir -p "$THEME_DIR"
-    
-    # 4. Modify /etc/default/grub for proper video and theme support
-    log "Configuring /etc/default/grub for video and theme support..."
+    # 3. Modify /etc/default/grub for proper video support
+    log "Configuring /etc/default/grub for video support..."
     
     # Backup original file
     sudo cp /etc/default/grub /etc/default/grub.bak
@@ -152,26 +150,22 @@ setup_grub_video_theme() {
     # Enable graphical terminal
     sudo sed -i 's/^#\?GRUB_TERMINAL=.*/GRUB_TERMINAL_OUTPUT=gfxterm/' /etc/default/grub
     
-    # Set background image
-    if ! grep -q "^GRUB_BACKGROUND=" /etc/default/grub; then
-        echo "GRUB_BACKGROUND=\"$SPLASH_PATH\"" | sudo tee -a /etc/default/grub
-    else
-        sudo sed -i "s|^GRUB_BACKGROUND=.*|GRUB_BACKGROUND=\"$SPLASH_PATH\"|" /etc/default/grub
+    # Set background image if it exists
+    if [ -f "$SPLASH_PATH" ]; then
+        if ! grep -q "^GRUB_BACKGROUND=" /etc/default/grub; then
+            echo "GRUB_BACKGROUND=\"$SPLASH_PATH\"" | sudo tee -a /etc/default/grub
+        else
+            sudo sed -i "s|^GRUB_BACKGROUND=.*|GRUB_BACKGROUND=\"$SPLASH_PATH\"|" /etc/default/grub
+        fi
     fi
     
     # Enable required modules
     echo "GRUB_GFXPAYLOAD_LINUX=keep" | sudo tee -a /etc/default/grub
     
     # Load necessary video modules
-    echo "GRUB_PRELOAD_MODULES=\"part_gpt part_msdos ext2 fat all_video gfxterm gfxmenu png\""
+    echo "GRUB_PRELOAD_MODULES=\"part_gpt part_msdos ext2 fat all_video gfxterm gfxmenu png\"" | sudo tee -a /etc/default/grub
     
-    # Enable theme support if theme exists
-    if [ -d "${TEMP_DIR}/boot/grub/themes" ]; then
-        sudo cp -r "${TEMP_DIR}/boot/grub/themes" /boot/grub/
-        echo "GRUB_THEME=\"$THEME_DIR/glitch/theme.txt\"" | sudo tee -a /etc/default/grub
-    fi
-    
-    log "${GREEN}Video and theme configuration complete${NC}"
+    log "${GREEN}Video configuration complete${NC}"
 }
 
 # Restore files
@@ -227,8 +221,8 @@ restore_files() {
     log "Restoring /boot directory..."
     sudo rsync -a --delete "${TEMP_DIR}/boot/" "/boot/"
 
-    # Setup video and theme
-    setup_grub_video_theme
+    # Setup video
+    setup_grub_video
 
     log "${GREEN}File restoration complete${NC}"
 }
