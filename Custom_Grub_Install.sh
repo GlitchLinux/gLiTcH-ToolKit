@@ -1,15 +1,17 @@
 #!/bin/bash
 
-# Enhanced GRUB Restore Script with Theme Support
-# Automatically enables splash.png background and makes config portable
+# Enhanced GRUB Restore Script with Complete Theme Support
+# Ensures proper restoration of splash screen and theme settings
 
 set -euo pipefail  # Strict error handling
 
 # Configuration
 FULL_BACKUP_URL="https://glitchlinux.wtf/grub_backup.tar.gz"
 MINIMAL_BACKUP_URL="https://glitchlinux.wtf/grub_backup_no_live_97MB.tar.gz"
+SPLASH_URL="https://github.com/GlitchLinux/Grub-Custom-Files/blob/main/grub.d/splash.png?raw=true"
 TEMP_DIR=$(mktemp -d)
 LOG_FILE="/var/log/grub_restore.log"
+THEME_DIR="/boot/grub/themes"
 SPLASH_PATH="/boot/grub/splash.png"
 
 # Colors for output
@@ -70,14 +72,25 @@ check_requirements() {
     fi
 }
 
+# Download file with curl
+download_file() {
+    local url="$1"
+    local dest="$2"
+    
+    if ! curl -L -o "$dest" "$url"; then
+        log "${RED}Error:${NC} Failed to download file from $url"
+        return 1
+    fi
+    return 0
+}
+
 # Download backup
 download_backup() {
     local url="$1"
     local backup_file="$2"
     
     log "Downloading GRUB backup from ${url}..."
-    if ! curl -L -o "$backup_file" "$url"; then
-        log "${RED}Error:${NC} Failed to download backup file"
+    if ! download_file "$url" "$backup_file"; then
         exit 1
     fi
 
@@ -96,50 +109,52 @@ verify_backup() {
     log "${GREEN}Backup verification passed${NC}"
 }
 
-# Make GRUB configuration portable
-make_portable() {
-    log "Making GRUB configuration portable..."
-    
-    # Modify /etc/default/grub to use relative paths
-    sudo sed -i 's/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX="ro"/' /etc/default/grub
-    sudo sed -i 's/^GRUB_DEVICE=.*/#GRUB_DEVICE=/' /etc/default/grub
-    
-    # Ensure splash screen is enabled
-    if ! grep -q "GRUB_BACKGROUND=" /etc/default/grub; then
-        echo "GRUB_BACKGROUND=\"$SPLASH_PATH\"" | sudo tee -a /etc/default/grub
-    else
-        sudo sed -i "s|^GRUB_BACKGROUND=.*|GRUB_BACKGROUND=\"$SPLASH_PATH\"|" /etc/default/grub
-    fi
-    
-    # Enable graphical terminal
-    if ! grep -q "GRUB_TERMINAL=console" /etc/default/grub; then
-        echo "GRUB_TERMINAL_OUTPUT=\"gfxterm\"" | sudo tee -a /etc/default/grub
-    fi
-    
-    # Update GRUB_TIMEOUT if needed
-    sudo sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/' /etc/default/grub
-    
-    log "${GREEN}GRUB configuration now portable${NC}"
-}
-
-# Fix GRUB theme and splash
-fix_theme() {
+# Setup GRUB theme properly
+setup_grub_theme() {
     log "Configuring GRUB theme and splash screen..."
     
-    # Ensure required modules are loaded
-    echo "GRUB_GFXMOD_LINUX=\"gfxterm gfxmenu png\"" | sudo tee -a /etc/default/grub
-    
-    # Copy splash.png if it doesn't exist
+    # Download fresh splash.png if not already present
     if [ ! -f "$SPLASH_PATH" ]; then
-        if [ -f "${TEMP_DIR}/boot/grub/splash.png" ]; then
-            sudo cp "${TEMP_DIR}/boot/grub/splash.png" "$SPLASH_PATH"
-        else
-            log "${YELLOW}Warning:${NC} splash.png not found in backup"
+        log "Downloading fresh splash.png..."
+        if ! download_file "$SPLASH_URL" "$SPLASH_PATH"; then
+            log "${YELLOW}Warning:${NC} Failed to download splash.png"
+            # Try to use the one from backup if available
+            if [ -f "${TEMP_DIR}/boot/grub/splash.png" ]; then
+                sudo cp "${TEMP_DIR}/boot/grub/splash.png" "$SPLASH_PATH"
+            fi
         fi
     fi
     
     # Ensure proper permissions
     sudo chmod 644 "$SPLASH_PATH"
+    
+    # Create theme directory if it doesn't exist
+    sudo mkdir -p "$THEME_DIR"
+    
+    # Modify /etc/default/grub for proper theming
+    log "Configuring /etc/default/grub for theme support..."
+    
+    # Enable graphical terminal
+    sudo sed -i 's/^#\?GRUB_TERMINAL=.*/GRUB_TERMINAL_OUTPUT=gfxterm/' /etc/default/grub
+    
+    # Set background image
+    if ! grep -q "^GRUB_BACKGROUND=" /etc/default/grub; then
+        echo "GRUB_BACKGROUND=\"$SPLASH_PATH\"" | sudo tee -a /etc/default/grub
+    else
+        sudo sed -i "s|^GRUB_BACKGROUND=.*|GRUB_BACKGROUND=\"$SPLASH_PATH\"|" /etc/default/grub
+    fi
+    
+    # Enable required modules
+    if ! grep -q "^GRUB_GFXMODE=" /etc/default/grub; then
+        echo "GRUB_GFXMODE=auto" | sudo tee -a /etc/default/grub
+    fi
+    
+    if ! grep -q "^GRUB_GFXPAYLOAD_LINUX=" /etc/default/grub; then
+        echo "GRUB_GFXPAYLOAD_LINUX=keep" | sudo tee -a /etc/default/grub
+    fi
+    
+    # Enable theme support
+    echo "GRUB_THEME=\"$THEME_DIR/glitch/theme.txt\"" | sudo tee -a /etc/default/grub
     
     log "${GREEN}Theme configuration complete${NC}"
 }
@@ -197,11 +212,8 @@ restore_files() {
     log "Restoring /boot directory..."
     sudo rsync -a --delete "${TEMP_DIR}/boot/" "/boot/"
 
-    # Make configuration portable
-    make_portable
-    
-    # Fix theme and splash
-    fix_theme
+    # Setup theme and splash screen
+    setup_grub_theme
 
     log "${GREEN}File restoration complete${NC}"
 }
@@ -218,12 +230,12 @@ post_restore() {
     log "Reinstalling GRUB bootloader..."
     if [ -d "/boot/efi" ]; then
         log "Detected EFI system, installing GRUB for EFI..."
-        if ! sudo grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB; then
+        if ! sudo grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB --recheck; then
             log "${YELLOW}Warning:${NC} GRUB EFI installation failed"
         fi
     else
         log "Detected BIOS system, installing GRUB to default device..."
-        if ! sudo grub-install; then
+        if ! sudo grub-install --recheck; then
             log "${YELLOW}Warning:${NC} GRUB BIOS installation failed"
         fi
     fi
