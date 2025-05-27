@@ -7,19 +7,29 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Configuration
-REFIND_VERSION="0.14.2"
-REFIND_URL="https://sourceforge.net/projects/refind/files/${REFIND_VERSION}/refind-cd-${REFIND_VERSION}.zip/download"
-GRUBFM_UEFI_URL="https://github.com/a1ive/grub2-filemanager/releases/download/latest/grubfm-en_US.7z"
-GRUBFM_BIOS_URL="https://github.com/a1ive/grub2-filemanager/releases/download/latest/grubfm_multiarch.iso"
 TEMP_DIR="/tmp/bootmanager-install"
 GRUB_ENTRY_FILE="/etc/grub.d/40_custom_bootmanagers"
 EFI_TARGET="/boot/efi/EFI"
 BIOS_TARGET="/boot/grubfm"
+GRUB_CONFIG="/etc/default/grub"
+GRUB_CUSTOM_DIR="/boot/grub/custom"
+GRUB_THEME_DIR="/boot/grub/themes"
+GRUB_WALLPAPER="/boot/grub/splash.png"
+
+# Updated URLs
+REFIND_URL="https://github.com/GlitchLinux/Multibooters-agFM-rEFInd-GRUBFM/raw/main/refind-cd-0.14.2.zip"
+GRUBFM_UEFI_URL="https://github.com/GlitchLinux/Multibooters-agFM-rEFInd-GRUBFM/raw/main/grubfmx64.efi"
+GRUBFM_BIOS_URL="https://github.com/GlitchLinux/Multibooters-agFM-rEFInd-GRUBFM/raw/main/grubfm_multiarch.iso"
 
 # Create temp directory
 mkdir -p "$TEMP_DIR"
-sudo mkdir /tmp/bootmanager-install/refind-mount/
 cd "$TEMP_DIR" || exit
+
+# User configuration
+read -p "Do you want to remove UEFI firmware entries from GRUB? [y/N] " remove_uefi
+read -p "Do you want to remove 'Advanced options for Debian GNU/Linux'? [y/N] " remove_advanced
+read -p "Enter path to custom wallpaper (PNG image) or leave blank: " wallpaper_path
+read -p "Enter custom distribution name (to replace 'Debian GNU/Linux') or leave blank: " distro_name
 
 # Function to install required tools
 install_tools() {
@@ -53,24 +63,25 @@ install_tools() {
     fi
 }
 
-# Install rEFInd (UEFI only)
+# Install rEFInd
 echo "=== Installing rEFInd (UEFI) ==="
-wget -O "refind-cd-${REFIND_VERSION}.zip" "$REFIND_URL" || {
+wget -O "refind-cd-0.14.2.zip" "$REFIND_URL" || {
     echo "Failed to download rEFInd" >&2
     exit 1
 }
 
-unzip "refind-cd-${REFIND_VERSION}.zip" || {
+unzip "refind-cd-0.14.2.zip" || {
     echo "Failed to extract rEFInd" >&2
     exit 1
 }
 
-mkdir -p "$EFI_TARGET/refind"
-mount -o loop "refind-cd-${REFIND_VERSION}.iso" "$TEMP_DIR/refind-mount" || {
+mkdir -p "$TEMP_DIR/refind-mount"
+mount -o loop "refind-cd-0.14.2.iso" "$TEMP_DIR/refind-mount" || {
     echo "Failed to mount rEFInd ISO" >&2
     exit 1
 }
 
+mkdir -p "$EFI_TARGET/refind"
 cp -r "$TEMP_DIR/refind-mount/EFI/boot/"* "$EFI_TARGET/refind/" || {
     echo "Failed to copy rEFInd files" >&2
     exit 1
@@ -80,20 +91,9 @@ umount "$TEMP_DIR/refind-mount"
 
 # Install GRUB File Manager (UEFI)
 echo "=== Installing GRUB File Manager (UEFI) ==="
-install_tools
-wget -O "grubfm-en_US.7z" "$GRUBFM_UEFI_URL" || {
-    echo "Failed to download GRUBFM UEFI" >&2
-    exit 1
-}
-
-7z x "grubfm-en_US.7z" -o"$TEMP_DIR/grubfm-uefi" || {
-    echo "Failed to extract GRUBFM UEFI" >&2
-    exit 1
-}
-
 mkdir -p "$EFI_TARGET/grubfm"
-cp "$TEMP_DIR/grubfm-uefi/grubfmx64.efi" "$EFI_TARGET/grubfm/" || {
-    echo "Failed to copy GRUBFM UEFI files" >&2
+wget -O "$EFI_TARGET/grubfm/grubfmx64.efi" "$GRUBFM_UEFI_URL" || {
+    echo "Failed to download GRUBFM UEFI" >&2
     exit 1
 }
 
@@ -153,6 +153,39 @@ EOF
 # Make the grub entry executable
 chmod a+x "$GRUB_ENTRY_FILE"
 
+# GRUB Customizations
+echo "=== Applying GRUB Customizations ==="
+
+# Remove UEFI firmware entries if requested
+if [[ "$remove_uefi" =~ ^[Yy]$ ]]; then
+    echo "Removing UEFI firmware entries..."
+    sed -i '/^menuentry.*UEFI Firmware Settings/,+2d' /boot/grub/grub.cfg
+fi
+
+# Remove advanced options if requested
+if [[ "$remove_advanced" =~ ^[Yy]$ ]]; then
+    echo "Removing 'Advanced options for Debian GNU/Linux'..."
+    sed -i '/^submenu.*Advanced options for/,+1d' /boot/grub/grub.cfg
+    sed -i '/^menuentry.*recovery mode/,+2d' /boot/grub/grub.cfg
+fi
+
+# Apply custom wallpaper if provided
+if [[ -n "$wallpaper_path" && -f "$wallpaper_path" ]]; then
+    echo "Setting custom GRUB wallpaper..."
+    mkdir -p "$GRUB_CUSTOM_DIR"
+    cp "$wallpaper_path" "$GRUB_WALLPAPER"
+    grep -q "GRUB_BACKGROUND" "$GRUB_CONFIG" && \
+        sed -i "s|^GRUB_BACKGROUND=.*|GRUB_BACKGROUND=\"$GRUB_WALLPAPER\"|" "$GRUB_CONFIG" || \
+        echo "GRUB_BACKGROUND=\"$GRUB_WALLPAPER\"" >> "$GRUB_CONFIG"
+fi
+
+# Apply custom distribution name if provided
+if [[ -n "$distro_name" ]]; then
+    echo "Setting custom distribution name to '$distro_name GNU/Linux'..."
+    sed -i "s/Debian GNU\/Linux/$distro_name GNU\/Linux/g" /boot/grub/grub.cfg
+    sed -i "s/GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR=\"$distro_name\"/" "$GRUB_CONFIG"
+fi
+
 # Update GRUB
 echo "Updating GRUB configuration..."
 if command -v update-grub >/dev/null 2>&1; then
@@ -166,6 +199,12 @@ echo "The following boot options have been added:"
 echo "1. rEFInd (UEFI) - Advanced boot manager"
 echo "2. GRUBFM (UEFI) - File manager/boot utility"
 echo "3. GRUBFM (BIOS) - Legacy BIOS version"
+echo ""
+echo "Customizations applied:"
+[[ "$remove_uefi" =~ ^[Yy]$ ]] && echo "- Removed UEFI firmware entries"
+[[ "$remove_advanced" =~ ^[Yy]$ ]] && echo "- Removed advanced options menu"
+[[ -n "$wallpaper_path" ]] && echo "- Set custom wallpaper"
+[[ -n "$distro_name" ]] && echo "- Set custom distribution name: $distro_name"
 echo ""
 echo "Files installed to:"
 echo "- rEFInd: $EFI_TARGET/refind"
