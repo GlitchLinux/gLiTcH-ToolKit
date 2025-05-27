@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Interactive GRUB Backup Restore Script
-# Prompts user to choose between full or minimal restore
+# Enhanced GRUB Restore Script with Theme Support
+# Automatically enables splash.png background and makes config portable
 
 set -euo pipefail  # Strict error handling
 
@@ -10,6 +10,7 @@ FULL_BACKUP_URL="https://glitchlinux.wtf/grub_backup.tar.gz"
 MINIMAL_BACKUP_URL="https://glitchlinux.wtf/grub_backup_no_live_97MB.tar.gz"
 TEMP_DIR=$(mktemp -d)
 LOG_FILE="/var/log/grub_restore.log"
+SPLASH_PATH="/boot/grub/splash.png"
 
 # Colors for output
 RED='\033[0;31m'
@@ -95,6 +96,54 @@ verify_backup() {
     log "${GREEN}Backup verification passed${NC}"
 }
 
+# Make GRUB configuration portable
+make_portable() {
+    log "Making GRUB configuration portable..."
+    
+    # Modify /etc/default/grub to use relative paths
+    sudo sed -i 's/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX="ro"/' /etc/default/grub
+    sudo sed -i 's/^GRUB_DEVICE=.*/#GRUB_DEVICE=/' /etc/default/grub
+    
+    # Ensure splash screen is enabled
+    if ! grep -q "GRUB_BACKGROUND=" /etc/default/grub; then
+        echo "GRUB_BACKGROUND=\"$SPLASH_PATH\"" | sudo tee -a /etc/default/grub
+    else
+        sudo sed -i "s|^GRUB_BACKGROUND=.*|GRUB_BACKGROUND=\"$SPLASH_PATH\"|" /etc/default/grub
+    fi
+    
+    # Enable graphical terminal
+    if ! grep -q "GRUB_TERMINAL=console" /etc/default/grub; then
+        echo "GRUB_TERMINAL_OUTPUT=\"gfxterm\"" | sudo tee -a /etc/default/grub
+    fi
+    
+    # Update GRUB_TIMEOUT if needed
+    sudo sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/' /etc/default/grub
+    
+    log "${GREEN}GRUB configuration now portable${NC}"
+}
+
+# Fix GRUB theme and splash
+fix_theme() {
+    log "Configuring GRUB theme and splash screen..."
+    
+    # Ensure required modules are loaded
+    echo "GRUB_GFXMOD_LINUX=\"gfxterm gfxmenu png\"" | sudo tee -a /etc/default/grub
+    
+    # Copy splash.png if it doesn't exist
+    if [ ! -f "$SPLASH_PATH" ]; then
+        if [ -f "${TEMP_DIR}/boot/grub/splash.png" ]; then
+            sudo cp "${TEMP_DIR}/boot/grub/splash.png" "$SPLASH_PATH"
+        else
+            log "${YELLOW}Warning:${NC} splash.png not found in backup"
+        fi
+    fi
+    
+    # Ensure proper permissions
+    sudo chmod 644 "$SPLASH_PATH"
+    
+    log "${GREEN}Theme configuration complete${NC}"
+}
+
 # Restore files
 restore_files() {
     local backup_file="$1"
@@ -147,6 +196,12 @@ restore_files() {
 
     log "Restoring /boot directory..."
     sudo rsync -a --delete "${TEMP_DIR}/boot/" "/boot/"
+
+    # Make configuration portable
+    make_portable
+    
+    # Fix theme and splash
+    fix_theme
 
     log "${GREEN}File restoration complete${NC}"
 }
