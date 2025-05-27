@@ -1,0 +1,175 @@
+#!/bin/bash
+
+# Check if running as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root" >&2
+    exit 1
+fi
+
+# Configuration
+REFIND_VERSION="0.14.2"
+REFIND_URL="https://sourceforge.net/projects/refind/files/${REFIND_VERSION}/refind-cd-${REFIND_VERSION}.zip/download"
+GRUBFM_UEFI_URL="https://github.com/a1ive/grub2-filemanager/releases/download/latest/grubfm-en_US.7z"
+GRUBFM_BIOS_URL="https://github.com/a1ive/grub2-filemanager/releases/download/latest/grubfm_multiarch.iso"
+TEMP_DIR="/tmp/bootmanager-install"
+GRUB_ENTRY_FILE="/etc/grub.d/40_custom_bootmanagers"
+EFI_TARGET="/boot/efi/EFI"
+BIOS_TARGET="/boot/grubfm"
+
+# Create temp directory
+mkdir -p "$TEMP_DIR"
+cd "$TEMP_DIR" || exit
+
+# Function to install required tools
+install_tools() {
+    if ! command -v 7z &> /dev/null; then
+        echo "Installing 7zip for extraction..."
+        if command -v apt-get &> /dev/null; then
+            apt-get install -y p7zip-full
+        elif command -v dnf &> /dev/null; then
+            dnf install -y p7zip
+        elif command -v yum &> /dev/null; then
+            yum install -y p7zip
+        elif command -v pacman &> /dev/null; then
+            pacman -Sy --noconfirm p7zip
+        else
+            echo "Could not install 7zip automatically. Please install it manually."
+            exit 1
+        fi
+    fi
+    
+    if ! command -v xorriso &> /dev/null; then
+        echo "Installing xorriso for ISO extraction..."
+        if command -v apt-get &> /dev/null; then
+            apt-get install -y xorriso
+        elif command -v dnf &> /dev/null; then
+            dnf install -y xorriso
+        elif command -v yum &> /dev/null; then
+            yum install -y xorriso
+        elif command -v pacman &> /dev/null; then
+            pacman -Sy --noconfirm xorriso
+        fi
+    fi
+}
+
+# Install rEFInd (UEFI only)
+echo "=== Installing rEFInd (UEFI) ==="
+wget -O "refind-cd-${REFIND_VERSION}.zip" "$REFIND_URL" || {
+    echo "Failed to download rEFInd" >&2
+    exit 1
+}
+
+unzip "refind-cd-${REFIND_VERSION}.zip" || {
+    echo "Failed to extract rEFInd" >&2
+    exit 1
+}
+
+mkdir -p "$EFI_TARGET/refind"
+mount -o loop "refind-cd-${REFIND_VERSION}.iso" "$TEMP_DIR/refind-mount" || {
+    echo "Failed to mount rEFInd ISO" >&2
+    exit 1
+}
+
+cp -r "$TEMP_DIR/refind-mount/EFI/boot/"* "$EFI_TARGET/refind/" || {
+    echo "Failed to copy rEFInd files" >&2
+    exit 1
+}
+
+umount "$TEMP_DIR/refind-mount"
+
+# Install GRUB File Manager (UEFI)
+echo "=== Installing GRUB File Manager (UEFI) ==="
+install_tools
+wget -O "grubfm-en_US.7z" "$GRUBFM_UEFI_URL" || {
+    echo "Failed to download GRUBFM UEFI" >&2
+    exit 1
+}
+
+7z x "grubfm-en_US.7z" -o"$TEMP_DIR/grubfm-uefi" || {
+    echo "Failed to extract GRUBFM UEFI" >&2
+    exit 1
+}
+
+mkdir -p "$EFI_TARGET/grubfm"
+cp "$TEMP_DIR/grubfm-uefi/grubfmx64.efi" "$EFI_TARGET/grubfm/" || {
+    echo "Failed to copy GRUBFM UEFI files" >&2
+    exit 1
+}
+
+# Install GRUB File Manager (BIOS)
+echo "=== Installing GRUB File Manager (BIOS) ==="
+wget -O "grubfm_multiarch.iso" "$GRUBFM_BIOS_URL" || {
+    echo "Failed to download GRUBFM BIOS" >&2
+    exit 1
+}
+
+mkdir -p "$TEMP_DIR/grubfm-bios"
+xorriso -osirrox on -indev "grubfm_multiarch.iso" -extract / "$TEMP_DIR/grubfm-bios" || {
+    echo "Failed to extract GRUBFM BIOS ISO" >&2
+    exit 1
+}
+
+mkdir -p "$BIOS_TARGET"
+cp "$TEMP_DIR/grubfm-bios/grubfm.elf" "$BIOS_TARGET/" || {
+    echo "Failed to copy GRUBFM BIOS files" >&2
+    exit 1
+}
+
+# Create GRUB custom entries
+echo "Creating GRUB custom entries..."
+cat > "$GRUB_ENTRY_FILE" <<EOF
+#!/bin/sh
+exec tail -n +3 \$0
+# This file provides custom boot manager entries
+
+### UEFI Entries ###
+menuentry "rEFInd (UEFI)" --class refind {
+    insmod part_gpt
+    insmod fat
+    insmod chain
+    search --file --no-floppy --set=root /EFI/refind/bootx64.efi
+    chainloader /EFI/refind/bootx64.efi
+}
+
+menuentry "GRUBFM (UEFI)" --class grubfm {
+    insmod part_gpt
+    insmod fat
+    insmod chain
+    search --file --no-floppy --set=root /EFI/grubfm/grubfmx64.efi
+    chainloader /EFI/grubfm/grubfmx64.efi
+}
+
+### BIOS/Legacy Entries ###
+menuentry "GRUBFM (BIOS)" --class grubfm {
+    insmod multiboot
+    insmod ext2
+    search --file --no-floppy --set=root /grubfm/grubfm.elf
+    multiboot /grubfm/grubfm.elf
+    boot
+}
+EOF
+
+# Make the grub entry executable
+chmod a+x "$GRUB_ENTRY_FILE"
+
+# Update GRUB
+echo "Updating GRUB configuration..."
+if command -v update-grub >/dev/null 2>&1; then
+    update-grub
+else
+    grub-mkconfig -o /boot/grub/grub.cfg
+fi
+
+echo "Installation complete!"
+echo "The following boot options have been added:"
+echo "1. rEFInd (UEFI) - Advanced boot manager"
+echo "2. GRUBFM (UEFI) - File manager/boot utility"
+echo "3. GRUBFM (BIOS) - Legacy BIOS version"
+echo ""
+echo "Files installed to:"
+echo "- rEFInd: $EFI_TARGET/refind"
+echo "- GRUBFM UEFI: $EFI_TARGET/grubfm"
+echo "- GRUBFM BIOS: $BIOS_TARGET"
+
+# Clean up
+rm -rf "$TEMP_DIR"
