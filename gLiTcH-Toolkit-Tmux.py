@@ -48,6 +48,7 @@ def setup_repository():
         print(f"{YELLOW}Updating repository...{NC}")
         try:
             subprocess.run(["git", "-C", LOCAL_DIR_PATH, "pull"], check=True)
+            subprocess.run(["chmod", "-R", "+x", LOCAL_DIR_PATH], check=True)
         except subprocess.CalledProcessError as e:
             print(f"{RED}Failed to update repository. Error: {e.stderr}{NC}")
             return False
@@ -55,6 +56,7 @@ def setup_repository():
         print(f"{YELLOW}Cloning repository...{NC}")
         try:
             subprocess.run(["git", "clone", REPO_URL, LOCAL_DIR_PATH], check=True)
+            subprocess.run(["chmod", "-R", "+x", LOCAL_DIR_PATH], check=True)
         except subprocess.CalledProcessError as e:
             print(f"{RED}Failed to clone repository. Error: {e.stderr}{NC}")
             return False
@@ -71,7 +73,6 @@ def get_tools():
             continue
         item_path = os.path.join(LOCAL_DIR_PATH, item)
 
-        # Include if executable, or has .sh/.py extension
         if os.path.isfile(item_path) and (
             os.access(item_path, os.X_OK) or item.endswith(('.sh', '.py'))
         ):
@@ -79,7 +80,6 @@ def get_tools():
     
     tools.sort(key=str.lower)
     return tools
-
 
 def display_menu(tools):
     """Displays the menu of available tools."""
@@ -108,13 +108,16 @@ def run_in_tmux(tool_path):
             # Create detached session if it doesn't exist
             subprocess.run(["tmux", "new-session", "-d", "-s", session_name])
 
+        # Build the shell command string
+        command_string = f"bash -c '{tool_path} || echo \"Script failed with exit code $?\"; exec bash'"
+
         # Open a new window for the tool inside the session
         subprocess.run([
             "tmux", "new-window",
             "-t", f"{session_name}:",
             "-n", os.path.basename(tool_path),
-            "bash", "-c", f'"{tool_path} || echo Script failed with exit code $?; exec bash"'
-        ])
+            command_string
+        ], check=True)
 
         # Focus the new window if inside tmux
         if 'TMUX' in os.environ:
@@ -128,7 +131,6 @@ def run_in_tmux(tool_path):
         print(f"{RED}Failed to run in tmux: {e}{NC}")
         return False
     return True
-
 
 def main():
     """Main function to run the tool kit."""
@@ -199,4 +201,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"{RED}An unexpected error occurred: {e}{NC}")
         sys.exit(1)
-
