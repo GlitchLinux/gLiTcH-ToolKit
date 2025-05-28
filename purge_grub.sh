@@ -9,7 +9,9 @@ sudo apt-get purge --allow-remove-essential -y grub2-common:*
 echo "PURGE COMPLETED NOW REINSTALL GRUB!"
 
 echo "sudo apt install grub-efi #UEFI"
+
 echo "OR ->"
+
 echo "sudo apt install grub-pc  #BIOS"
 
 sleep 60
