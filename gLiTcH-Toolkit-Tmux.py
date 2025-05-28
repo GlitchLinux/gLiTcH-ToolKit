@@ -16,7 +16,7 @@ PINK = '\033[1;35m'
 NC = '\033[0m'  # No Color
 
 # Repository details
-REPO_URL = "https://github.com/GlitchLinux/gLiTcH-ToolKit.git"
+REPO_URL = "https://github.com/GlitchLinux/gLiTcH-ToolKit.git "
 BASE_DIR = "/tmp"
 LOCAL_DIR_NAME = "gLiTcH-ToolKit"
 LOCAL_DIR_PATH = os.path.join(BASE_DIR, LOCAL_DIR_NAME)
@@ -41,7 +41,7 @@ def setup_repository():
         except OSError as e:
             print(f"{RED}Failed to create base directory {BASE_DIR}: {e}{NC}")
             return False
-    
+
     os.chdir(BASE_DIR)
 
     if os.path.isdir(os.path.join(LOCAL_DIR_PATH, ".git")):
@@ -49,14 +49,14 @@ def setup_repository():
         try:
             subprocess.run(["git", "-C", LOCAL_DIR_PATH, "pull"], check=True)
         except subprocess.CalledProcessError as e:
-            print(f"{RED}Failed to update repository. Error: {e.stderr}{NC}")
+            print(f"{RED}Failed to update repository. Error: {e}{NC}")
             return False
     else:
         print(f"{YELLOW}Cloning repository...{NC}")
         try:
             subprocess.run(["git", "clone", REPO_URL, LOCAL_DIR_PATH], check=True)
         except subprocess.CalledProcessError as e:
-            print(f"{RED}Failed to clone repository. Error: {e.stderr}{NC}")
+            print(f"{RED}Failed to clone repository. Error: {e}{NC}")
             return False
     return True
 
@@ -72,24 +72,29 @@ def get_tools():
         item_path = os.path.join(LOCAL_DIR_PATH, item)
         if os.path.isfile(item_path):
             tools.append(item)
-    
+
     tools.sort(key=str.lower)
     return tools
 
-def display_menu(tools):
-    """Displays the menu of available tools."""
-    os.system('clear')
-    print(f"{PINK}╔════════════════════════════════════════════╗{NC}")
-    print(f"{PINK}║{NC}{YELLOW}      gLiTcH-ToolKit - Linux System Tools      {NC}{PINK}║{NC}")
-    print(f"{PINK}╠════════════════════════════════════════════╣{NC}")
-    
+def display_menu_in_tmux(tools):
+    """Display the menu directly inside the tmux Menu window."""
+    # Clear the menu pane
+    subprocess.run(["tmux", "send-keys", "-t", "Menu", "clear", "C-m"])
+
+    def send_line(line=""):
+        subprocess.run(["tmux", "send-keys", "-t", "Menu", line, "C-m"])
+
+    send_line(f"{PINK}╔════════════════════════════════════════════╗{NC}")
+    send_line(f"{PINK}║{NC}{YELLOW}      gLiTcH-ToolKit - Linux System Tools      {NC}{PINK}║{NC}")
+    send_line(f"{PINK}╠════════════════════════════════════════════╣{NC}")
+
     for idx, tool in enumerate(tools, 1):
-        print(f"{PINK}║{NC} {GREEN}{idx:2}.{NC} {CYAN}{tool.ljust(38)}{NC} {PINK}║{NC}")
-    
-    print(f"{PINK}╠════════════════════════════════════════════╣{NC}")
-    print(f"{PINK}║{NC} {YELLOW} 0. Quit{' ' * 35}{NC}{PINK}║{NC}")
-    print(f"{PINK}╚════════════════════════════════════════════╝{NC}")
-    print()
+        send_line(f"{PINK}║{NC} {GREEN}{idx:2}.{NC} {CYAN}{tool.ljust(38)}{NC} {PINK}║{NC}")
+
+    send_line(f"{PINK}╠════════════════════════════════════════════╣{NC}")
+    send_line(f"{PINK}║{NC} {YELLOW} 0. Quit{' ' * 35}{NC}{PINK}║{NC}")
+    send_line(f"{PINK}╚════════════════════════════════════════════╝{NC}")
+    send_line()
 
 def setup_tmux_session():
     """Sets up the tmux session with two windows."""
@@ -100,16 +105,19 @@ def setup_tmux_session():
             subprocess.run(["tmux", "new-session", "-d", "-s", "glitch-toolkit", "-n", "Menu"])
             subprocess.run(["tmux", "new-window", "-t", "glitch-toolkit:1", "-n", "Script"])
             subprocess.run(["tmux", "select-window", "-t", "glitch-toolkit:0"])
-            subprocess.run(["tmux", "attach-session", "-t", "glitch-toolkit"])
         else:
             # If already in tmux, just create windows in current session
             subprocess.run(["tmux", "new-window", "-n", "Menu"])
             subprocess.run(["tmux", "new-window", "-n", "Script"])
             subprocess.run(["tmux", "select-window", "-t", "0"])
-        
-        # Set up layout (menu on left, script on right)
+
+        # Split window horizontally (menu on left, script on right)
         subprocess.run(["tmux", "split-window", "-h"])
         subprocess.run(["tmux", "select-pane", "-t", "0"])
+
+        # Attach only if not already inside tmux
+        if 'TMUX' not in os.environ:
+            subprocess.run(["tmux", "attach-session", "-t", "glitch-toolkit"])
         return True
     except subprocess.CalledProcessError as e:
         print(f"{RED}Failed to setup tmux session: {e}{NC}")
@@ -132,55 +140,54 @@ def main():
     if not check_tmux():
         print(f"{RED}Error: tmux is required for this toolkit. Please install tmux first.{NC}")
         sys.exit(1)
-    
+
     print(f"{YELLOW}Initializing gLiTcH-ToolKit...{NC}")
     if not setup_repository():
         print_colored("Initial setup failed. Please check messages above. Exiting.", RED)
         return
-    
+
     if not setup_tmux_session():
         print_colored("Failed to setup tmux session. Exiting.", RED)
         return
-    
+
     tools = get_tools()
     if not tools:
         print(f"{YELLOW}No tools found in repository.{NC}")
+        input(f"{PINK}Press Enter to exit...{NC}")
         return
-    
+
     while True:
-        # Display menu in the Menu window
-        subprocess.run(["tmux", "send-keys", "-t", "Menu", "clear", "C-m"])
-        subprocess.run(["tmux", "send-keys", "-t", "Menu", f"python3 {sys.argv[0]} --show-menu {len(tools)}", "C-m"])
-        
+        display_menu_in_tmux(tools)
+
         try:
             choice = input(f"{YELLOW}Select a tool (1-{len(tools)}), or 0 to quit: {NC}")
-            
+
             if not choice:
                 continue
-                
+
             choice = int(choice)
-            
+
             if choice == 0:
                 break
             elif 1 <= choice <= len(tools):
                 selected_tool = tools[choice - 1]
                 tool_path = os.path.join(LOCAL_DIR_PATH, selected_tool)
-                
+
                 if not run_script_in_tmux(tool_path):
                     print(f"{RED}Failed to launch tool.{NC}")
                     input(f"{PINK}Press Enter to continue...{NC}")
-                
+
             else:
                 print(f"{RED}Invalid selection. Please choose between 1 and {len(tools)}.{NC}")
                 sleep(1)
-                
+
         except ValueError:
             print(f"{RED}Please enter a number.{NC}")
             sleep(1)
         except KeyboardInterrupt:
             print(f"\n{YELLOW}Exiting...{NC}")
             break
-    
+
     # Cleanup
     if os.path.exists(LOCAL_DIR_PATH):
         try:
@@ -188,7 +195,7 @@ def main():
             print(f"{GREEN}Cleaned up temporary files.{NC}")
         except OSError as e:
             print(f"{RED}Failed to clean up temporary files: {e}{NC}")
-    
+
     # Kill tmux session if we created it
     if 'TMUX' not in os.environ:
         subprocess.run(["tmux", "kill-session", "-t", "glitch-toolkit"])
