@@ -1,10 +1,40 @@
 #!/bin/bash
-sudo touch /etc/apt/sources.list.d/kali.list
-echo "deb [trusted=yes] http://http.kali.org/kali kali-rolling main non-free contrib" | sudo tee /etc/apt/sources.list.d/kali.list
-wget -qO - https://archive.kali.org/archive-key.asc | sudo gpg --dearmor -o /usr/share/keyrings/kali-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/kali-archive-keyring.gpg] http://http.kali.org/kali kali-rolling main non-free contrib" | sudo tee /etc/apt/sources.list.d/kali.list
-sudo apt update
-sudo apt install kali-tools-top10
-sudo rm /etc/apt/sources.list.d/kali.list
-sudo rm /usr/share/keyrings/kali-archive-keyring.gpg
-sudo apt update
+set -euo pipefail  # Enable strict mode
+
+# Check if running as root, request elevation if not
+if [[ $EUID -ne 0 ]]; then
+    exec sudo "$0" "$@"
+fi
+
+# Setup Kali repository
+KALI_LIST="/etc/apt/sources.list.d/kali.list"
+KEYRING="/usr/share/keyrings/kali-archive-keyring.gpg"
+
+cleanup() {
+    echo "Cleaning up..."
+    rm -f "$KALI_LIST" "$KEYRING" 2>/dev/null || true
+    apt-get update
+}
+
+trap cleanup EXIT  # Ensure cleanup runs on script exit
+
+echo "Adding Kali Linux repository..."
+cat > "$KALI_LIST" <<EOF
+deb [trusted=yes] http://http.kali.org/kali kali-rolling main non-free contrib
+EOF
+
+echo "Adding Kali Linux signing key..."
+wget -qO - https://archive.kali.org/archive-key.asc | gpg --dearmor -o "$KEYRING"
+
+echo "Updating repository with signed key..."
+cat > "$KALI_LIST" <<EOF
+deb [signed-by=$KEYRING] http://http.kali.org/kali kali-rolling main non-free contrib
+EOF
+
+echo "Updating package lists..."
+apt-get update -qq
+
+echo "Installing kali-tools-top10..."
+apt-get install -y kali-tools-top10
+
+echo "Installation completed successfully."
