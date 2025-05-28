@@ -43,17 +43,22 @@ while true; do
         continue
     fi
 
-    # Display tools in 3 columns with dynamic alignment
-    count=1
+    # Calculate number of columns and rows needed
+    num_entries=${#entries[@]}
+    num_columns=3
+    num_rows=$(( (num_entries + num_columns - 1) / num_columns ))
     max_width=35 # Maximum width for each column
-    for entry in "${entries[@]}"; do
-        printf "${GREEN}%3d. ${PINK}%-*s${NC}" "$count" "$max_width" "$entry"
-        if (( count % 3 == 0 )); then
-            echo ""
-        fi
-        ((count++))
+
+    # Display tools in column-wise order
+    for (( row=0; row<num_rows; row++ )); do
+        for (( col=0; col<num_columns; col++ )); do
+            index=$(( row + col * num_rows ))
+            if (( index < num_entries )); then
+                printf "${GREEN}%3d. ${PINK}%-*s${NC}" "$((index+1))" "$max_width" "${entries[index]}"
+            fi
+        done
+        echo ""
     done
-    [[ $(( (count-1) % 3 )) != 0 ]] && echo ""  # Add newline if last row incomplete
 
     echo ""
     echo -e -n "${YELLOW}Enter a number to execute (1-${#entries[@]}), or 0 to quit: ${NC}"
