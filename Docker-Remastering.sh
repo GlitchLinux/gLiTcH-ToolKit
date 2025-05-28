@@ -183,6 +183,8 @@ while true; do
     fi
 done
 
+#!/bin/bash
+
 # Check if script is run as root
 if [ "$(id -u)" -ne 0 ]; then
     echo "This script must be run as root" >&2
@@ -198,17 +200,25 @@ if [ -z "$new_hostname" ]; then
     exit 1
 fi
 
-# Set hostname in all locations
 echo "Setting hostname to: $new_hostname"
 
-# 1. Set the transient hostname (immediate effect)
-hostname "$new_hostname"
+# For Docker containers, we need to:
+# 1. Write directly to the kernel hostname file
+echo "$new_hostname" > /proc/sys/kernel/hostname
 
-# 2. Set the static hostname (persists after reboot)
-hostnamectl set-hostname "$new_hostname"
+# 2. Set the static hostname (if hostnamectl is available)
+if command -v hostnamectl &> /dev/null; then
+    hostnamectl set-hostname "$new_hostname"
+fi
 
-# 3. Update /etc/hosts (replace old hostname if it exists)
+# 3. Update /etc/hosts
 sed -i "/127.0.1.1/c\127.0.1.1\t$new_hostname" /etc/hosts
+
+# 4. Update /etc/hostname (Debian-specific)
+echo "$new_hostname" > /etc/hostname
+
+echo "Hostname set successfully in container."
+echo "Note: Container hostname changes might not be visible in 'docker ps' until restart."
 
 echo "Hostname set successfully. Changes are effective immediately."
 echo "You may need to restart services or log out/login for all applications to recognize the new hostname."
