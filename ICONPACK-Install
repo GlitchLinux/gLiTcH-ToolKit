@@ -1,0 +1,6 @@
+cd /usr/share/pixmaps
+sudo wget https://github.com/GlitchLinux/ICONPACK/raw/refs/heads/main/ICONPACK.zip
+sudo unzip ICONPACK.zip && sleep 3
+sudo rm -f ICONPACK.zip 
+echo "ICONPACK Installed to System"
+exit
