@@ -33,6 +33,17 @@ def check_tmux():
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
+def wait_for_tmux_session(session_name="glitch-toolkit", timeout=10):
+    """Waits until the tmux session exists."""
+    for _ in range(timeout):
+        result = subprocess.run(["tmux", "has-session", "-t", session_name],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if result.returncode == 0:
+            return True
+        sleep(0.5)
+    print(f"{RED}Timeout waiting for tmux session '{session_name}'{NC}")
+    return False
+
 def setup_repository():
     """Clones or updates the repository."""
     if not os.path.exists(BASE_DIR):
@@ -103,21 +114,29 @@ def setup_tmux_session():
         if 'TMUX' not in os.environ:
             # Create new session with two windows
             subprocess.run(["tmux", "new-session", "-d", "-s", "glitch-toolkit", "-n", "Menu"])
+            
+            if not wait_for_tmux_session("glitch-toolkit"):
+                return False
+
             subprocess.run(["tmux", "new-window", "-t", "glitch-toolkit:1", "-n", "Script"])
             subprocess.run(["tmux", "select-window", "-t", "glitch-toolkit:0"])
+
+            # Split window layout
+            subprocess.run(["tmux", "split-window", "-h"])
+            subprocess.run(["tmux", "select-pane", "-t", "0"])
+
+            # Start tmux session
+            subprocess.Popen(["tmux", "attach-session", "-t", "glitch-toolkit"])
         else:
             # If already in tmux, just create windows in current session
             subprocess.run(["tmux", "new-window", "-n", "Menu"])
             subprocess.run(["tmux", "new-window", "-n", "Script"])
             subprocess.run(["tmux", "select-window", "-t", "0"])
 
-        # Split window horizontally (menu on left, script on right)
-        subprocess.run(["tmux", "split-window", "-h"])
-        subprocess.run(["tmux", "select-pane", "-t", "0"])
+            # Split window layout
+            subprocess.run(["tmux", "split-window", "-h"])
+            subprocess.run(["tmux", "select-pane", "-t", "0"])
 
-        # Attach only if not already inside tmux
-        if 'TMUX' not in os.environ:
-            subprocess.run(["tmux", "attach-session", "-t", "glitch-toolkit"])
         return True
     except subprocess.CalledProcessError as e:
         print(f"{RED}Failed to setup tmux session: {e}{NC}")
@@ -155,6 +174,8 @@ def main():
         print(f"{YELLOW}No tools found in repository.{NC}")
         input(f"{PINK}Press Enter to exit...{NC}")
         return
+
+    sleep(0.5)  # Give tmux time to initialize before sending keys
 
     while True:
         display_menu_in_tmux(tools)
