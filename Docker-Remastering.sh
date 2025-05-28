@@ -105,26 +105,6 @@ Section "InputClass"
 EndSection
 EOF
 
-# Apply changes immediately (no reboot needed)
-setupcon --force
-
-# Verify settings
-echo -e "\n✔ Keyboard configured:"
-localectl status
-echo -e "\n✔ Locale settings:"
-locale | grep LANG=
-
-# Configure timezone
-ln -fs /usr/share/zoneinfo/UTC /etc/localtime
-dpkg-reconfigure -f noninteractive tzdata
-
-# Configure keyboard (US layout)
-echo "XKBMODEL=\"pc105\"" > /etc/default/keyboard
-echo "XKBLAYOUT=\"se\"" >> /etc/default/keyboard
-echo "XKBVARIANT=\"\"" >> /etc/default/keyboard
-echo "XKBOPTIONS=\"\"" >> /etc/default/keyboard
-dpkg-reconfigure -f noninteractive keyboard-configuration
-
 # Configure network (use NetworkManager)
 systemctl enable NetworkManager
 systemctl disable networking
