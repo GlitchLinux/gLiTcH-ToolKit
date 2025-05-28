@@ -1,6 +1,6 @@
 #/bin/bash
 
-sudo apt update && sudo apt install -y calamares calamares-settings-debian
+sudo apt update && sudo apt install -y calamares calamares-settings-debian xinit
 sudo rm -rf /tmp/gLiTcH-Calamares/
 sudo rm -rf /etc/calamares/
 sudo mkdir /etc/calamares/
