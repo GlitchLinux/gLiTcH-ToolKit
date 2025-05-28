@@ -1,7 +1,8 @@
+#!/usr/bin/env python3
+
 import os
 import subprocess
 import shutil
-import math
 import sys
 from threading import Thread
 from queue import Queue, Empty
@@ -51,7 +52,6 @@ def clear_screen_area(start_row, num_rows, term_width):
 
 def print_colored(text, color):
     """Prints text in a specified color."""
-    # This function is simple; complex printing is handled by drawing functions
     print(f"{color}{text}{NC}")
 
 def setup_repository():
@@ -142,24 +142,17 @@ def smart_truncate(text_with_ansi, max_visible_length):
                 current_visible_length += ellipsis_len
                 break # Stop processing, string is now at max_visible_length
             else: # Not enough space even for ellipsis, so break earlier
-                # This case implies max_visible_length was too small for char + ellipsis
-                # The string might already be too long if ellipsis_len is > 1 and max_visible_length is small.
-                # If ellipsis is "…", its length is 1.
                 if current_visible_length < max_visible_length : # if there is space for at least one char of ellipsis
                      truncated_string += ellipsis + NC
                      current_visible_length += ellipsis_len
                 break
     
-    # Fallback if max_visible_length is very small (e.g., 0 or 1)
+    # Fallback if max_visible_length is very small
     if max_visible_length > 0 and count_visible_chars(truncated_string) == 0 and not text_with_ansi.startswith(ellipsis):
-        # If string is empty but should have content, return ellipsis if possible
         return (ellipsis + NC) if max_visible_length >= ellipsis_len else ""
     
-    # Safety check: if somehow the string is still longer than allowed (complex ANSI might trick simple counter)
-    # This is a fallback, the primary logic should handle it.
+    # Safety check
     if count_visible_chars(truncated_string) > max_visible_length:
-        # Re-truncate based on a simpler plain text version if the above failed.
-        # This is a very rough fallback.
         plain_fallback = ""
         in_esc_fallback = False
         for char_fb in truncated_string:
@@ -171,7 +164,6 @@ def smart_truncate(text_with_ansi, max_visible_length):
             return plain_fallback[:max(0, max_visible_length - ellipsis_len)] + ellipsis + NC
 
     return truncated_string
-
 
 def display_tools_with_border(tools, screen_draw_start_row, term_width, term_height):
     """
@@ -218,7 +210,6 @@ def display_tools_with_border(tools, screen_draw_start_row, term_width, term_hei
     MAIN_WINDOW_LAYOUT["content_start_line_abs"] = screen_draw_start_row + FIXED_HEADER_LINES -1 
 
     # --- Drawing ---
-    # Each print ends with "\033[K" to clear rest of the line, preventing artifacts on resize
     sys.stdout.write(f"\033[{screen_draw_start_row};1H") # Ensure cursor is at the start for drawing
     
     print(PINK + "╔" + "═" * (actual_total_width - 2) + "╗" + NC + "\033[K")
@@ -274,41 +265,49 @@ def display_tools_with_border(tools, screen_draw_start_row, term_width, term_hei
     MAIN_WINDOW_LAYOUT["is_drawn_once"] = True
     sys.stdout.flush() 
 
-
 def execute_tool(tool_path, output_queue):
-    """Executes a tool in a subprocess, passing DEBIAN_FRONTEND=noninteractive."""
+    """Executes a tool in a subprocess with proper environment settings."""
     try:
         env = os.environ.copy()
         env['DEBIAN_FRONTEND'] = 'noninteractive'
-        env['APT_LISTCHANGES_FRONTEND'] = 'none' 
+        env['APT_LISTCHANGES_FRONTEND'] = 'none'
+        env['APT_LISTBUGS_FRONTEND'] = 'none'
+        env['NEEDRESTART_MODE'] = 'a'  # Disable needrestart prompts
 
         process = subprocess.Popen(
             ["bash", tool_path],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1, 
-            universal_newlines=True, 
+            bufsize=1,
+            universal_newlines=True,
             env=env,
-            errors='replace' 
+            errors='replace'
         )
 
+        # Read stdout line by line
         for stdout_line in iter(process.stdout.readline, ""):
             output_queue.put(stdout_line.strip())
-        process.stdout.close() 
+        process.stdout.close()
 
+        # Read all stderr at once
         stderr_output = process.stderr.read()
-        process.stderr.close() 
+        process.stderr.close()
         
-        process.wait() 
+        process.wait()
 
-        apt_warning = "WARNING: apt does not have a stable CLI interface. Use with caution in scripts."
-        stderr_content_stripped = stderr_output.strip()
-
-        if stderr_content_stripped == apt_warning:
-            output_queue.put(f"{YELLOW}{stderr_content_stripped}{NC}") 
-        elif stderr_content_stripped: 
-            output_queue.put(f"{RED}Error:{NC} {stderr_content_stripped}")
+        # Filter out common APT warnings
+        common_warnings = [
+            "WARNING: apt does not have a stable CLI interface. Use with caution in scripts.",
+            "N: Download is performed unsandboxed as root",
+            "WARNING: The following packages cannot be authenticated!"
+        ]
+        
+        stderr_lines = stderr_output.strip().split('\n')
+        for line in stderr_lines:
+            line = line.strip()
+            if line and line not in common_warnings:
+                output_queue.put(f"{RED}Error:{NC} {line}")
         
         output_queue.put(None)
 
@@ -316,14 +315,12 @@ def execute_tool(tool_path, output_queue):
         output_queue.put(f"{RED}Execution failed: {str(e)}{NC}")
         output_queue.put(None)
 
-
 def format_output_line_for_window(line_text, max_content_width):
     """Formats a single line of script output for display within the execution window area."""
     truncated_line = smart_truncate(line_text, max_content_width)
     visible_len_of_truncated = count_visible_chars(truncated_line)
     padding = " " * max(0, max_content_width - visible_len_of_truncated)
     return PINK + "║ " + NC + truncated_line + padding + PINK + " ║" + NC
-
 
 def display_execution_output_within_main_window(tool_name, output_queue):
     """Displays scrolling execution output within the main toolkit's content area."""
@@ -337,7 +334,7 @@ def display_execution_output_within_main_window(tool_name, output_queue):
 
     output_lines_buffer = [] 
 
-    # --- Update Prompt Line to "Now executing..." ---
+    # Update Prompt Line to "Now executing..."
     prompt_line_abs = MAIN_WINDOW_LAYOUT["prompt_line_abs"]
     prompt_text_start_col = MAIN_WINDOW_LAYOUT["prompt_text_start_col_abs"]
     prompt_text_area_width = MAIN_WINDOW_LAYOUT["total_width"] - prompt_text_start_col -1 
@@ -348,9 +345,8 @@ def display_execution_output_within_main_window(tool_name, output_queue):
     padding_exec_msg = " " * max(0, prompt_text_area_width - visible_len_exec_msg)
 
     sys.stdout.write(f"\033[{prompt_line_abs};{prompt_text_start_col}H") 
-    sys.stdout.write(truncated_exec_msg + padding_exec_msg + "\033[K") # Clear rest of line too
+    sys.stdout.write(truncated_exec_msg + padding_exec_msg + "\033[K")
     sys.stdout.flush()
-    # --- End Prompt Line Update ---
 
     sys.stdout.write(f"\033[{content_start_abs};1H") 
     
@@ -395,7 +391,6 @@ def display_execution_output_within_main_window(tool_name, output_queue):
             sys.stdout.flush()
             break 
 
-
 def main():
     """Main function to run the tool kit."""
     os.system('cls' if os.name == 'nt' else 'clear') # Initial clear for setup messages
@@ -406,11 +401,10 @@ def main():
         return
     time.sleep(0.5) 
 
-    # === Force clear and cursor reset AFTER initial setup messages ===
+    # Force clear and cursor reset AFTER initial setup messages
     os.system('cls' if os.name == 'nt' else 'clear')
     sys.stdout.write("\033[1;1H") # Explicitly move cursor to top-left
     sys.stdout.flush()
-    # === End force clear ===
 
     screen_draw_start_row = 1 
     MAIN_WINDOW_LAYOUT["screen_draw_start_row"] = screen_draw_start_row
@@ -437,7 +431,7 @@ def main():
             padding_no_tools = " " * max(0, prompt_text_area_width - visible_len_no_tools)
             
             sys.stdout.write(f"\033[{prompt_line_abs};{prompt_text_start_col}H")
-            sys.stdout.write(truncated_no_tools_msg + padding_no_tools + "\033[K") # Clear rest of line
+            sys.stdout.write(truncated_no_tools_msg + padding_no_tools + "\033[K")
             sys.stdout.flush()
 
             sys.stdout.write(f"\033[{MAIN_WINDOW_LAYOUT['prompt_line_abs'] + 2};1H\033[K") 
@@ -451,11 +445,10 @@ def main():
                     time.sleep(2)
                     break
                 time.sleep(0.5)
-                # === Force clear and cursor reset AFTER setup messages before loop continues ===
+                # Force clear and cursor reset
                 os.system('cls' if os.name == 'nt' else 'clear')
                 sys.stdout.write("\033[1;1H")
                 sys.stdout.flush()
-                # === End force clear ===
                 continue 
             except KeyboardInterrupt:
                 break 
@@ -524,15 +517,15 @@ def main():
             time.sleep(1.5)
         except KeyboardInterrupt:
             sys.stdout.write(f"\033[{prompt_line_abs};1H\033[K") 
-            sys.stdout.write(f"\033[{MAIN_WINDOW_LAYOUT.get('prompt_line_abs', term_rows -1) + 2};1H\n") # Use .get for safety
+            sys.stdout.write(f"\033[{MAIN_WINDOW_LAYOUT.get('prompt_line_abs', term_rows -1) + 2};1H\n")
             print_colored("Exiting due to user interruption.", YELLOW)
             break 
         sys.stdout.flush() 
 
-    # --- Cleanup ---
+    # Cleanup
     try:
         _, term_rows_at_exit = shutil.get_terminal_size()
-        final_cursor_line = MAIN_WINDOW_LAYOUT.get("prompt_line_abs", term_rows_at_exit -3) + 2 # Use .get for safety
+        final_cursor_line = MAIN_WINDOW_LAYOUT.get("prompt_line_abs", term_rows_at_exit -3) + 2
         final_cursor_line = min(final_cursor_line, term_rows_at_exit) 
         sys.stdout.write(f"\033[{final_cursor_line};1H\n\033[K") 
     except Exception: 
@@ -547,7 +540,6 @@ def main():
     
     print(NC) 
     sys.stdout.flush()
-
 
 if __name__ == "__main__":
     try:
