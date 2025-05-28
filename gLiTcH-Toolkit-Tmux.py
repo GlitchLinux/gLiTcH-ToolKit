@@ -70,7 +70,7 @@ def get_tools():
         if item == ".git" or item.startswith('.'):
             continue
         item_path = os.path.join(LOCAL_DIR_PATH, item)
-        if os.path.isfile(item_path):
+        if os.path.isfile(item_path) and os.access(item_path, os.X_OK):
             tools.append(item)
     
     tools.sort(key=str.lower)
@@ -92,18 +92,30 @@ def display_menu(tools):
     print()
 
 def run_in_tmux(tool_path):
-    """Run the selected tool in a tmux split pane."""
+    """Run the selected tool in a new tmux window."""
+    session_name = "glitch-toolkit"
+
     try:
-        # Create a new tmux session if not already in one
-        if 'TMUX' not in os.environ:
-            subprocess.run(["tmux", "new-session", "-d", "-s", "glitch-toolkit"])
-            subprocess.run(["tmux", "attach-session", "-t", "glitch-toolkit"])
-            sleep(1)  # Wait for tmux to initialize
-        
-        # Split window and run tool in the lower pane
-        subprocess.run(["tmux", "split-window", "-v", "-p", "30", tool_path])
-        subprocess.run(["tmux", "select-pane", "-U"])  # Focus back to menu pane
-        
+        # Check if session exists
+        result = subprocess.run(["tmux", "has-session", "-t", session_name],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if result.returncode != 0:
+            # Create detached session if it doesn't exist
+            subprocess.run(["tmux", "new-session", "-d", "-s", session_name])
+
+        # Open a new window for the tool inside the session
+        subprocess.run(["tmux", "new-window", "-t", f"{session_name}:",
+                        "-n", os.path.basename(tool_path),
+                        tool_path])
+
+        # Optional: focus the new window (if already inside tmux)
+        if 'TMUX' in os.environ:
+            subprocess.run(["tmux", "select-window", "-t", f"{session_name}:" + os.path.basename(tool_path)])
+
+        # If not inside tmux, attach to the session after launching
+        elif 'TMUX' not in os.environ:
+            subprocess.run(["tmux", "attach-session", "-t", session_name])
+
     except subprocess.CalledProcessError as e:
         print(f"{RED}Failed to run in tmux: {e}{NC}")
         return False
@@ -122,7 +134,7 @@ def main():
     
     tools = get_tools()
     if not tools:
-        print(f"{YELLOW}No tools found in repository.{NC}")
+        print(f"{YELLOW}No executable tools found in repository.{NC}")
         return
     
     while True:
@@ -142,7 +154,7 @@ def main():
                 selected_tool = tools[choice - 1]
                 tool_path = os.path.join(LOCAL_DIR_PATH, selected_tool)
                 
-                print(f"{YELLOW}Launching {selected_tool} in tmux pane...{NC}")
+                print(f"{YELLOW}Launching {selected_tool} in tmux window...{NC}")
                 sleep(1)
                 
                 if not run_in_tmux(tool_path):
@@ -168,7 +180,7 @@ def main():
         except OSError as e:
             print(f"{RED}Failed to clean up temporary files: {e}{NC}")
     
-    # Kill tmux session if we created it
+    # Kill tmux session if we created it and we're not already inside tmux
     if 'TMUX' not in os.environ:
         subprocess.run(["tmux", "kill-session", "-t", "glitch-toolkit"])
 
@@ -178,3 +190,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"{RED}An unexpected error occurred: {e}{NC}")
         sys.exit(1)
+
