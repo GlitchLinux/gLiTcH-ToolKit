@@ -183,15 +183,11 @@ while true; do
     fi
 done
 
-# Prompt for new hostname
-current_hostname=$(hostname)
-echo "Current hostname is: $current_hostname"
-while true; do
-    read -rp "Enter new hostname: " new_hostname
-    if validate_hostname "$new_hostname"; then
-        break
-    fi
-done
+# Check if script is run as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root" >&2
+    exit 1
+fi
 
 # Prompt user for new hostname
 read -p "Enter new hostname: " new_hostname
@@ -213,6 +209,8 @@ hostnamectl set-hostname "$new_hostname"
 
 # 3. Update /etc/hosts (replace old hostname if it exists)
 sed -i "/127.0.1.1/c\127.0.1.1\t$new_hostname" /etc/hosts
+
+echo "Hostname set successfully. Changes are effective immediately."
 
 # Create the user
 echo "Creating user $username..."
