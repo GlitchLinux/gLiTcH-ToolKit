@@ -202,10 +202,10 @@ fi
 echo "Setting hostname to: $new_hostname"
 
 # 1. Set the transient hostname (immediate effect)
-hostname "$new_hostname"
+sudo hostname "$new_hostname"
 
 # 2. Set the static hostname (persists after reboot)
-hostnamectl set-hostname "$new_hostname"
+sudo hostnamectl set-hostname "$new_hostname"
 
 # 3. Update /etc/hosts (replace old hostname if it exists)
 sed -i "/127.0.1.1/c\127.0.1.1\t$new_hostname" /etc/hosts
