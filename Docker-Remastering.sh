@@ -82,16 +82,13 @@ update-locale LANG=en_US.UTF-8
 # Configure network (use NetworkManager)
 systemctl enable NetworkManager
 systemctl disable networking
+echo "nameserver 8.8.8.8" >> /etc/resolv.conf
 
 # Configure SSH
 mkdir -p /etc/ssh/sshd_config.d
 echo "PermitRootLogin no" > /etc/ssh/sshd_config.d/disable-root.conf
 echo "PasswordAuthentication no" >> /etc/ssh/sshd_config.d/disable-root.conf
 systemctl enable ssh
-
-# Configure firewall
-#ufw allow ssh
-#ufw enable
 
 # Install cloud-init for cloud compatibility (even if not using cloud)
 cat > /etc/cloud/cloud.cfg.d/99_defaults.cfg <<EOF
@@ -112,7 +109,6 @@ EOF
 apt-get install -y \
     jq \
     yq \
-    tmux \
     screen \
     ncdu \
     tree \
@@ -122,9 +118,6 @@ apt-get install -y \
     lzop \
     p7zip-full \
     nano
-
-
-#!/bin/bash
 
 # Ensure script is run as root
 if [ "$(id -u)" -ne 0 ]; then
@@ -266,4 +259,16 @@ sudo dpkg --force-all -i live-boot_20221008~fsr1_all.deb live-boot-initramfs-too
 sudo apt install -f -y
 sudo dpkg --configure -a
 
+cd /tmp
+sudo wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/ssh-file-transfer.sh
+
 sudo refractasnapshot
+
+echo"ISO HAVE BEEN CREATED AND SAVED AT /MiniDeb.iso"
+echo"A SSH FILE TRANSFER WILL START AUTOMATICALLY IN 30 SEC"
+echo"Ctrl+C to skip or run it manually with -> sudo bash /tmp/ssh-file-transfer.sh"
+sleep 35
+
+sudo bash /tmp/ssh-file-transfer.sh
+
+### FIN ###
