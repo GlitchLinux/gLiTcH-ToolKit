@@ -78,33 +78,6 @@ echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
 locale-gen
 update-locale LANG=en_US.UTF-8
 
-# Pre-set Swedish keyboard layout (se) with PC105 model (no GUI prompt)
-debconf-set-selections <<EOF
-keyboard-configuration  keyboard-configuration/layoutcode  string  se
-keyboard-configuration  keyboard-configuration/modelcode   string  pc105
-keyboard-configuration  keyboard-configuration/variant    string  
-keyboard-configuration  keyboard-configuration/optionscode string 
-EOF
-
-# Apply changes silently (no GUI)
-dpkg-reconfigure -f noninteractive keyboard-configuration
-
-# Set console keymap (for TTY)
-echo 'KEYMAP="sv-latin1"' > /etc/vconsole.conf
-
-# Configure X11 keymap (for GUI if installed)
-mkdir -p /etc/X11/xorg.conf.d
-cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<EOF
-Section "InputClass"
-    Identifier "system-keyboard"
-    MatchIsKeyboard "on"
-    Option "XkbLayout" "se"
-    Option "XkbModel" "pc105"
-    Option "XkbVariant" ""
-    Option "XkbOptions" ""
-EndSection
-EOF
-
 # Configure network (use NetworkManager)
 systemctl enable NetworkManager
 systemctl disable networking
