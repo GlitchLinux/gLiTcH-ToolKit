@@ -202,26 +202,32 @@ fi
 
 echo "Setting hostname to: $new_hostname"
 
-# For Docker containers, we need to:
-# 1. Write directly to the kernel hostname file
-echo "$new_hostname" > /proc/sys/kernel/hostname
-
-# 2. Set the static hostname (if hostnamectl is available)
-if command -v hostnamectl &> /dev/null; then
-    hostnamectl set-hostname "$new_hostname"
+# For read-only container environments, we'll:
+# 1. Set the hostname in the current session (may not work in all containers)
+if ! echo "$new_hostname" > /proc/sys/kernel/hostname 2>/dev/null; then
+    echo "Warning: Could not set transient hostname (read-only filesystem)"
 fi
 
+# 2. Set the hostname in environment files
+echo "$new_hostname" > /etc/hostname 2>/dev/null || echo "Warning: Could not write to /etc/hostname"
+
 # 3. Update /etc/hosts
-sed -i "/127.0.1.1/c\127.0.1.1\t$new_hostname" /etc/hosts
+if grep -q "127.0.1.1" /etc/hosts; then
+    sed -i "s/127.0.1.1.*/127.0.1.1\t$new_hostname/" /etc/hosts
+else
+    echo -e "127.0.1.1\t$new_hostname" >> /etc/hosts
+fi
 
-# 4. Update /etc/hostname (Debian-specific)
-echo "$new_hostname" > /etc/hostname
+# 4. Alternative method using hostname command (if available)
+if command -v hostname &>/dev/null; then
+    hostname "$new_hostname" 2>/dev/null || echo "Warning: hostname command failed"
+fi
 
-echo "Hostname set successfully in container."
-echo "Note: Container hostname changes might not be visible in 'docker ps' until restart."
+# 5. Export the hostname to the current environment
+export HOSTNAME="$new_hostname"
 
-echo "Hostname set successfully. Changes are effective immediately."
-echo "You may need to restart services or log out/login for all applications to recognize the new hostname."
+echo "Hostname configuration attempted. Results may vary in container environments."
+echo "For persistent changes in Docker, use --hostname flag when creating containers."
 
 # Create the user
 echo "Creating user $username..."
