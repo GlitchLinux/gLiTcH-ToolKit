@@ -61,7 +61,7 @@ def setup_repository():
     return True
 
 def get_tools():
-    """Gets a sorted list of tools from the repository."""
+    """Gets a sorted list of tools (scripts & executables) from the repository."""
     tools = []
     if not os.path.isdir(LOCAL_DIR_PATH):
         return tools
@@ -70,11 +70,16 @@ def get_tools():
         if item == ".git" or item.startswith('.'):
             continue
         item_path = os.path.join(LOCAL_DIR_PATH, item)
-        if os.path.isfile(item_path) and os.access(item_path, os.X_OK):
+
+        # Include if executable, or has .sh/.py extension
+        if os.path.isfile(item_path) and (
+            os.access(item_path, os.X_OK) or item.endswith(('.sh', '.py'))
+        ):
             tools.append(item)
     
     tools.sort(key=str.lower)
     return tools
+
 
 def display_menu(tools):
     """Displays the menu of available tools."""
