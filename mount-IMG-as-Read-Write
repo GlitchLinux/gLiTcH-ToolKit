@@ -17,34 +17,24 @@ if [ ! -f "$IMG_FILE" ]; then
     exit 1
 fi
 
-# Attach image as writable loop device
+# Attach as writable loop device (no filesystem/partition checks)
 echo "Attaching $IMG_FILE as writable loop device..."
-LOOP_DEV=$(sudo losetup -fP --show "$IMG_FILE")
+LOOP_DEV=$(losetup --find --show -P "$IMG_FILE")
 if [ -z "$LOOP_DEV" ]; then
     echo "ERROR: Failed to attach loop device!" >&2
     exit 1
 fi
 
-# Create mount point
-MOUNT_POINT="/mnt/${IMG_FILE%.*}_mount"
-mkdir -p "$MOUNT_POINT"
-
-# Mount the entire device (not partitions) with write access
-echo "Mounting entire virtual disk as writable..."
-mount -o rw,loop "$IMG_FILE" "$MOUNT_POINT"
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to mount the image!" >&2
-    losetup -d "$LOOP_DEV"
-    exit 1
-fi
-
 # Success message
 echo "---------------------------------------------"
-echo "SUCCESS: $IMG_FILE mounted at $MOUNT_POINT (R/W)"
-echo "Device: $LOOP_DEV"
+echo "SUCCESS: $IMG_FILE attached as writable block device:"
+echo "  Loop Device: $LOOP_DEV"
 echo ""
-echo "To unmount later, run:"
-echo "  sudo umount $MOUNT_POINT"
+echo "You can now:"
+echo "1. Modify it directly (e.g., with 'fdisk', 'dd')"
+echo "2. Format it (e.g., 'mkfs.ext4 $LOOP_DEV')"
+echo "3. Mount it manually if needed (e.g., 'mount $LOOP_DEV /mnt')"
+echo ""
+echo "To detach later, run:"
 echo "  sudo losetup -d $LOOP_DEV"
-echo "  rmdir $MOUNT_POINT (optional)"
 echo "---------------------------------------------"
