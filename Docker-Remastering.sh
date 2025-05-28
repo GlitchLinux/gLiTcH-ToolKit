@@ -89,8 +89,8 @@ echo "PasswordAuthentication no" >> /etc/ssh/sshd_config.d/disable-root.conf
 systemctl enable ssh
 
 # Configure firewall
-ufw allow ssh
-ufw enable
+#ufw allow ssh
+#ufw enable
 
 # Install cloud-init for cloud compatibility (even if not using cloud)
 cat > /etc/cloud/cloud.cfg.d/99_defaults.cfg <<EOF
