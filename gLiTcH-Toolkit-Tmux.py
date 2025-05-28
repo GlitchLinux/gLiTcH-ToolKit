@@ -97,7 +97,7 @@ def display_menu(tools):
     print()
 
 def run_in_tmux(tool_path):
-    """Run the selected tool in a new tmux window."""
+    """Run the selected tool in a new tmux window without taking over terminal."""
     session_name = "glitch-toolkit"
 
     try:
@@ -105,27 +105,18 @@ def run_in_tmux(tool_path):
         result = subprocess.run(["tmux", "has-session", "-t", session_name],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if result.returncode != 0:
-            # Create detached session if it doesn't exist
-            subprocess.run(["tmux", "new-session", "-d", "-s", session_name])
+            subprocess.run(["tmux", "new-session", "-d", "-s", session_name, "bash"], check=True)
 
-        # Build the shell command string
-        command_string = f"bash -c '{tool_path} || echo \"Script failed with exit code $?\"; exec bash'"
+        # Command to run the tool and auto-close the window when done
+        command_string = f"bash -c '{tool_path}; sleep 1; tmux kill-window'"
 
-        # Open a new window for the tool inside the session
+        # Create a new detached window inside the tmux session
         subprocess.run([
             "tmux", "new-window",
             "-t", f"{session_name}:",
             "-n", os.path.basename(tool_path),
             command_string
         ], check=True)
-
-        # Focus the new window if inside tmux
-        if 'TMUX' in os.environ:
-            subprocess.run(["tmux", "select-window", "-t", f"{session_name}:" + os.path.basename(tool_path)])
-
-        # Attach to the session if not already inside tmux
-        elif 'TMUX' not in os.environ:
-            subprocess.run(["tmux", "attach-session", "-t", session_name])
 
     except subprocess.CalledProcessError as e:
         print(f"{RED}Failed to run in tmux: {e}{NC}")
