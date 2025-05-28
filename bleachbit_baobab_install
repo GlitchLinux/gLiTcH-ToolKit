@@ -1,0 +1,2 @@
+sudo apt update && sudo apt install bleachbit baobab -y
+sudo bleachbit
