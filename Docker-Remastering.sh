@@ -263,7 +263,7 @@ wget https://glitchlinux.wtf/FILES/live-boot-initramfs-tools_20221008~fsr1_all.d
 wget https://glitchlinux.wtf/FILES/live-boot_20221008~fsr1_all.deb
 
 sudo dpkg --force-all -i live-boot_20221008~fsr1_all.deb live-boot-initramfs-tools_20221008~fsr1_all.deb live-config-refracta_0.0.5.deb refractasnapshot-base_10.2.12_all.deb
-sudo apt install -f
+sudo apt install -f -y
 sudo dpkg --configure -a
 
 sudo refractasnapshot
