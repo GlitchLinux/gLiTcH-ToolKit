@@ -1,0 +1,202 @@
+#!/bin/bash
+
+# gLiTcH-ToolKit Installer and Runner
+# Ensures tmux is installed and runs the toolkit
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+PINK='\033[1;35m'
+NC='\033[0m' # No Color
+
+# Function to print colored text
+print_colored() {
+    echo -e "${1}${2}${NC}"
+}
+
+# Function to detect the Linux distribution
+detect_distro() {
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        echo $ID
+    elif [[ -f /etc/redhat-release ]]; then
+        echo "rhel"
+    elif [[ -f /etc/debian_version ]]; then
+        echo "debian"
+    else
+        echo "unknown"
+    fi
+}
+
+# Function to check if tmux is installed
+check_tmux() {
+    if command -v tmux &> /dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to install tmux based on distribution
+install_tmux() {
+    local distro=$(detect_distro)
+    
+    print_colored $YELLOW "Installing tmux for $distro..."
+    
+    case $distro in
+        ubuntu|debian|pop|mint|elementary)
+            if [[ $EUID -eq 0 ]]; then
+                apt update && apt install -y tmux
+            else
+                sudo apt update && sudo apt install -y tmux
+            fi
+            ;;
+        fedora)
+            if [[ $EUID -eq 0 ]]; then
+                dnf install -y tmux
+            else
+                sudo dnf install -y tmux
+            fi
+            ;;
+        centos|rhel|rocky|alma)
+            if [[ $EUID -eq 0 ]]; then
+                yum install -y tmux
+            else
+                sudo yum install -y tmux
+            fi
+            ;;
+        arch|manjaro)
+            if [[ $EUID -eq 0 ]]; then
+                pacman -S --noconfirm tmux
+            else
+                sudo pacman -S --noconfirm tmux
+            fi
+            ;;
+        opensuse|suse)
+            if [[ $EUID -eq 0 ]]; then
+                zypper install -y tmux
+            else
+                sudo zypper install -y tmux
+            fi
+            ;;
+        *)
+            print_colored $RED "Unknown distribution: $distro"
+            print_colored $YELLOW "Please install tmux manually using your package manager:"
+            print_colored $CYAN "  Ubuntu/Debian: sudo apt install tmux"
+            print_colored $CYAN "  Fedora:        sudo dnf install tmux"
+            print_colored $CYAN "  CentOS/RHEL:   sudo yum install tmux"
+            print_colored $CYAN "  Arch:          sudo pacman -S tmux"
+            print_colored $CYAN "  openSUSE:      sudo zypper install tmux"
+            return 1
+            ;;
+    esac
+    
+    return $?
+}
+
+# Function to check if Python 3 is available
+check_python() {
+    if command -v python3 &> /dev/null; then
+        return 0
+    elif command -v python &> /dev/null; then
+        # Check if it's Python 3
+        if python -c "import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Function to download the toolkit script
+download_toolkit() {
+    local script_url="https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/main/gLiTcH-Toolkit-Tmux.py"
+    local script_name="gLiTcH-Toolkit-Tmux.py"
+    
+    print_colored $YELLOW "Downloading gLiTcH-ToolKit..."
+    
+    if command -v curl &> /dev/null; then
+        curl -sL "$script_url" -o "$script_name"
+    elif command -v wget &> /dev/null; then
+        wget -q "$script_url" -O "$script_name"
+    else
+        print_colored $RED "Neither curl nor wget is available. Please install one of them."
+        return 1
+    fi
+    
+    if [[ -f "$script_name" ]]; then
+        chmod +x "$script_name"
+        print_colored $GREEN "Downloaded $script_name successfully!"
+        return 0
+    else
+        print_colored $RED "Failed to download the toolkit script."
+        return 1
+    fi
+}
+
+# Main function
+main() {
+    clear
+    print_colored $PINK "╔══════════════════════════════════════════════════════════════════════════════╗"
+    print_colored $PINK "║" && echo -en "${YELLOW} gLiTcH-ToolKit Installer & Runner${NC}                                     ${PINK}║${NC}"
+    echo
+    print_colored $PINK "╚══════════════════════════════════════════════════════════════════════════════╝"
+    echo
+    
+    # Check if Python 3 is available
+    if ! check_python; then
+        print_colored $RED "Python 3 is required but not found."
+        print_colored $YELLOW "Please install Python 3 using your package manager."
+        exit 1
+    fi
+    
+    print_colored $GREEN "✓ Python 3 is available"
+    
+    # Check if tmux is installed
+    if ! check_tmux; then
+        print_colored $YELLOW "tmux is not installed. Attempting to install it..."
+        
+        if install_tmux; then
+            print_colored $GREEN "✓ tmux installed successfully"
+        else
+            print_colored $RED "Failed to install tmux. Please install it manually."
+            exit 1
+        fi
+    else
+        print_colored $GREEN "✓ tmux is already installed"
+    fi
+    
+    # Check if the toolkit script exists locally
+    if [[ ! -f "gLiTcH-Toolkit-Tmux.py" ]]; then
+        if ! download_toolkit; then
+            exit 1
+        fi
+    else
+        print_colored $GREEN "✓ gLiTcH-Toolkit-Tmux.py found locally"
+    fi
+    
+    echo
+    print_colored $CYAN "Starting gLiTcH-ToolKit..."
+    sleep 1
+    
+    # Run the toolkit
+    if command -v python3 &> /dev/null; then
+        python3 gLiTcH-Toolkit-Tmux.py
+    else
+        python gLiTcH-Toolkit-Tmux.py
+    fi
+}
+
+# Trap for cleanup on script exit
+cleanup() {
+    print_colored $YELLOW "Cleaning up..."
+    # Kill any remaining tmux sessions
+    tmux kill-session -t glitch-toolkit 2>/dev/null || true
+}
+
+trap cleanup EXIT INT TERM
+
+# Run main function
+main "$@"
