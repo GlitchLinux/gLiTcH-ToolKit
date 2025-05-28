@@ -193,6 +193,27 @@ while true; do
     fi
 done
 
+# Prompt user for new hostname
+read -p "Enter new hostname: " new_hostname
+
+# Validate input
+if [ -z "$new_hostname" ]; then
+    echo "Error: Hostname cannot be empty"
+    exit 1
+fi
+
+# Set hostname in all locations
+echo "Setting hostname to: $new_hostname"
+
+# 1. Set the transient hostname (immediate effect)
+hostname "$new_hostname"
+
+# 2. Set the static hostname (persists after reboot)
+hostnamectl set-hostname "$new_hostname"
+
+# 3. Update /etc/hosts (replace old hostname if it exists)
+sed -i "/127.0.1.1/c\127.0.1.1\t$new_hostname" /etc/hosts
+
 # Create the user
 echo "Creating user $username..."
 adduser --gecos "" --disabled-password "$username"
@@ -201,10 +222,6 @@ echo "$username:$password" | chpasswd
 # Add user to sudo group
 echo "Adding $username to sudo group..."
 usermod -aG sudo "$username"
-
-# Change hostname
-echo "Changing hostname to $new_hostname..."
-sed -i "/^127.0.1.1/c\127.0.1.1\t$new_hostname" /etc/hosts
 
 # Configure sudo without password (optional)
 echo "Configuring passwordless sudo for $username..."
@@ -215,14 +232,6 @@ chmod 440 "/etc/sudoers.d/90-$username"
 echo -e "\n=== Setup Complete ==="
 echo "Username: $username"
 echo "Hostname: $(hostname)"
-echo "Sudo access: Enabled (passwordless)"
-echo "User groups: $(groups "$username")"
-
-# Verify sudo access
-echo -e "\nTesting sudo access..."
-su - "$username" -c 'sudo whoami'
-
-echo -e "\nYou can now login as $username with the password you set."
 
 sleep 4
 
