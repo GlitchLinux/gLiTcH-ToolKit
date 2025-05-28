@@ -109,15 +109,18 @@ def run_in_tmux(tool_path):
             subprocess.run(["tmux", "new-session", "-d", "-s", session_name])
 
         # Open a new window for the tool inside the session
-        subprocess.run(["tmux", "new-window", "-t", f"{session_name}:",
-                        "-n", os.path.basename(tool_path),
-                        tool_path])
+        subprocess.run([
+            "tmux", "new-window",
+            "-t", f"{session_name}:",
+            "-n", os.path.basename(tool_path),
+            "bash", "-c", f'"{tool_path} || echo Script failed with exit code $?; exec bash"'
+        ])
 
-        # Optional: focus the new window (if already inside tmux)
+        # Focus the new window if inside tmux
         if 'TMUX' in os.environ:
             subprocess.run(["tmux", "select-window", "-t", f"{session_name}:" + os.path.basename(tool_path)])
 
-        # If not inside tmux, attach to the session after launching
+        # Attach to the session if not already inside tmux
         elif 'TMUX' not in os.environ:
             subprocess.run(["tmux", "attach-session", "-t", session_name])
 
@@ -125,6 +128,7 @@ def run_in_tmux(tool_path):
         print(f"{RED}Failed to run in tmux: {e}{NC}")
         return False
     return True
+
 
 def main():
     """Main function to run the tool kit."""
