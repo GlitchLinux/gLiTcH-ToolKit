@@ -204,9 +204,7 @@ usermod -aG sudo "$username"
 
 # Change hostname
 echo "Changing hostname to $new_hostname..."
-hostnamectl set-hostname "$new_hostname"
 sed -i "/^127.0.1.1/c\127.0.1.1\t$new_hostname" /etc/hosts
-sysctl kernel.hostname="$new_hostname"
 
 # Configure sudo without password (optional)
 echo "Configuring passwordless sudo for $username..."
@@ -226,10 +224,12 @@ su - "$username" -c 'sudo whoami'
 
 echo -e "\nYou can now login as $username with the password you set."
 
+sleep 4
+
 cd /
 sudo wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
 sudo chmod +x apps && sudo chmod 777 apps
-cp apps /home && cp apps /home/x && cp apps /root 
+sudo cp apps /home && cp apps /home/x && cp apps /root 
 
 cd /tmp
 wget https://glitchlinux.wtf/FILES/refractasnapshot-base_10.2.12_all.deb
