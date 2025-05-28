@@ -66,6 +66,7 @@ apt-get install -y --no-install-recommends \
     mdadm \
     btrfs-progs \
     xfsprogs \
+    sshpass
 
 #Kernel modules
 sudo apt install --reinstall linux-image-amd64 linux-headers-amd64 -y
