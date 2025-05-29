@@ -268,11 +268,11 @@ sudo refractasnapshot
 
 echo "===================================================================="
 echo " YOUR CUSTOM ISO HAVE BEEN CREATED AND SAVED AT: /home/MiniDeb.iso  "
-echo "  A SSH FILE TRANSFER WILL START IN 40 SEC, Ctrl+C TO SKIP IT NOW   "  
+echo "  A SSH FILE TRANSFER WILL START IN 20 SEC, Ctrl+C TO SKIP IT NOW   "  
 echo "   AND run manually with -> sudo bash /tmp/ssh-file-transfer.sh     " 
 echo "===================================================================="
 
-sleep 40
+sleep 20
 
 sudo bash /tmp/ssh-file-transfer.sh
 
