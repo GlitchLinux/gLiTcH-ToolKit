@@ -242,8 +242,6 @@ echo -e "\n=== Setup Complete ==="
 echo "Username: $username"
 echo "Hostname: $(hostname)"
 
-sleep 4
-
 cd /
 sudo wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
 sudo chmod +x apps && sudo chmod 777 apps
@@ -260,7 +258,7 @@ sudo apt install -f -y
 sudo dpkg --configure -a
 
 cd /tmp
-sudo wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/ssh-file-transfer.sh
+sudo wget https://raw.githubusercontent.com/GlitchLinux/docker-remastering/refs/heads/main/ssh-file-transfer.sh
 
 sudo refractasnapshot
 
@@ -269,9 +267,9 @@ echo " YOUR CUSTOM ISO HAVE BEEN CREATED AND SAVED AT: /home/MiniDeb.iso  "
 echo "  A SSH FILE TRANSFER WILL START IN 40 SEC, Ctrl+C TO SKIP IT NOW   "  
 echo "   AND run manually with -> sudo bash /tmp/ssh-file-transfer.sh     " 
 echo "===================================================================="
+
 sleep 40
+
 sudo bash /tmp/ssh-file-transfer.sh
-
-
 
 ### FIN ###
