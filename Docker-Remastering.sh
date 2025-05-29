@@ -267,15 +267,15 @@ sudo refractasnapshot
 
 ###########################################################################
 
-echo "===================================================================="
-echo "     YOUR CUSTOM ISO HAVE BEEN CREATED AND SAVED SUCSESSFULLY       "
-echo "  A SSH FILE TRANSFER WILL START SHORTLY, Ctrl+C TO SKIP IT NOW     "  
-echo "   AND run manually LATER -> sudo bash /tmp/ssh-file-transfer.sh    " 
-echo "===================================================================="
+echo "|==================================================================|"
+echo "|    YOUR CUSTOM ISO HAVE BEEN CREATED AND SAVED SUCSESSFULLY      |"
+echo "| -> SSH FILE TRANSFER WILL START SHORTLY, Ctrl+C TO SKIP IT NOW   |"  
+echo "|   AND run manually LATER -> sudo bash /tmp/ssh-file-transfer.sh  |" 
+echo "|==================================================================|"
 
 ###########################################################################
 
-sleep 20
+sleep 25
 
 sudo bash /tmp/ssh-file-transfer.sh
 
