@@ -242,6 +242,10 @@ echo -e "\n=== Setup Complete ==="
 echo "Username: $username"
 echo "Hostname: $(hostname)"
 
+sudo rm -f /etc/refractasnapshot.conf
+sudo wget https://raw.githubusercontent.com/GlitchLinux/docker-remastering/refs/heads/main/refractasnapshot.conf
+sudo mv refractasnapshot.conf /etc
+
 cd /
 sudo wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
 sudo chmod +x apps && sudo chmod 777 apps
@@ -272,8 +276,8 @@ sudo refractasnapshot
 echo "|==================================================================|"
 echo "|   YOUR CUSTOM ISO HAS BEEN CREATED AND SAVED SUCCESSFULLY        |"
 echo "| -> SSH FILE TRANSFER WILL START SHORTLY. Press Ctrl+C to skip.   |"
-echo "|    You can run it manually later with:                            |"
-echo "|    sudo bash /tmp/ssh-file-transfer.sh                            |"
+echo "|    You can run it manually later with:                           |"
+echo "|    sudo bash /tmp/ssh-file-transfer.sh                           |"
 echo "|==================================================================|"
 
 ###########################################################################
