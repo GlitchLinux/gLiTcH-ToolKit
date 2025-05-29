@@ -70,7 +70,6 @@ apt-get install -y --no-install-recommends \
 
 #Kernel modules
 sudo apt install --reinstall linux-image-amd64 linux-headers-amd64 -y
-sudo apt install mlocate xz-utils cpio -Y
 
 # Force non-interactive mode (no GUI prompts)
 export DEBIAN_FRONTEND=noninteractive
