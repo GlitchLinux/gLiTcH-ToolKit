@@ -249,8 +249,8 @@ sudo cp apps /home && cp apps /home/x && cp apps /root
 
 cd /tmp
 wget https://github.com/GlitchLinux/docker-remastering/raw/refs/heads/main/REFRACTA-ALL-TOOLS_DEB_FILES/refractasnapshot-base_10.2.12_all.deb
-wget https://github.com/GlitchLinux/docker-remastering/blob/main/REFRACTA-ALL-TOOLS_DEB_FILES/live-config-refracta_0.0.5.deb
-wget https://github.com/GlitchLinux/docker-remastering/blob/main/REFRACTA-ALL-TOOLS_DEB_FILES/live-boot-initramfs-tools_20221008~fsr1_all.deb
+wget https://github.com/GlitchLinux/docker-remastering/raw/refs/heads/main/REFRACTA-ALL-TOOLS_DEB_FILES/live-config-refracta_0.0.5.deb
+wget https://github.com/GlitchLinux/docker-remastering/raw/refs/heads/main/REFRACTA-ALL-TOOLS_DEB_FILES/live-boot-initramfs-tools_20221008~fsr1_all.deb
 wget https://github.com/GlitchLinux/docker-remastering/raw/refs/heads/main/REFRACTA-ALL-TOOLS_DEB_FILES/live-boot_20221008~fsr1_all.deb
 wget https://github.com/GlitchLinux/docker-remastering/raw/refs/heads/main/grub-efi-amd64-signed_1+2.06+13+deb12u1_amd64.deb
 wget https://raw.githubusercontent.com/GlitchLinux/docker-remastering/refs/heads/main/ssh-file-transfer.sh
