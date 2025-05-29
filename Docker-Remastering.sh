@@ -261,7 +261,7 @@ cd /tmp
 sudo wget https://raw.githubusercontent.com/GlitchLinux/docker-remastering/refs/heads/main/ssh-file-transfer.sh
 
 sudo rm -f /etc/refractasnapshot.conf
-cd /etc/ && sudo wget https://raw.githubusercontent.com/GlitchLinux/docker-remastering/refs/heads/main/refractasnapshot.conf
+cd /etc && sudo wget https://raw.githubusercontent.com/GlitchLinux/docker-remastering/refs/heads/main/refractasnapshot.conf
 sudo wget grub-efi-amd
 sudo refractasnapshot
 
