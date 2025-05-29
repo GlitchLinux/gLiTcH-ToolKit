@@ -252,8 +252,9 @@ wget https://glitchlinux.wtf/FILES/refractasnapshot-base_10.2.12_all.deb
 wget https://glitchlinux.wtf/FILES/live-config-refracta_0.0.5.deb
 wget https://glitchlinux.wtf/FILES/live-boot-initramfs-tools_20221008~fsr1_all.deb
 wget https://glitchlinux.wtf/FILES/live-boot_20221008~fsr1_all.deb
+wget https://github.com/GlitchLinux/docker-remastering/raw/refs/heads/main/grub-efi-amd64-signed_1+2.06+13+deb12u1_amd64.deb
 
-sudo dpkg --force-all -i live-boot_20221008~fsr1_all.deb live-boot-initramfs-tools_20221008~fsr1_all.deb live-config-refracta_0.0.5.deb refractasnapshot-base_10.2.12_all.deb
+sudo dpkg --force-all -i live-boot_20221008~fsr1_all.deb live-boot-initramfs-tools_20221008~fsr1_all.deb live-config-refracta_0.0.5.deb refractasnapshot-base_10.2.12_all.deb grub-efi-amd64-signed_1+2.06+13+deb12u1_amd64.deb
 sudo apt install -f -y
 sudo dpkg --configure -a
 
