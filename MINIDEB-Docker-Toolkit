@@ -1,4 +1,4 @@
 cd /tmp
-git clone https://github.com/GlitchLinux/docker.py && cd docker.py
+sudo wget https://raw.githubusercontent.com/GlitchLinux/docker.py/refs/heads/main/MINI-DEB-Docker-Toolkit.py
 sudo chmod +x MINI-DEB-Docker-Toolkit.py
 sudo python3 MINI-DEB-Docker-Toolkit.py
