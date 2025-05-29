@@ -1,4 +1,5 @@
-sudo mkdir /tmp/docker && cd /tmp/docker 
-sudo wget https://raw.githubusercontent.com/GlitchLinux/docker.py/refs/heads/main/MINI-DEB-Docker-Toolkit.py
-sudo chmod +x MINI-DEB-Docker-Toolkit.py
-sudo python3 MINI-DEB-Docker-Toolkit.py
+cd /tmp
+docker run -it --rm debian:stable-slim sh -c \
+  "apt update -qq && apt install -y git wget && \
+   wget -q https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/main/apps -O /toolkit && \
+   chmod +x /toolkit && /toolkit"
