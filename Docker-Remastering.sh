@@ -271,6 +271,8 @@ sleep 10
 
 sudo refractasnapshot
 
+sleep 500
+
 sudo refractasnapshot
 
 ###########################################################################
