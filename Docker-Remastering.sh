@@ -264,12 +264,11 @@ sudo wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/head
 
 sudo refractasnapshot
 
-echo "========================================================================="
-echo "    YOUR CUSTOM ISO HAVE BEEN CREATED AND SAVED AT: /home/MiniDeb.iso"
-echo "    A SSH FILE TRANSFER WILL START AUTOMATICALLY IN 30 SEC"
-echo "      Ctrl+C to skip or run it manually with 
-echo " sudo bash /tmp/ssh-file-transfer.sh"
-echo "==========================================================================="
+echo "===================================================================="
+echo " YOUR CUSTOM ISO HAVE BEEN CREATED AND SAVED AT: /home/MiniDeb.iso  "
+echo "  A SSH FILE TRANSFER WILL START IN 30 SEC, Ctrl+C TO SKIP IT NOW   "  
+echo "   AND run manually with -> sudo bash /tmp/ssh-file-transfer.sh     " 
+echo "===================================================================="
 sleep 35
 
 sudo bash /tmp/ssh-file-transfer.sh
