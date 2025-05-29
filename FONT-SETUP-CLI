@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# Console Font Changer for Debian CLI
+# Usage: sudo ./console-font.sh [fontname] [size]
+
+FONT_DIR="/usr/share/consolefonts"
+CURRENT_FONT=$(cat /etc/default/console-setup | grep -oP 'FONTFACE=\K\w+' || echo "Unset")
+CURRENT_SIZE=$(cat /etc/default/console-setup | grep -oP 'FONTSIZE=\K\w+' || echo "Unset")
+
+# List available fonts if no arguments provided
+if [ $# -eq 0 ]; then
+    echo "Current font: $CURRENT_FONT"
+    echo "Current size: $CURRENT_SIZE"
+    echo ""
+    echo "Available console fonts:"
+    ls $FONT_DIR | sed 's/\.gz//g' | sort | uniq | column
+    echo ""
+    echo "Usage: $0 [fontname] [size]"
+    echo "Example: $0 Lat7-Terminus 16x8"
+    exit 0
+fi
+
+# Check root privileges
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root" >&2
+    exit 1
+fi
+
+FONT=$1
+SIZE=${2:-"8x16"}  # Default size if not provided
+
+# Check if font exists
+if [ ! -f "$FONT_DIR/$FONT.gz" ] && [ ! -f "$FONT_DIR/$FONT" ]; then
+    echo "Font '$FONT' not found in $FONT_DIR" >&2
+    exit 1
+fi
+
+# Update console-setup configuration
+echo "Setting console font to $FONT with size $SIZE..."
+
+# Backup original file
+cp /etc/default/console-setup /etc/default/console-setup.bak
+
+# Update configuration
+sed -i "s/^FONTFACE=.*/FONTFACE=\"$FONT\"/" /etc/default/console-setup
+sed -i "s/^FONTSIZE=.*/FONTSIZE=\"$SIZE\"/" /etc/default/console-setup
+
+# Apply changes
+setupcon --save
+
+echo "Font changed successfully. The change will take full effect after reboot."
+echo "To see immediate changes (partial), run: setupcon"
