@@ -83,5 +83,36 @@ while true; do
     fi
 done
 
+cd /home/x/
+sudo rm -f apps
+wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
+sudo chmod 777 apps
+sudo chmod +x apps
+
+# Define the functions to be added
+APPS_FUNC=$(cat << 'EOF'
+
+# Custom functions to run /home/x/apps
+apps() {
+    bash /home/x/apps
+}
+
+sudoapps() {
+    sudo bash /home/x/apps
+}
+EOF
+)
+
+# Check if already present
+if grep -q "apps() {" ~/.bashrc; then
+    echo "Functions 'apps' and 'sudoapps' already exist in ~/.bashrc"
+else
+    echo "Adding 'apps' and 'sudoapps' functions to ~/.bashrc"
+    echo "$APPS_FUNC" >> ~/.bashrc
+    echo "Reloading ~/.bashrc..."
+    source ~/.bashrc
+    echo "Done."
+fi
+
 # Cleanup
 rm -rf "/tmp/$LOCAL_DIR" || echo -e "${RED}Failed to clean up temporary files.${NC}"
