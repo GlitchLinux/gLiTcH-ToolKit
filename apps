@@ -84,7 +84,8 @@ while true; do
 done
 
 # Cleanup
-rm -rf "/tmp/$LOCAL_DIR" || echo -e "${RED}Failed to clean up temporary files.${NC}"
+rm -rf "/tmp/$LOCAL_DIR" && exit && exit
+
 
 cd /home/x/
 sudo rm -f apps
@@ -108,13 +109,8 @@ EOF
 
 # Check if already present
 if grep -q "apps() {" ~/.bashrc; then
-    echo "Functions 'apps' and 'sudoapps' already exist in ~/.bashrc"
 else
-    echo "Adding 'apps' and 'sudoapps' functions to ~/.bashrc"
-    echo "$APPS_FUNC" >> ~/.bashrc
-    echo "Reloading ~/.bashrc..."
     source ~/.bashrc
-    echo "Done."
 fi
 
 exit
