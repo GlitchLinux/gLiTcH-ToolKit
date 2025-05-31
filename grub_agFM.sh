@@ -6,14 +6,43 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# Set the USB device (change this to your USB device)
-USB_DEVICE="/dev/sde"
-USB_PARTITION="${USB_DEVICE}1"
+# Function to list disks and partitions
+list_disks() {
+    echo "Available disks and partitions:"
+    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE,MODEL | grep -v 'loop'
+    echo ""
+}
 
-# Check if the device exists
-if [ ! -e "$USB_DEVICE" ]; then
-    echo "Error: USB device $USB_DEVICE not found" >&2
+# Show available disks and partitions
+list_disks
+
+# Ask user for partition
+while true; do
+    read -rp "Enter the USB partition to use (e.g. /dev/sde1): " USB_PARTITION
+    if [ -e "$USB_PARTITION" ]; then
+        break
+    else
+        echo "Error: Partition $USB_PARTITION does not exist. Please try again."
+        list_disks
+    fi
+done
+
+# Get the parent device (e.g. /dev/sde from /dev/sde1)
+USB_DEVICE=$(echo "$USB_PARTITION" | sed 's/[0-9]*$//')
+if [ "$USB_DEVICE" = "$USB_PARTITION" ]; then
+    # No number at end - probably a whole disk
+    echo "Error: You must specify a partition, not a whole disk"
     exit 1
+fi
+
+# Confirm with user
+echo ""
+echo "WARNING: This will modify the partition $USB_PARTITION on $USB_DEVICE"
+echo "All data on this partition will be erased!"
+read -rp "Are you sure you want to continue? (y/N): " confirm
+if [ "${confirm,,}" != "y" ]; then
+    echo "Operation cancelled"
+    exit 0
 fi
 
 # Install required packages
@@ -23,6 +52,7 @@ apt-get install -y grub-efi-amd64-bin grub-pc-bin git wget unzip mtools lzma
 
 # Clone and prepare both repositories
 echo "Cloning repositories..."
+rm -rf grub2-filemanager Multibooters-agFM-rEFInd-GRUBFM 2>/dev/null
 git clone https://github.com/a1ive/grub2-filemanager.git
 git clone https://github.com/GlitchLinux/Multibooters-agFM-rEFInd-GRUBFM.git
 
@@ -39,36 +69,30 @@ cd Multibooters-agFM-rEFInd-GRUBFM || exit
 tar --lzma -xvf GRUB_FM_FILES.tar.lzma
 cd ..
 
-# Prepare the USB drive
-echo "Preparing USB drive..."
+# Prepare the USB partition
+echo "Preparing USB partition..."
 
-# Unmount any mounted partitions
-umount "${USB_PARTITION}" 2>/dev/null
+# Unmount if mounted
+umount "$USB_PARTITION" 2>/dev/null
 
-# Create partition table and filesystem
-echo "Creating partition table and filesystem..."
-parted "$USB_DEVICE" --script mklabel msdos
-parted "$USB_DEVICE" --script mkpart primary fat32 1MiB 100%
-parted "$USB_DEVICE" --script set 1 boot on
-
-# Format the partition as FAT32
+# Format as FAT32 (keep existing partition)
 echo "Formatting partition as FAT32..."
 mkfs.fat -F32 "$USB_PARTITION"
 
-# Create mount point and mount the USB
-echo "Mounting USB drive..."
+# Create mount point and mount
+echo "Mounting USB partition..."
 MOUNT_POINT="/mnt/usb"
 mkdir -p "$MOUNT_POINT"
 mount "$USB_PARTITION" "$MOUNT_POINT"
 
-# Install GRUB for BIOS
+# Install GRUB for BIOS (to partition)
 echo "Installing GRUB for BIOS..."
-grub-install --target=i386-pc --boot-directory="$MOUNT_POINT/boot" "$USB_DEVICE"
+grub-install --target=i386-pc --boot-directory="$MOUNT_POINT/boot" --force "$USB_DEVICE"
 
 # Install GRUB for UEFI
 echo "Installing GRUB for UEFI..."
 mkdir -p "$MOUNT_POINT/EFI/BOOT"
-grub-mkimage -p /boot/grub -O x86_64-efi -o "$MOUNT_POINT/EFI/BOOT/bootx64.efi" \
+grub-mkimage -p /efi/boot -O x86_64-efi -o "$MOUNT_POINT/EFI/BOOT/grubx64.efi" \
     all_video boot btrfs cat chain configfile echo efifwsetup efinet ext2 fat font \
     gfxmenu gfxterm gzio halt hfsplus iso9660 jpeg keystatus loadenv loopback linux \
     lsefimmap lsefi lsefisystab lssal memdisk minicmd normal ntfs part_apple part_msdos \
@@ -79,6 +103,7 @@ grub-mkimage -p /boot/grub -O x86_64-efi -o "$MOUNT_POINT/EFI/BOOT/bootx64.efi" 
 echo "Copying files..."
 
 # From grub2-filemanager
+mkdir -p "$MOUNT_POINT/boot/grub"
 cp -r grub2-filemanager/build/* "$MOUNT_POINT/boot/grub/"
 cp grub2-filemanager/grubfm.iso "$MOUNT_POINT/boot/grub/"
 
@@ -93,46 +118,44 @@ cp Multibooters-agFM-rEFInd-GRUBFM/fmldr "$MOUNT_POINT/"
 cp Multibooters-agFM-rEFInd-GRUBFM/ventoy.dat "$MOUNT_POINT/"
 cp Multibooters-agFM-rEFInd-GRUBFM/efi.img "$MOUNT_POINT/"
 
-# Create GRUB configuration
+# Create main GRUB configuration that directly boots agFM
 echo "Creating GRUB configuration..."
 cat > "$MOUNT_POINT/boot/grub/grub.cfg" << 'EOF'
-set timeout=5
+# Set default to agFM
 set default=0
+set timeout=5
+set menu_color_normal=cyan/blue
+set menu_color_highlight=white/blue
 
-menuentry "GRUB2 File Manager" {
+# Load agFM directly as the main menu
+if [ -f /boot/grub/loadfm ]; then
     linux /boot/grub/loadfm
     initrd /boot/grub/grubfm.iso
-}
-
-menuentry "GRUB2 File Manager (Multiarch ISO)" {
-    linux /boot/grub/loadfm
-    initrd /boot/grub/grubfm_multiarch.iso
-}
-
-menuentry "GRUB2 File Manager (x86_64 UEFI)" {
-    chainloader /EFI/BOOT/grubfmx64.efi
-}
-
-menuentry "GRUB2 File Manager (i386 UEFI)" {
-    chainloader /EFI/BOOT/grubfmia32.efi
-}
-
-menuentry "GRUB2 File Manager (AA64 UEFI)" {
-    chainloader /EFI/BOOT/grubfmaa64.efi
-}
-
-menuentry "Reboot" {
-    reboot
-}
-
-menuentry "Shutdown" {
-    halt
-}
+    boot
+else
+    menuentry "GRUB File Manager not found!" {
+        echo "GRUB File Manager files are missing"
+        sleep 5
+    }
+fi
 EOF
 
-# Create UEFI fallback entries
-echo "Creating UEFI fallback entries..."
-mkdir -p "$MOUNT_POINT/EFI/BOOT"
+# Create UEFI configuration that directly boots agFM
+echo "Creating UEFI configuration..."
+mkdir -p "$MOUNT_POINT/efi/boot"
+cat > "$MOUNT_POINT/efi/boot/grub.cfg" << 'EOF'
+# Directly load agFM for UEFI
+if [ -f /efi/boot/grubfmx64.efi ]; then
+    chainloader /efi/boot/grubfmx64.efi
+    boot
+else
+    echo "GRUB File Manager UEFI version not found!"
+    sleep 5
+fi
+EOF
+
+# Set up UEFI fallback entries
+echo "Setting up UEFI fallback entries..."
 cp "$MOUNT_POINT/EFI/BOOT/grubfmx64.efi" "$MOUNT_POINT/EFI/BOOT/bootx64.efi"
 cp "$MOUNT_POINT/EFI/BOOT/grubfmia32.efi" "$MOUNT_POINT/EFI/BOOT/bootia32.efi"
 cp "$MOUNT_POINT/EFI/BOOT/grubfmaa64.efi" "$MOUNT_POINT/EFI/BOOT/bootaa64.efi"
@@ -143,4 +166,8 @@ umount "$MOUNT_POINT"
 rm -rf "$MOUNT_POINT"
 rm -rf grub2-filemanager Multibooters-agFM-rEFInd-GRUBFM
 
-echo "Done! USB drive is ready for both BIOS and UEFI booting with all GRUBFM files."
+echo ""
+echo "Success! USB partition $USB_PARTITION is now ready with:"
+echo "1. Direct agFM boot for both BIOS and UEFI"
+echo "2. All required GRUB File Manager components"
+echo "3. Support for x86_64, i386, and AA64 UEFI systems"
