@@ -4,13 +4,11 @@
 REPO_URL="https://github.com/GlitchLinux/gLiTcH-ToolKit.git"
 LOCAL_DIR="gLiTcH-ToolKit"
 
-# Cleanup
-sudo rm -rf "/tmp/$LOCAL_DIR" || echo -e "${RED}Failed to clean up temporary files.${NC}"
+# Cleanup - don't use sudo for /tmp
+rm -rf "/tmp/$LOCAL_DIR" || echo -e "${RED}Failed to clean up temporary files.${NC}"
 
 # Navigate to /tmp directory
 cd /tmp || { echo -e "${RED}Failed to navigate to /tmp.${NC}"; exit 1; }
-
-sudo chmod +x "/tmp/$LOCAL_DIR" && sudo chmod 777 "/tmp/$LOCAL_DIR" 
 
 # Define ANSI color codes
 RED='\033[0;31m'
@@ -24,10 +22,14 @@ NC='\033[0m' # No Color
 # Clone or update repository
 if [ -d "$LOCAL_DIR/.git" ]; then
     echo -e "${YELLOW}Updating repository...${NC}"
+    # Ensure proper permissions before updating
+    chmod -R u+rw "$LOCAL_DIR"
     git -C "$LOCAL_DIR" pull || { echo -e "${RED}Failed to update repository.${NC}"; exit 1; }
 else
     echo -e "${YELLOW}Cloning repository...${NC}"
     git clone "$REPO_URL" "$LOCAL_DIR" || { echo -e "${RED}Failed to clone repository.${NC}"; exit 1; }
+    # Set permissions after cloning
+    chmod -R u+rw "$LOCAL_DIR"
 fi
 
 # Main loop
