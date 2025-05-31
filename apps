@@ -16,6 +16,8 @@ NC='\033[0m' # No Color
 REPO_URL="https://github.com/GlitchLinux/gLiTcH-ToolKit.git"
 LOCAL_DIR="gLiTcH-ToolKit"
 
+rm -rf "/tmp/$LOCAL_DIR"
+
 # Clone or update repository
 if [ -d "$LOCAL_DIR/.git" ]; then
     echo -e "${YELLOW}Updating repository...${NC}"
@@ -82,34 +84,3 @@ while true; do
         sleep 1
     fi
 done
-
-# Cleanup
-rm -rf "/tmp/$LOCAL_DIR" && exit && exit
-
-
-cd /home/x/
-sudo rm -f apps
-wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
-sudo chmod 777 apps
-sudo chmod +x apps
-
-
-ALIAS_FILE="$HOME/.bashrc"
-
-# Define aliases
-ALIAS1="alias apps='bash /home/x/apps'"
-ALIAS2="alias sudo_apps='sudo bash /home/x/apps'"
-
-# Function to add alias if not already present
-add_alias_if_missing() {
-    local alias_line="$1"
-    grep -Fxq "$alias_line" "$ALIAS_FILE" || echo "$alias_line" >> "$ALIAS_FILE"
-}
-
-add_alias_if_missing "$ALIAS1"
-add_alias_if_missing "$ALIAS2"
-
-# Reload .bashrc silently
-source "$ALIAS_FILE" > /dev/null 2>&1
-
-exit
