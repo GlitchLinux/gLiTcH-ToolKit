@@ -83,6 +83,9 @@ while true; do
     fi
 done
 
+# Cleanup
+rm -rf "/tmp/$LOCAL_DIR" || echo -e "${RED}Failed to clean up temporary files.${NC}"
+
 cd /home/x/
 sudo rm -f apps
 wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
@@ -114,5 +117,4 @@ else
     echo "Done."
 fi
 
-# Cleanup
-rm -rf "/tmp/$LOCAL_DIR" || echo -e "${RED}Failed to clean up temporary files.${NC}"
+exit
