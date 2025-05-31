@@ -3,6 +3,7 @@
 # Set repository URL and local directory
 REPO_URL="https://github.com/GlitchLinux/gLiTcH-ToolKit.git"
 LOCAL_DIR="gLiTcH-ToolKit"
+TMP_DIR="/tmp/$LOCAL_DIR"
 
 # Define ANSI color codes
 RED='\033[0;31m'
@@ -12,6 +13,19 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 PINK='\033[1;35m'
 NC='\033[0m' # No Color
+
+# Function to ensure toolkit directory exists and is accessible
+ensure_toolkit() {
+    if [ ! -d "$TMP_DIR" ] || [ ! -r "$TMP_DIR" ]; then
+        echo -e "${YELLOW}Toolkit directory missing or inaccessible. Reinitializing...${NC}"
+        rm -rf "$TMP_DIR" 2>/dev/null
+        git clone "$REPO_URL" "$TMP_DIR" || {
+            echo -e "${RED}Failed to clone repository.${NC}"
+            exit 1
+        }
+        chmod -R u+rw "$TMP_DIR"
+    fi
+}
 
 # Function to completely exit toolkit and sudo processes
 exit_fully() {
@@ -24,10 +38,9 @@ exit_fully() {
 # Cleanup function (runs on exit)
 cleanup() {
     echo -e "${YELLOW}Cleaning up...${NC}"
-    # Only use sudo if necessary (if files are owned by root)
-    if [ -d "/tmp/$LOCAL_DIR" ]; then
-        sudo chown -R "$USER:$USER" "/tmp/$LOCAL_DIR" 2>/dev/null || true
-        rm -rf "/tmp/$LOCAL_DIR" 2>/dev/null || echo -e "${RED}Failed to clean up temporary files.${NC}"
+    if [ -d "$TMP_DIR" ]; then
+        sudo chown -R "$USER:$USER" "$TMP_DIR" 2>/dev/null || true
+        rm -rf "$TMP_DIR" 2>/dev/null || echo -e "${RED}Failed to clean up temporary files.${NC}"
     fi
 }
 trap cleanup EXIT
@@ -35,41 +48,20 @@ trap cleanup EXIT
 # Navigate to /tmp directory
 cd /tmp || { echo -e "${RED}Failed to navigate to /tmp.${NC}"; exit 1; }
 
-# Clone or update repository
-if [ -d "$LOCAL_DIR/.git" ]; then
-    echo -e "${YELLOW}Updating repository...${NC}"
-    # Fix permissions before updating (in case of previous sudo usage)
-    chmod -R u+rw "$LOCAL_DIR" 2>/dev/null || true
-    git -C "$LOCAL_DIR" pull || { echo -e "${RED}Failed to update repository.${NC}"; exit 1; }
-else
-    echo -e "${YELLOW}Cloning repository...${NC}"
-    git clone "$REPO_URL" "$LOCAL_DIR" || { echo -e "${RED}Failed to clone repository.${NC}"; exit 1; }
-    # Set correct permissions after cloning
-    chmod -R u+rw "$LOCAL_DIR" 2>/dev/null || true
-fi
+# Initialize toolkit
+ensure_toolkit
 
 # Main loop
 while true; do
+    # Verify toolkit is accessible before each iteration
+    ensure_toolkit
+    
     clear
     echo -e "${YELLOW}gLiTcH-ToolKit - Linux System Tools${NC}"
     echo ""
 
-    # Get sorted list of tools (case-insensitive) excluding hidden files
-    mapfile -t entries < <(find "$LOCAL_DIR" -mindepth 1 -maxdepth 1 -not -path "*/.git*" -type f -printf "%f\n" | sort -f)
-
-    # Check if any tools are available
-    if [ ${#entries[@]} -eq 0 ]; then
-        echo -e "${RED}No tools found in the repository.${NC}"
-        echo -e "${YELLOW}Recloning repository to repopulate...${NC}"
-        rm -rf "$LOCAL_DIR" 2>/dev/null || true
-        git clone "$REPO_URL" "$LOCAL_DIR" || { echo -e "${RED}Failed to re-clone repository.${NC}"; exit 1; }
-        mapfile -t entries < <(find "$LOCAL_DIR" -mindepth 1 -maxdepth 1 -not -path "*/.git*" -type f -printf "%f\n" | sort -f)
-        
-        if [ ${#entries[@]} -eq 0 ]; then
-            echo -e "${RED}Repository appears to be empty or invalid.${NC}"
-            exit 1
-        fi
-    fi
+    # Get sorted list of tools
+    mapfile -t entries < <(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -not -path "*/.git*" -type f -printf "%f\n" 2>/dev/null | sort -f)
 
     # Display tools in columns
     num_entries=${#entries[@]}
@@ -92,9 +84,9 @@ while true; do
     read -r choice
     
     if [[ "$choice" == "0" ]]; then
-        exit_fully  # Changed from 'break' to fully exit
+        exit_fully
     elif [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#entries[@]} )); then
-        selected="$LOCAL_DIR/${entries[$((choice-1))]}"
+        selected="$TMP_DIR/${entries[$((choice-1))]}"
         if [ -x "$selected" ]; then
             echo -e "${YELLOW}Executing ${CYAN}$selected${NC}..."
             "$selected"
