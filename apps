@@ -93,24 +93,23 @@ wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/mai
 sudo chmod 777 apps
 sudo chmod +x apps
 
-# Define the functions to be added
-APPS_FUNC=$(cat << 'EOF'
 
-# Custom functions to run /home/x/apps
-apps() {
-    bash /home/x/apps
+ALIAS_FILE="$HOME/.bashrc"
+
+# Define aliases
+ALIAS1="alias apps='bash /home/x/apps'"
+ALIAS2="alias sudo_apps='sudo bash /home/x/apps'"
+
+# Function to add alias if not already present
+add_alias_if_missing() {
+    local alias_line="$1"
+    grep -Fxq "$alias_line" "$ALIAS_FILE" || echo "$alias_line" >> "$ALIAS_FILE"
 }
 
-sudoapps() {
-    sudo bash /home/x/apps
-}
-EOF
-)
+add_alias_if_missing "$ALIAS1"
+add_alias_if_missing "$ALIAS2"
 
-# Check if already present
-if grep -q "apps() {" ~/.bashrc; then
-else
-    source ~/.bashrc
-fi
+# Reload .bashrc silently
+source "$ALIAS_FILE" > /dev/null 2>&1
 
 exit
