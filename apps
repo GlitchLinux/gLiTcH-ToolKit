@@ -10,6 +10,8 @@ sudo rm -rf "/tmp/$LOCAL_DIR" || echo -e "${RED}Failed to clean up temporary fil
 # Navigate to /tmp directory
 cd /tmp || { echo -e "${RED}Failed to navigate to /tmp.${NC}"; exit 1; }
 
+sudo chmod +x "/tmp/$LOCAL_DIR" && sudo chmod 777 "/tmp/$LOCAL_DIR" 
+
 # Define ANSI color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
