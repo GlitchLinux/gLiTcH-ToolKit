@@ -13,6 +13,14 @@ CYAN='\033[0;36m'
 PINK='\033[1;35m'
 NC='\033[0m' # No Color
 
+# Function to completely exit toolkit and sudo processes
+exit_fully() {
+    echo -e "${YELLOW}Exiting toolkit completely...${NC}"
+    # Kill all processes with the same name as this script
+    pkill -f "$(basename "$0")" 2>/dev/null
+    exit 0
+}
+
 # Cleanup function (runs on exit)
 cleanup() {
     echo -e "${YELLOW}Cleaning up...${NC}"
@@ -84,7 +92,7 @@ while true; do
     read -r choice
     
     if [[ "$choice" == "0" ]]; then
-        break
+        exit_fully  # Changed from 'break' to fully exit
     elif [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#entries[@]} )); then
         selected="$LOCAL_DIR/${entries[$((choice-1))]}"
         if [ -x "$selected" ]; then
@@ -100,15 +108,3 @@ while true; do
         sleep 1
     fi
 done
-
-# Navigate to /tmp directory
-cd /tmp || { echo -e "${RED}Failed to navigate to /tmp.${NC}"; exit 1; }
-
-# Clone or update repository
-if [ -d "$LOCAL_DIR/.git" ]; then
-    echo -e "${YELLOW}Updating repository...${NC}"
-    # Fix permissions before updating (in case of previous sudo usage)
-    chmod -R u+rw "$LOCAL_DIR" 2>/dev/null || true
-    git -C "$LOCAL_DIR" pull || { echo -e "${RED}Failed to update repository.${NC}"; exit 1; }
-
-exit 
