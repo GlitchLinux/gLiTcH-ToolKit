@@ -28,6 +28,13 @@ fi
 # Main loop
 while true; do
     clear
+    
+    # Check if any tools are available
+    if [ ${#entries[@]} -eq 0 ]; then
+        echo -e "${RED}No tools found in the repository.${NC}"
+        sleep 2
+        continue
+    fi
 
     # Display simplified banner
     echo -e "${YELLOW}gLiTcH-ToolKit - Linux System Tools${NC}"
