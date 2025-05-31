@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Set repository URL and local directory
+REPO_URL="https://github.com/GlitchLinux/gLiTcH-ToolKit.git"
+LOCAL_DIR="gLiTcH-ToolKit"
+
+# Cleanup
+sudo rm -rf "/tmp/$LOCAL_DIR" || echo -e "${RED}Failed to clean up temporary files.${NC}"
+
 # Navigate to /tmp directory
 cd /tmp || { echo -e "${RED}Failed to navigate to /tmp.${NC}"; exit 1; }
 
@@ -11,10 +18,6 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 PINK='\033[1;35m'
 NC='\033[0m' # No Color
-
-# Set repository URL and local directory
-REPO_URL="https://github.com/GlitchLinux/gLiTcH-ToolKit.git"
-LOCAL_DIR="gLiTcH-ToolKit"
 
 # Clone or update repository
 if [ -d "$LOCAL_DIR/.git" ]; then
@@ -92,6 +95,3 @@ while true; do
         sleep 1
     fi
 done
-
-# Cleanup
-rm -rf "/tmp/$LOCAL_DIR" || echo -e "${RED}Failed to clean up temporary files.${NC}"
