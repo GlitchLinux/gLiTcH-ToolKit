@@ -38,10 +38,7 @@ while true; do
 
     # Check if any tools are available
     if [ ${#entries[@]} -eq 0 ]; then
-        echo -e "${RED}No tools found in the repository.${NC}"
-        sleep 2
-        continue
-    fi
+        exit && exit
 
     # Calculate number of columns and rows needed
     num_entries=${#entries[@]}
