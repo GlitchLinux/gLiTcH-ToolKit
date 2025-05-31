@@ -16,8 +16,6 @@ NC='\033[0m' # No Color
 REPO_URL="https://github.com/GlitchLinux/gLiTcH-ToolKit.git"
 LOCAL_DIR="gLiTcH-ToolKit"
 
-rm -rf "/tmp/$LOCAL_DIR"
-
 # Clone or update repository
 if [ -d "$LOCAL_DIR/.git" ]; then
     echo -e "${YELLOW}Updating repository...${NC}"
@@ -30,13 +28,6 @@ fi
 # Main loop
 while true; do
     clear
-    
-    # Check if any tools are available
-    if [ ${#entries[@]} -eq 0 ]; then
-        echo -e "${RED}No tools found in the repository.${NC}"
-        sleep 2
-        continue
-    fi
 
     # Display simplified banner
     echo -e "${YELLOW}gLiTcH-ToolKit - Linux System Tools${NC}"
@@ -44,6 +35,13 @@ while true; do
 
     # Get sorted list of tools (case-insensitive) excluding hidden files
     mapfile -t entries < <(find "$LOCAL_DIR" -mindepth 1 -maxdepth 1 -not -path "*/.git*" -type f -printf "%f\n" | sort -f)
+
+    # Check if any tools are available
+    if [ ${#entries[@]} -eq 0 ]; then
+        echo -e "${RED}No tools found in the repository.${NC}"
+        sleep 2
+        continue
+    fi
 
     # Calculate number of columns and rows needed
     num_entries=${#entries[@]}
@@ -84,3 +82,7 @@ while true; do
         sleep 1
     fi
 done
+
+# Cleanup
+rm -rf "/tmp/$LOCAL_DIR" || echo -e "${RED}Failed to clean up temporary files.${NC}"
+
