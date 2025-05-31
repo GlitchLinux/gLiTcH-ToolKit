@@ -19,17 +19,25 @@ fi
 # Install required packages
 echo "Installing required packages..."
 apt-get update
-apt-get install -y grub-efi-amd64-bin grub-pc-bin git wget unzip mtools
+apt-get install -y grub-efi-amd64-bin grub-pc-bin git wget unzip mtools lzma
 
-# Clone the grub2-filemanager repository
-echo "Cloning grub2-filemanager repository..."
+# Clone and prepare both repositories
+echo "Cloning repositories..."
 git clone https://github.com/a1ive/grub2-filemanager.git
-cd grub2-filemanager || exit
+git clone https://github.com/GlitchLinux/Multibooters-agFM-rEFInd-GRUBFM.git
 
-# Build the project
+# Build the main grub2-filemanager project
 echo "Building grub2-filemanager..."
+cd grub2-filemanager || exit
 ./update_grub2.sh
 ./build.sh
+cd ..
+
+# Extract additional files
+echo "Extracting additional files..."
+cd Multibooters-agFM-rEFInd-GRUBFM || exit
+tar --lzma -xvf GRUB_FM_FILES.tar.lzma
+cd ..
 
 # Prepare the USB drive
 echo "Preparing USB drive..."
@@ -67,10 +75,23 @@ grub-mkimage -p /boot/grub -O x86_64-efi -o "$MOUNT_POINT/EFI/BOOT/bootx64.efi" 
     part_gpt password_pbkdf2 png probe reboot regexp search search_fs_uuid search_fs_file \
     search_label sleep smbios squash4 test true video xfs zstd
 
-# Copy grub2-filemanager files
-echo "Copying grub2-filemanager files..."
-cp -r build/* "$MOUNT_POINT/boot/grub/"
-cp grubfm.iso "$MOUNT_POINT/boot/grub/"
+# Copy files from both repositories
+echo "Copying files..."
+
+# From grub2-filemanager
+cp -r grub2-filemanager/build/* "$MOUNT_POINT/boot/grub/"
+cp grub2-filemanager/grubfm.iso "$MOUNT_POINT/boot/grub/"
+
+# From Multibooters-agFM-rEFInd-GRUBFM
+cp Multibooters-agFM-rEFInd-GRUBFM/grubfmx64.efi "$MOUNT_POINT/EFI/BOOT/"
+cp Multibooters-agFM-rEFInd-GRUBFM/grubfmia32.efi "$MOUNT_POINT/EFI/BOOT/"
+cp Multibooters-agFM-rEFInd-GRUBFM/grubfmaa64.efi "$MOUNT_POINT/EFI/BOOT/"
+cp Multibooters-agFM-rEFInd-GRUBFM/grubfm.elf "$MOUNT_POINT/boot/grub/"
+cp Multibooters-agFM-rEFInd-GRUBFM/grubfm_multiarch.iso "$MOUNT_POINT/boot/grub/"
+cp Multibooters-agFM-rEFInd-GRUBFM/loadfm "$MOUNT_POINT/boot/grub/"
+cp Multibooters-agFM-rEFInd-GRUBFM/fmldr "$MOUNT_POINT/"
+cp Multibooters-agFM-rEFInd-GRUBFM/ventoy.dat "$MOUNT_POINT/"
+cp Multibooters-agFM-rEFInd-GRUBFM/efi.img "$MOUNT_POINT/"
 
 # Create GRUB configuration
 echo "Creating GRUB configuration..."
@@ -83,8 +104,21 @@ menuentry "GRUB2 File Manager" {
     initrd /boot/grub/grubfm.iso
 }
 
+menuentry "GRUB2 File Manager (Multiarch ISO)" {
+    linux /boot/grub/loadfm
+    initrd /boot/grub/grubfm_multiarch.iso
+}
+
 menuentry "GRUB2 File Manager (x86_64 UEFI)" {
-    chainloader /EFI/BOOT/bootx64.efi
+    chainloader /EFI/BOOT/grubfmx64.efi
+}
+
+menuentry "GRUB2 File Manager (i386 UEFI)" {
+    chainloader /EFI/BOOT/grubfmia32.efi
+}
+
+menuentry "GRUB2 File Manager (AA64 UEFI)" {
+    chainloader /EFI/BOOT/grubfmaa64.efi
 }
 
 menuentry "Reboot" {
@@ -96,11 +130,17 @@ menuentry "Shutdown" {
 }
 EOF
 
+# Create UEFI fallback entries
+echo "Creating UEFI fallback entries..."
+mkdir -p "$MOUNT_POINT/EFI/BOOT"
+cp "$MOUNT_POINT/EFI/BOOT/grubfmx64.efi" "$MOUNT_POINT/EFI/BOOT/bootx64.efi"
+cp "$MOUNT_POINT/EFI/BOOT/grubfmia32.efi" "$MOUNT_POINT/EFI/BOOT/bootia32.efi"
+cp "$MOUNT_POINT/EFI/BOOT/grubfmaa64.efi" "$MOUNT_POINT/EFI/BOOT/bootaa64.efi"
+
 # Clean up
 echo "Cleaning up..."
 umount "$MOUNT_POINT"
 rm -rf "$MOUNT_POINT"
-cd ..
-rm -rf grub2-filemanager
+rm -rf grub2-filemanager Multibooters-agFM-rEFInd-GRUBFM
 
-echo "Done! USB drive is ready for both BIOS and UEFI booting."
+echo "Done! USB drive is ready for both BIOS and UEFI booting with all GRUBFM files."
