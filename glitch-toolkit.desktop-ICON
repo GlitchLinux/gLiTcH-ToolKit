@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Download the icon to /usr/share/pixmaps
+sudo mkdir -p /usr/share/pixmaps
+sudo wget https://raw.githubusercontent.com/GlitchLinux/ICONPACK/refs/heads/main/default-icons/alienarena.svg -O /usr/share/pixmaps/alien-arena.svg
+
+# Create the applications directory if it doesn't exist
+mkdir -p ~/.local/share/applications
+
+# Create the desktop entry file
+cat > ~/.local/share/applications/glitch-toolkit.desktop <<EOL
+[Desktop Entry]
+Comment[en_US]=
+Comment=
+Exec=xfce4-terminal --maximize --command 'bash -c '\''/home/\$USER/apps; read -p "Enter to Exit"'\'''
+GenericName[en_US]=
+GenericName=
+Icon=alien-arena
+MimeType=
+Name[en_US]=gLiTcH ToolKit
+Name=gLiTcH ToolKit
+Path=
+StartupNotify=true
+Terminal=false
+TerminalOptions=
+Type=Application
+Version=1.0
+X-KDE-SubstituteUID=false
+X-KDE-Username=
+EOL
+
+# Update desktop database (may be needed for some environments)
+update-desktop-database ~/.local/share/applications
+
+echo "Desktop entry created at ~/.local/share/applications/glitch-toolkit.desktop"
+echo "Icon downloaded to /usr/share/pixmaps/alien-arena.svg"
