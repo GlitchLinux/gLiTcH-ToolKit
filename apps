@@ -4,17 +4,6 @@
 REPO_URL="https://github.com/GlitchLinux/gLiTcH-ToolKit.git"
 LOCAL_DIR="gLiTcH-ToolKit"
 
-# Cleanup function (runs on exit)
-cleanup() {
-    echo -e "${YELLOW}Cleaning up...${NC}"
-    sudo chown -R $USER:$USER "/tmp/$LOCAL_DIR" 2>/dev/null || true
-    rm -rf "/tmp/$LOCAL_DIR" 2>/dev/null || echo -e "${RED}Failed to clean up temporary files.${NC}"
-}
-trap cleanup EXIT
-
-# Navigate to /tmp directory
-cd /tmp || { echo -e "${RED}Failed to navigate to /tmp.${NC}"; exit 1; }
-
 # Define ANSI color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -24,24 +13,36 @@ CYAN='\033[0;36m'
 PINK='\033[1;35m'
 NC='\033[0m' # No Color
 
+# Cleanup function (runs on exit)
+cleanup() {
+    echo -e "${YELLOW}Cleaning up...${NC}"
+    # Only use sudo if necessary (if files are owned by root)
+    if [ -d "/tmp/$LOCAL_DIR" ]; then
+        sudo chown -R "$USER:$USER" "/tmp/$LOCAL_DIR" 2>/dev/null || true
+        rm -rf "/tmp/$LOCAL_DIR" 2>/dev/null || echo -e "${RED}Failed to clean up temporary files.${NC}"
+    fi
+}
+trap cleanup EXIT
+
+# Navigate to /tmp directory
+cd /tmp || { echo -e "${RED}Failed to navigate to /tmp.${NC}"; exit 1; }
+
 # Clone or update repository
 if [ -d "$LOCAL_DIR/.git" ]; then
     echo -e "${YELLOW}Updating repository...${NC}"
-    # Ensure proper permissions before updating
-    chmod -R u+rw "$LOCAL_DIR"
+    # Fix permissions before updating (in case of previous sudo usage)
+    chmod -R u+rw "$LOCAL_DIR" 2>/dev/null || true
     git -C "$LOCAL_DIR" pull || { echo -e "${RED}Failed to update repository.${NC}"; exit 1; }
 else
     echo -e "${YELLOW}Cloning repository...${NC}"
     git clone "$REPO_URL" "$LOCAL_DIR" || { echo -e "${RED}Failed to clone repository.${NC}"; exit 1; }
-    # Set permissions after cloning
-    chmod -R u+rw "$LOCAL_DIR"
+    # Set correct permissions after cloning
+    chmod -R u+rw "$LOCAL_DIR" 2>/dev/null || true
 fi
 
 # Main loop
 while true; do
     clear
-
-    # Display simplified banner
     echo -e "${YELLOW}gLiTcH-ToolKit - Linux System Tools${NC}"
     echo ""
 
@@ -52,26 +53,22 @@ while true; do
     if [ ${#entries[@]} -eq 0 ]; then
         echo -e "${RED}No tools found in the repository.${NC}"
         echo -e "${YELLOW}Recloning repository to repopulate...${NC}"
-        rm -rf "$LOCAL_DIR"
+        rm -rf "$LOCAL_DIR" 2>/dev/null || true
         git clone "$REPO_URL" "$LOCAL_DIR" || { echo -e "${RED}Failed to re-clone repository.${NC}"; exit 1; }
-
-        # Refresh entries after recloning
         mapfile -t entries < <(find "$LOCAL_DIR" -mindepth 1 -maxdepth 1 -not -path "*/.git*" -type f -printf "%f\n" | sort -f)
-
-        # If still empty after recloning, exit
+        
         if [ ${#entries[@]} -eq 0 ]; then
             echo -e "${RED}Repository appears to be empty or invalid.${NC}"
             exit 1
         fi
     fi
 
-    # Calculate number of columns and rows needed
+    # Display tools in columns
     num_entries=${#entries[@]}
     num_columns=3
     num_rows=$(( (num_entries + num_columns - 1) / num_columns ))
-    max_width=35 # Maximum width for each column
+    max_width=35
 
-    # Display tools in column-wise order
     for (( row=0; row<num_rows; row++ )); do
         for (( col=0; col<num_columns; col++ )); do
             index=$(( row + col * num_rows ))
@@ -86,7 +83,6 @@ while true; do
     echo -e -n "${YELLOW}Enter a number to execute (1-${#entries[@]}), or 0 to quit: ${NC}"
     read -r choice
     
-    # Handle user input
     if [[ "$choice" == "0" ]]; then
         break
     elif [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#entries[@]} )); then
