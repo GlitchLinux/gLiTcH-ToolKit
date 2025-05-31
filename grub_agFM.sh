@@ -7,40 +7,62 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Function to list disks and partitions
-list_disks() {
+list_devices() {
     echo "Available disks and partitions:"
     lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE,MODEL | grep -v 'loop'
     echo ""
+    echo "Note: You can also specify a disk image file (e.g., /path/to/image.img)"
 }
 
 # Show available disks and partitions
-list_disks
+list_devices
 
-# Ask user for partition
+# Ask user for target
 while true; do
-    read -rp "Enter the USB partition to use (e.g. /dev/sde1): " USB_PARTITION
-    if [ -e "$USB_PARTITION" ]; then
+    read -rp "Enter the USB partition to use (e.g. /dev/sde1) or disk image path: " TARGET
+    
+    # Check if target is a disk image
+    if [[ "$TARGET" == *.img ]]; then
+        if [ -f "$TARGET" ]; then
+            # Setup loop device for the image
+            echo "Setting up loop device for $TARGET..."
+            LOOP_DEV=$(losetup -f --show -P "$TARGET")
+            if [ -z "$LOOP_DEV" ]; then
+                echo "Error: Failed to setup loop device"
+                exit 1
+            fi
+            USB_PARTITION="${LOOP_DEV}p1"
+            USB_DEVICE="$LOOP_DEV"
+            break
+        else
+            echo "Error: Image file $TARGET does not exist"
+            continue
+        fi
+    elif [ -e "$TARGET" ]; then
+        # Handle regular device/partition
+        USB_PARTITION="$TARGET"
+        USB_DEVICE=$(echo "$TARGET" | sed 's/[0-9]*$//')
+        if [ "$USB_DEVICE" = "$USB_PARTITION" ]; then
+            echo "Error: You must specify a partition, not a whole disk"
+            continue
+        fi
         break
     else
-        echo "Error: Partition $USB_PARTITION does not exist. Please try again."
-        list_disks
+        echo "Error: Target $TARGET does not exist. Please try again."
+        list_devices
     fi
 done
 
-# Get the parent device (e.g. /dev/sde from /dev/sde1)
-USB_DEVICE=$(echo "$USB_PARTITION" | sed 's/[0-9]*$//')
-if [ "$USB_DEVICE" = "$USB_PARTITION" ]; then
-    # No number at end - probably a whole disk
-    echo "Error: You must specify a partition, not a whole disk"
-    exit 1
-fi
-
 # Confirm with user
 echo ""
-echo "WARNING: This will modify the partition $USB_PARTITION on $USB_DEVICE"
-echo "All data on this partition will be erased!"
+echo "WARNING: This will modify $USB_PARTITION"
+echo "All data on this target will be erased!"
 read -rp "Are you sure you want to continue? (y/N): " confirm
 if [ "${confirm,,}" != "y" ]; then
+    # Clean up loop device if we created one
+    if [ -n "$LOOP_DEV" ]; then
+        losetup -d "$LOOP_DEV"
+    fi
     echo "Operation cancelled"
     exit 0
 fi
@@ -70,7 +92,7 @@ tar --lzma -xvf GRUB_FM_FILES.tar.lzma
 cd ..
 
 # Prepare the USB partition
-echo "Preparing USB partition..."
+echo "Preparing target partition..."
 
 # Unmount if mounted
 umount "$USB_PARTITION" 2>/dev/null
@@ -80,7 +102,7 @@ echo "Formatting partition as FAT32..."
 mkfs.fat -F32 "$USB_PARTITION"
 
 # Create mount point and mount
-echo "Mounting USB partition..."
+echo "Mounting partition..."
 MOUNT_POINT="/mnt/usb"
 mkdir -p "$MOUNT_POINT"
 mount "$USB_PARTITION" "$MOUNT_POINT"
@@ -166,8 +188,18 @@ umount "$MOUNT_POINT"
 rm -rf "$MOUNT_POINT"
 rm -rf grub2-filemanager Multibooters-agFM-rEFInd-GRUBFM
 
+# Detach loop device if we used one
+if [ -n "$LOOP_DEV" ]; then
+    losetup -d "$LOOP_DEV"
+fi
+
 echo ""
-echo "Success! USB partition $USB_PARTITION is now ready with:"
+echo "Success! Target $USB_PARTITION is now ready with:"
 echo "1. Direct agFM boot for both BIOS and UEFI"
 echo "2. All required GRUB File Manager components"
 echo "3. Support for x86_64, i386, and AA64 UEFI systems"
+if [[ "$TARGET" == *.img ]]; then
+    echo ""
+    echo "You can test the image with:"
+    echo "qemu-system-x86_64 -hda $TARGET"
+fi
