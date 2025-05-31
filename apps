@@ -36,10 +36,6 @@ while true; do
     # Get sorted list of tools (case-insensitive) excluding hidden files
     mapfile -t entries < <(find "$LOCAL_DIR" -mindepth 1 -maxdepth 1 -not -path "*/.git*" -type f -printf "%f\n" | sort -f)
 
-    # Check if any tools are available
-    if [ ${#entries[@]} -eq 0 ]; then
-        exit && exit
-
     # Calculate number of columns and rows needed
     num_entries=${#entries[@]}
     num_columns=3
