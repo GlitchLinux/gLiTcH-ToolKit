@@ -39,8 +39,18 @@ while true; do
     # Check if any tools are available
     if [ ${#entries[@]} -eq 0 ]; then
         echo -e "${RED}No tools found in the repository.${NC}"
-        sleep 2
-        continue
+        echo -e "${YELLOW}Recloning repository to repopulate...${NC}"
+        rm -rf "$LOCAL_DIR"
+        git clone "$REPO_URL" "$LOCAL_DIR" || { echo -e "${RED}Failed to re-clone repository.${NC}"; exit 1; }
+
+        # Refresh entries after recloning
+        mapfile -t entries < <(find "$LOCAL_DIR" -mindepth 1 -maxdepth 1 -not -path "*/.git*" -type f -printf "%f\n" | sort -f)
+
+        # If still empty after recloning, exit
+        if [ ${#entries[@]} -eq 0 ]; then
+            echo -e "${RED}Repository appears to be empty or invalid.${NC}"
+            exit 1
+        fi
     fi
 
     # Calculate number of columns and rows needed
@@ -85,4 +95,3 @@ done
 
 # Cleanup
 rm -rf "/tmp/$LOCAL_DIR" || echo -e "${RED}Failed to clean up temporary files.${NC}"
-
