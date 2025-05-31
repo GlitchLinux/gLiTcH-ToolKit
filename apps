@@ -100,3 +100,15 @@ while true; do
         sleep 1
     fi
 done
+
+# Navigate to /tmp directory
+cd /tmp || { echo -e "${RED}Failed to navigate to /tmp.${NC}"; exit 1; }
+
+# Clone or update repository
+if [ -d "$LOCAL_DIR/.git" ]; then
+    echo -e "${YELLOW}Updating repository...${NC}"
+    # Fix permissions before updating (in case of previous sudo usage)
+    chmod -R u+rw "$LOCAL_DIR" 2>/dev/null || true
+    git -C "$LOCAL_DIR" pull || { echo -e "${RED}Failed to update repository.${NC}"; exit 1; }
+
+exit 
