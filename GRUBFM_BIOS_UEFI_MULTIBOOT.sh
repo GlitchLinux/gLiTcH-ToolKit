@@ -87,8 +87,8 @@ echo "Preparing target partition..."
 umount "$USB_PARTITION" 2>/dev/null
 
 # Format as FAT32 with label
-echo "Formatting partition as FAT32 with label GRUBFM-MULTI-BOOT..."
-mkfs.fat -F32 -n "GRUBFM-MULTI-BOOT" "$USB_PARTITION"
+echo "Formatting partition as FAT32 with label"
+mkfs.fat -F32 -n "agFM-Boot" "$USB_PARTITION"
 
 # Create mount point and mount
 echo "Mounting partition..."
