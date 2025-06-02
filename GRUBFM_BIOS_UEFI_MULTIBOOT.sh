@@ -165,6 +165,11 @@ tar --lzma -xvf "$REPO_DIR/MULTIBOOTFILES.tar.lzma" --no-same-owner -C "$MOUNT_P
 echo "Extracting mini-ventoy..."
 tar --lzma -xvf "$REPO_DIR/mini-ventoy.tar.lzma" --no-same-owner -C "$MOUNT_POINT"
 
+# Download Qemu boot me files
+cd "$MOUNT_POINT"
+wget https://raw.githubusercontent.com/GlitchLinux/Qemu_Boot_Me/refs/heads/main/QEMU_Boot_ME_(BIOS).sh
+wget https://raw.githubusercontent.com/GlitchLinux/Qemu_Boot_Me/refs/heads/main/QEMU_Boot_ME_(UEFI).sh
+
 # Copy specific files from repository
 echo "Copying additional files..."
 cp "$REPO_DIR/grubfmx64.efi" "$MOUNT_POINT/EFI/BOOT/"
