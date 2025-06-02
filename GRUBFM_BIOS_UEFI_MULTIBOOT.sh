@@ -167,8 +167,8 @@ tar --lzma -xvf "$REPO_DIR/mini-ventoy.tar.lzma" --no-same-owner -C "$MOUNT_POIN
 
 # Download Qemu boot me files
 cd "$MOUNT_POINT"
-wget https://raw.githubusercontent.com/GlitchLinux/Qemu_Boot_Me/refs/heads/main/QEMU_Boot_ME_(BIOS).sh
-wget https://raw.githubusercontent.com/GlitchLinux/Qemu_Boot_Me/refs/heads/main/QEMU_Boot_ME_(UEFI).sh
+wget https://raw.githubusercontent.com/GlitchLinux/Qemu_Boot_Me/refs/heads/main/QEMU_Boot_ME_BIOS.sh
+wget https://raw.githubusercontent.com/GlitchLinux/Qemu_Boot_Me/refs/heads/main/QEMU_Boot_ME_UEFI.sh
 
 # Copy specific files from repository
 echo "Copying additional files..."
