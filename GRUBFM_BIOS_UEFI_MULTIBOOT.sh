@@ -165,11 +165,6 @@ tar --lzma -xvf "$REPO_DIR/MULTIBOOTFILES.tar.lzma" --no-same-owner -C "$MOUNT_P
 echo "Extracting mini-ventoy..."
 tar --lzma -xvf "$REPO_DIR/mini-ventoy.tar.lzma" --no-same-owner -C "$MOUNT_POINT"
 
-# Download Qemu boot me files
-# cd "$MOUNT_POINT"
-# wget https://raw.githubusercontent.com/GlitchLinux/Qemu_Boot_Me/refs/heads/main/QEMU_Boot_ME_BIOS.sh
-# wget https://raw.githubusercontent.com/GlitchLinux/Qemu_Boot_Me/refs/heads/main/QEMU_Boot_ME_UEFI.sh
-
 # Copy specific files from repository
 echo "Copying additional files..."
 cp "$REPO_DIR/grubfmx64.efi" "$MOUNT_POINT/EFI/BOOT/"
@@ -188,6 +183,12 @@ cp "$MOUNT_POINT/EFI/BOOT/grubfmx64.efi" "$MOUNT_POINT/EFI/BOOT/bootx64.efi"
 cp "$MOUNT_POINT/EFI/BOOT/grubfmia32.efi" "$MOUNT_POINT/EFI/BOOT/bootia32.efi"
 cp "$MOUNT_POINT/EFI/BOOT/grubfmaa64.efi" "$MOUNT_POINT/EFI/BOOT/bootaa64.efi"
 
+#Download Qemu boot me files
+cd "$MOUNT_POINT"
+wget https://raw.githubusercontent.com/GlitchLinux/Qemu_Boot_Me/refs/heads/main/QEMU_Boot_ME_BIOS.sh
+wget https://raw.githubusercontent.com/GlitchLinux/Qemu_Boot_Me/refs/heads/main/QEMU_Boot_ME_UEFI.sh
+cd
+
 # Clean up
 echo "Cleaning up..."
 umount "$MOUNT_POINT"
@@ -203,9 +204,7 @@ echo ""
 echo "Success! Target $USB_PARTITION is now ready with:"
 echo "1. Direct agFM boot for both BIOS and UEFI"
 echo "2. Pre-configured boot menus for various ISOs and tools"
-echo "3. Organized directory structure"
 echo "4. Support for x86_64, i386, and AA64 UEFI systems"
-echo "5. Partition labeled GRUBFM-MULTI-BOOT"
 if [[ "$TARGET" == *.img ]]; then
     echo ""
     echo "You can test the image with:"
