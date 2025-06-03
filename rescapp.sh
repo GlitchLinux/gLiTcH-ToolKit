@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Complete Rescapp Installation & Fix Script
-# Installs Rescapp and applies all necessary fixes in one go
+# Complete Rescapp Installation Script - All-in-One
+# Installs Rescapp with all fixes applied correctly from the start
 # Tested and working on Debian/Ubuntu systems
 
 # Color codes for better output
@@ -40,7 +40,7 @@ if ! grep -qi -E 'debian|ubuntu' /etc/os-release; then
     exit 1
 fi
 
-print_status "Starting complete Rescapp installation and configuration..."
+print_status "Starting complete Rescapp installation with all fixes..."
 
 # Install all required dependencies
 print_status "Installing dependencies..."
@@ -101,44 +101,62 @@ if [ -f "$RESCAPP_DIR/bin/rescapp" ]; then
     mv "$RESCAPP_DIR/bin/rescapp" "$MAIN_PY"
 fi
 
-print_status "Applying compatibility fixes..."
+print_status "Applying comprehensive compatibility fixes..."
 
-# Fix all QtWebKit references to QtWebEngine
-find "$RESCAPP_DIR" -type f -name "*.py" -exec sed -i \
-    -e 's/QtWebKit/QtWebEngineWidgets/g' \
-    -e 's/QWebPage/QWebEnginePage/g' \
-    -e 's/QWebSettings/QWebEngineSettings/g' \
-    -e 's/QWebView/QWebEngineView/g' \
-    -e 's/QtWebKitWidgets/QtWebEngineWidgets/g' \
-    {} \;
+# Step 1: Clean up the main Python file first
+print_status "Cleaning and fixing Python imports..."
 
-# Fix the main executable imports properly
-print_status "Fixing Python imports..."
-
-# Create the correct import structure
-cat > /tmp/rescapp_imports.txt <<'EOL'
+# Create a temporary file with the correct import structure
+cat > /tmp/correct_imports.txt <<'EOL'
 from PyQt5 import QtGui, QtCore, QtWidgets
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 EOL
 
-# Remove old import lines and add new ones
-sed -i '/^from PyQt5 import.*QtWebKit/d' "$MAIN_PY"
-sed -i '/^from PyQt5 import.*QtWebKitWidgets/d' "$MAIN_PY"
+# Remove all existing PyQt5 imports to avoid conflicts
+sed -i '/^from PyQt5 import/d' "$MAIN_PY"
 
-# Find the first PyQt5 import and replace the entire import block
-sed -i '0,/^from PyQt5 import/{
-    /^from PyQt5 import/ {
-        r /tmp/rescapp_imports.txt
-        d
-    }
-}' "$MAIN_PY"
+# Insert correct imports at the beginning (after shebang if it exists)
+if head -1 "$MAIN_PY" | grep -q '^#!'; then
+    sed -i '1r /tmp/correct_imports.txt' "$MAIN_PY"
+else
+    sed -i '1i\
+from PyQt5 import QtGui, QtCore, QtWidgets\
+from PyQt5.QtWebEngineWidgets import QWebEngineView' "$MAIN_PY"
+fi
 
 # Clean up temp file
-rm -f /tmp/rescapp_imports.txt
+rm -f /tmp/correct_imports.txt
 
-# Additional specific fixes for QtWebEngine
+# Step 2: Fix all QtWebKit references carefully to avoid double-word issues
+print_status "Converting QtWebKit to QtWebEngine references..."
+
+# Use more precise replacements to avoid creating malformed names
+sed -i 's/QtWebKit\.QWebView/QWebEngineView/g' "$MAIN_PY"
+sed -i 's/QtWebKit\.QWebPage/QWebEnginePage/g' "$MAIN_PY"
+sed -i 's/QtWebKit\.QWebSettings/QWebEngineSettings/g' "$MAIN_PY"
+
+# Handle QtWebKitWidgets separately to avoid double-word issues
 sed -i 's/QtWebKitWidgets\.QWebView/QWebEngineView/g' "$MAIN_PY"
+sed -i 's/QtWebKitWidgets/QtWebEngineWidgets/g' "$MAIN_PY"
+
+# Now handle the remaining QtWebKit references
+sed -i 's/QtWebKit/QtWebEngineWidgets/g' "$MAIN_PY"
+
+# Step 3: Fix specific instantiation issues
+print_status "Fixing QWebEngineView instantiation..."
+
+# Fix the main problematic line that creates the web view
 sed -i 's/self\.wb = QtWebEngineWidgets\.QWebEngineView()/self.wb = QWebEngineView()/' "$MAIN_PY"
+
+# Step 4: Clean up any potential malformed references that might have been created
+print_status "Cleaning up any malformed references..."
+
+# Fix any doubled words that might have been created
+sed -i 's/QtWebEngineWidgetsWidgets/QtWebEngineWidgets/g' "$MAIN_PY"
+sed -i 's/QtWebEngineWidgets\.QWebEngineView/QWebEngineView/g' "$MAIN_PY"
+
+# Step 5: Fix other compatibility issues
+print_status "Applying additional fixes..."
 
 # Fix menu paths
 sed -i "s|share/rescapp/menus|menus|g" "$MAIN_PY"
@@ -149,7 +167,19 @@ if [ ! -d "$RESCAPP_DIR/share" ]; then
     ln -s "$RESCAPP_DIR/menus" "$RESCAPP_DIR/share/rescapp/menus"
 fi
 
-# Create the optimized wrapper script
+# Step 6: Apply fixes to other Python files in the project
+print_status "Fixing other Python files..."
+
+find "$RESCAPP_DIR" -name "*.py" -not -path "*/bin/rescapp.py" -exec sed -i \
+    -e 's/QtWebKit\.QWebView/QWebEngineView/g' \
+    -e 's/QtWebKit\.QWebPage/QWebEnginePage/g' \
+    -e 's/QtWebKit\.QWebSettings/QWebEngineSettings/g' \
+    -e 's/QtWebKitWidgets\.QWebView/QWebEngineView/g' \
+    -e 's/QtWebKitWidgets/QtWebEngineWidgets/g' \
+    -e 's/QtWebKit/QtWebEngineWidgets/g' \
+    {} \;
+
+# Step 7: Create the optimized wrapper script
 print_status "Creating wrapper script..."
 cat > /usr/local/bin/rescapp <<'EOL'
 #!/bin/bash
@@ -162,6 +192,11 @@ export QT_QUICK_BACKEND=software
 export QTWEBENGINE_DISABLE_SANDBOX=1
 export QT_LOGGING_RULES="qt.qpa.xcb.glx.debug=false"
 
+# Warn if running as root in a GUI environment
+if [ "$(id -u)" -eq 0 ] && [ -n "$DISPLAY" ]; then
+    echo "Note: Running as root. Consider running as regular user for GUI applications."
+fi
+
 # Set Python path and execute main program
 PYTHONPATH="/usr/local/share/rescapp/lib" \
 exec /usr/bin/python3 /usr/local/share/rescapp/bin/rescapp.py "$@"
@@ -169,7 +204,7 @@ EOL
 
 chmod +x /usr/local/bin/rescapp
 
-# Create desktop shortcut
+# Step 8: Create desktop shortcut
 print_status "Creating desktop shortcut..."
 cat > /usr/share/applications/rescapp.desktop <<EOL
 [Desktop Entry]
@@ -183,20 +218,30 @@ Categories=System;Utility;Recovery;
 StartupNotify=true
 EOL
 
-# Set all necessary permissions
+# Step 9: Set all necessary permissions
 print_status "Setting permissions..."
 chmod -R +x "$RESCAPP_DIR/bin"
 find "$RESCAPP_DIR" -name "*.py" -exec chmod +x {} \;
 find "$RESCAPP_DIR" -name "*.sh" -exec chmod +x {} \;
 
-# Update icon cache if possible
+# Step 10: Update icon cache if possible
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     print_status "Updating icon cache..."
     gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true
 fi
 
-# Test the installation
-print_status "Testing Python imports..."
+# Step 11: Validate the installation
+print_status "Validating installation..."
+
+# Test Python syntax
+python3 -m py_compile "$MAIN_PY" 2>/dev/null
+if [ $? -eq 0 ]; then
+    print_success "Python syntax validation passed"
+else
+    print_warning "Python syntax validation failed - manual check recommended"
+fi
+
+# Test imports
 python3 -c "
 try:
     from PyQt5 import QtGui, QtCore, QtWidgets
@@ -209,17 +254,23 @@ except ImportError as e:
 " 2>/dev/null
 
 if [ $? -eq 0 ]; then
-    print_success "Python imports are working correctly"
+    print_success "Python imports working correctly"
 else
     print_warning "Import test failed, but installation may still work"
 fi
 
+# Check for any remaining malformed references
+if grep -q "QtWebEngineWidgetsWidgets" "$MAIN_PY"; then
+    print_warning "Found potential malformed references - cleaning up..."
+    sed -i 's/QtWebEngineWidgetsWidgets/QtWebEngineWidgets/g' "$MAIN_PY"
+fi
+
 # Final status
 echo ""
-print_success "Rescapp installation and fixes completed successfully!"
+print_success "Rescapp installation completed successfully!"
 echo ""
 echo -e "${BLUE}You can now run Rescapp by:${NC}"
-echo "  • Typing 'rescapp' in a terminal"
+echo "  • Typing 'rescapp' in a terminal (preferred - no sudo needed)"
 echo "  • Using the application menu (look for 'Rescapp')"
 echo ""
 echo -e "${BLUE}Installation details:${NC}"
@@ -227,4 +278,5 @@ echo "  • Installed to: $RESCAPP_DIR"
 echo "  • Wrapper script: /usr/local/bin/rescapp"
 echo "  • Desktop file: /usr/share/applications/rescapp.desktop"
 echo ""
-print_status "Ready to use! Try running 'rescapp' now."
+echo -e "${GREEN}Note:${NC} Run as regular user for GUI. App will request sudo when needed."
+print_success "Installation complete - ready to use!"
