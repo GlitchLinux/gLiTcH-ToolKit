@@ -114,22 +114,30 @@ if [ -x "$(command -v gtk-update-icon-cache)" ]; then
     gtk-update-icon-cache -f /usr/share/icons/hicolor
 fi
 
-# 1. First install missing dependencies
+# Fixes all remaining QtWebEngine and OpenGL issues
+
+# 1. Install missing dependencies
 sudo apt-get update
 sudo apt-get install -y \
     python3-pyqt5.qtwebengine \
-    libqt5webkit5-dev \
-    libgl1-mesa-dev \
+    python3-pyqt5.qtsvg \
+    libqt5webengine5 \
+    libqt5webenginecore5 \
+    libqt5webenginewidgets5 \
+    libgl1-mesa-dri \
     libegl1-mesa \
     libllvm15
 
-# 2. Fix the QtWebKitWidgets reference
-sudo sed -i 's/QtWebKitWidgets/QtWebEngineWidgets/g' /usr/local/share/rescapp/bin/rescapp.py
-
-# 3. Fix the specific QWebView reference
+# 2. Fix the main Python file imports
 sudo sed -i 's/QtWebKitWidgets.QWebView/QtWebEngineWidgets.QWebEngineView/g' /usr/local/share/rescapp/bin/rescapp.py
+sudo sed -i 's/from PyQt5 import QtWebKitWidgets/from PyQt5 import QtWebEngineWidgets/g' /usr/local/share/rescapp/bin/rescapp.py
 
-# 4. Update the wrapper script to handle OpenGL properly
+# 3. Add missing import at the top of the file
+if ! grep -q "QtWebEngineWidgets" /usr/local/share/rescapp/bin/rescapp.py; then
+    sudo sed -i '/from PyQt5 import/ s/$/, QtWebEngineWidgets/' /usr/local/share/rescapp/bin/rescapp.py
+fi
+
+# 4. Update the wrapper script
 sudo tee /usr/local/bin/rescapp >/dev/null <<'EOL'
 #!/bin/bash
 # Rescapp wrapper with proper environment
@@ -147,16 +155,11 @@ EOL
 sudo chmod +x /usr/local/bin/rescapp
 sudo chmod +x /usr/local/share/rescapp/bin/rescapp.py
 
-# 6. Create missing symlinks
+# 6. Create required symlinks
 sudo mkdir -p /usr/local/share/rescapp/share/rescapp
 sudo ln -sf /usr/local/share/rescapp/menus /usr/local/share/rescapp/share/rescapp/menus
 
-# 7. Install samunlock if missing
-if [ ! -f "/usr/sbin/samunlock" ]; then
-    echo "Installing samunlock..."
-    sudo wget https://github.com/rescatux/samunlock/releases/download/0.4/samunlock -O /usr/sbin/samunlock
-    sudo chmod +x /usr/sbin/samunlock
-fi
+echo "All fixes applied. Try running 'rescapp' now."
 
 echo "All fixes applied. Try running 'rescapp' now."
 
