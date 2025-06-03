@@ -1,8 +1,7 @@
 #!/bin/bash
 
-# Complete Rescapp Installation Script - All-in-One
-# Installs Rescapp with all fixes applied correctly from the start
-# Tested and working on Debian/Ubuntu systems
+# Rescapp Installation Script with Complete GUI Fixes
+# Version 2.0 - Enhanced for QtWebEngine and Menu Compatibility
 
 # Color codes for better output
 RED='\033[0;31m'
@@ -40,7 +39,7 @@ if ! grep -qi -E 'debian|ubuntu' /etc/os-release; then
     exit 1
 fi
 
-print_status "Starting complete Rescapp installation with all fixes..."
+print_status "Starting Rescapp installation with complete GUI fixes..."
 
 # Install all required dependencies
 print_status "Installing dependencies..."
@@ -67,7 +66,10 @@ apt-get install -y \
     gdisk \
     dosfstools \
     mtools \
-    pastebinit > /dev/null 2>&1
+    pastebinit \
+    qt5-style-plugins \
+    qttranslations5-l10n \
+    adwaita-qt > /dev/null 2>&1
 
 if [ $? -eq 0 ]; then
     print_success "Dependencies installed successfully"
@@ -155,56 +157,71 @@ print_status "Cleaning up any malformed references..."
 sed -i 's/QtWebEngineWidgetsWidgets/QtWebEngineWidgets/g' "$MAIN_PY"
 sed -i 's/QtWebEngineWidgets\.QWebEngineView/QWebEngineView/g' "$MAIN_PY"
 
-# Step 5: Fix other compatibility issues
-print_status "Applying additional fixes..."
-
-# Fix menu paths
-sed -i "s|share/rescapp/menus|menus|g" "$MAIN_PY"
+# Step 5: Fix menu and path issues
+print_status "Fixing menu paths and directory structure..."
 
 # Create necessary directory structure
-if [ ! -d "$RESCAPP_DIR/share" ]; then
-    mkdir -p "$RESCAPP_DIR/share/rescapp"
-    ln -s "$RESCAPP_DIR/menus" "$RESCAPP_DIR/share/rescapp/menus"
+mkdir -p "$RESCAPP_DIR/share/rescapp"
+mkdir -p "$RESCAPP_DIR/lib"
+
+# Create symlinks for proper path resolution
+if [ ! -L "$RESCAPP_DIR/share/rescapp/menus" ]; then
+    ln -sf "$RESCAPP_DIR/menus" "$RESCAPP_DIR/share/rescapp/menus"
+fi
+if [ ! -L "$RESCAPP_DIR/share/rescapp/plugins" ]; then
+    ln -sf "$RESCAPP_DIR/plugins" "$RESCAPP_DIR/share/rescapp/plugins"
 fi
 
-# Step 6: Apply fixes to other Python files in the project
-print_status "Fixing other Python files..."
+# Fix absolute paths in the Python code
+sed -i "s|os.path.join(os.path.dirname(__file__), '../menus')|\"$RESCAPP_DIR/menus\"|g" "$MAIN_PY"
+sed -i "s|os.path.join(os.path.dirname(__file__), '../share/rescapp/plugins')|\"$RESCAPP_DIR/plugins\"|g" "$MAIN_PY"
 
-find "$RESCAPP_DIR" -name "*.py" -not -path "*/bin/rescapp.py" -exec sed -i \
-    -e 's/QtWebKit\.QWebView/QWebEngineView/g' \
-    -e 's/QtWebKit\.QWebPage/QWebEnginePage/g' \
-    -e 's/QtWebKit\.QWebSettings/QWebEngineSettings/g' \
-    -e 's/QtWebKitWidgets\.QWebView/QWebEngineView/g' \
-    -e 's/QtWebKitWidgets/QtWebEngineWidgets/g' \
-    -e 's/QtWebKit/QtWebEngineWidgets/g' \
-    {} \;
+# Create version file if missing
+if [ ! -f "$RESCAPP_DIR/share/rescapp/VERSION" ]; then
+    echo "0.64" > "$RESCAPP_DIR/share/rescapp/VERSION"
+fi
 
-# Step 7: Create the optimized wrapper script
+# Step 6: Create the optimized wrapper script
 print_status "Creating wrapper script..."
 cat > /usr/local/bin/rescapp <<'EOL'
 #!/bin/bash
-# Rescapp wrapper script with full compatibility
+# Rescapp wrapper script with full GUI compatibility
 
-# Set environment variables for graphics compatibility
+# Set environment variables
+export RESCAPP_DIR="/usr/local/share/rescapp"
+export PYTHONPATH="$RESCAPP_DIR/lib"
+export PATH="$RESCAPP_DIR/bin:$PATH"
+
+# Set Qt environment variables for maximum compatibility
+export QT_DEBUG_PLUGINS=0
+export QT_AUTO_SCREEN_SCALE_FACTOR=0
+export QT_SCALE_FACTOR=1
+export QT_FONT_DPI=96
+export QT_STYLE_OVERRIDE=fusion
 export LIBGL_ALWAYS_SOFTWARE=1
 export QT_XCB_GL_INTEGRATION=none
 export QT_QUICK_BACKEND=software
 export QTWEBENGINE_DISABLE_SANDBOX=1
-export QT_LOGGING_RULES="qt.qpa.xcb.glx.debug=false"
+export QT_LOGGING_RULES="qt.qpa.*=false"
+export XDG_DATA_DIRS="/usr/share:/usr/local/share:$RESCAPP_DIR"
 
-# Warn if running as root in a GUI environment
-if [ "$(id -u)" -eq 0 ] && [ -n "$DISPLAY" ]; then
-    echo "Note: Running as root. Consider running as regular user for GUI applications."
+# Fix for missing icons
+if [ -f "$RESCAPP_DIR/gitrepo-images/rescapp-0.56-main-menu.png" ]; then
+    export XDG_ICON_DIRS="$RESCAPP_DIR/gitrepo-images:$XDG_ICON_DIRS"
 fi
 
-# Set Python path and execute main program
-PYTHONPATH="/usr/local/share/rescapp/lib" \
-exec /usr/bin/python3 /usr/local/share/rescapp/bin/rescapp.py "$@"
+# Execute main program with error handling
+if [ -f "$RESCAPP_DIR/bin/rescapp.py" ]; then
+    exec python3 "$RESCAPP_DIR/bin/rescapp.py" "$@"
+else
+    echo "Error: Rescapp main executable not found!"
+    exit 1
+fi
 EOL
 
 chmod +x /usr/local/bin/rescapp
 
-# Step 8: Create desktop shortcut
+# Step 7: Create desktop shortcut
 print_status "Creating desktop shortcut..."
 cat > /usr/share/applications/rescapp.desktop <<EOL
 [Desktop Entry]
@@ -218,20 +235,29 @@ Categories=System;Utility;Recovery;
 StartupNotify=true
 EOL
 
-# Step 9: Set all necessary permissions
+# Step 8: Set all necessary permissions
 print_status "Setting permissions..."
+chmod -R a+r "$RESCAPP_DIR"
 chmod -R +x "$RESCAPP_DIR/bin"
 find "$RESCAPP_DIR" -name "*.py" -exec chmod +x {} \;
 find "$RESCAPP_DIR" -name "*.sh" -exec chmod +x {} \;
 
-# Step 10: Update icon cache if possible
+# Step 9: Update icon cache if possible
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     print_status "Updating icon cache..."
     gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true
 fi
 
-# Step 11: Validate the installation
+# Step 10: Validate the installation
 print_status "Validating installation..."
+
+# Verify menu files exist
+if [ -f "$RESCAPP_DIR/menus/support/rescatux.lis" ]; then
+    print_success "Menu files found in correct location"
+else
+    print_error "Critical error: Menu files missing!"
+    print_warning "Check the directory: $RESCAPP_DIR/menus/"
+fi
 
 # Test Python syntax
 python3 -m py_compile "$MAIN_PY" 2>/dev/null
@@ -259,15 +285,9 @@ else
     print_warning "Import test failed, but installation may still work"
 fi
 
-# Check for any remaining malformed references
-if grep -q "QtWebEngineWidgetsWidgets" "$MAIN_PY"; then
-    print_warning "Found potential malformed references - cleaning up..."
-    sed -i 's/QtWebEngineWidgetsWidgets/QtWebEngineWidgets/g' "$MAIN_PY"
-fi
-
 # Final status
 echo ""
-print_success "Rescapp installation completed successfully!"
+print_success "Rescapp installation completed successfully with all GUI fixes applied!"
 echo ""
 echo -e "${BLUE}You can now run Rescapp by:${NC}"
 echo "  • Typing 'rescapp' in a terminal (preferred - no sudo needed)"
@@ -278,5 +298,9 @@ echo "  • Installed to: $RESCAPP_DIR"
 echo "  • Wrapper script: /usr/local/bin/rescapp"
 echo "  • Desktop file: /usr/share/applications/rescapp.desktop"
 echo ""
+echo -e "${YELLOW}If you encounter issues:${NC}"
+echo "  • Run with debug: RESCAPP_DEBUG=1 rescapp"
+echo "  • Check paths: ls -l $RESCAPP_DIR/menus/"
+echo ""
 echo -e "${GREEN}Note:${NC} Run as regular user for GUI. App will request sudo when needed."
-print_success "Installation complete - ready to use!"
+print_success "Enjoy your fully functional Rescapp installation!"
