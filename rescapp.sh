@@ -47,3 +47,12 @@ sudo mkdir -p /usr/local/share/rescapp/share/rescapp
 sudo ln -sf /usr/local/share/rescapp/menus /usr/local/share/rescapp/share/rescapp/menus
 
 echo "All fixes applied. Try running 'rescapp' now."
+
+# After running this script, verify the imports:
+# grep -A5 "from PyQt5 import" /usr/local/share/rescapp/bin/rescapp.py
+
+# Check the QWebEngineView replacement:
+# grep "QWebEngineView" /usr/local/share/rescapp/bin/rescapp.py
+
+# then run
+# rescapp
