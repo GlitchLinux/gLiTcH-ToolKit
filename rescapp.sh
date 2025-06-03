@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Rescapp Installation Script for Debian with QtWebKit to QtWebEngine fixes
-# Version 1.1
+# Final Rescapp Installation Script with Proper Wrapper Separation
+# Fixes all known issues including QtWebEngine, OpenGL, and execution problems
 
 # Check if running as root
 if [ "$(id -u)" -ne 0 ]; then
@@ -15,12 +15,9 @@ if ! grep -qi 'debian' /etc/os-release; then
     exit 1
 fi
 
-# Update package lists
-echo "Updating package lists..."
-apt-get update
-
 # Install required dependencies
 echo "Installing dependencies..."
+apt-get update
 apt-get install -y \
     git \
     python3 \
@@ -28,6 +25,10 @@ apt-get install -y \
     python3-pyqt5.qtsvg \
     python3-pyqt5.qtwebengine \
     qt5-qmake \
+    libgl1-mesa-dri \
+    libgl1-mesa-glx \
+    libegl1-mesa \
+    libllvm15 \
     gparted \
     testdisk \
     inxi \
@@ -38,39 +39,55 @@ apt-get install -y \
     mtools \
     pastebinit
 
-# Clone or update the Rescapp repository
+# Set up Rescapp
 RESCAPP_DIR="/usr/local/share/rescapp"
 echo "Setting up Rescapp in $RESCAPP_DIR..."
 
 if [ -d "$RESCAPP_DIR" ]; then
-    echo "Rescapp directory already exists. Pulling latest changes..."
-    cd "$RESCAPP_DIR" || exit 1
-    git pull
-else
-    git clone https://github.com/rescatux/rescapp.git "$RESCAPP_DIR"
-    cd "$RESCAPP_DIR" || exit 1
+    echo "Rescapp directory exists. Cleaning and updating..."
+    rm -rf "$RESCAPP_DIR"
 fi
 
-# Find the main executable
-MAIN_EXECUTABLE="$RESCAPP_DIR/bin/rescapp"
-if [ ! -f "$MAIN_EXECUTABLE" ]; then
-    echo "Error: Could not find main Rescapp executable."
-    exit 1
-fi
+git clone https://github.com/rescatux/rescapp.git "$RESCAPP_DIR"
+cd "$RESCAPP_DIR" || exit 1
 
-# Apply QtWebKit to QtWebEngine fixes
-echo "Applying QtWebKit to QtWebEngine compatibility fixes..."
+# Apply all necessary fixes
+echo "Applying fixes..."
 
-# Fix 1: Main executable
-sed -i 's/from PyQt5 import QtGui, QtCore, QtWebKit, QtWidgets, QtWebKitWidgets/from PyQt5 import QtGui, QtCore, QtWidgets\nfrom PyQt5.QtWebEngineWidgets import QWebEngineView as QWebView/' "$MAIN_EXECUTABLE"
-
-# Fix 2: Find and fix all Python files using QtWebKit
+# 1. Fix QtWebKit to QtWebEngine in all Python files
 find "$RESCAPP_DIR" -type f -name "*.py" -exec sed -i \
     -e 's/QtWebKit/QtWebEngineWidgets/g' \
     -e 's/QWebPage/QWebEnginePage/g' \
     -e 's/QWebSettings/QWebEngineSettings/g' \
     -e 's/QWebView/QWebEngineView/g' \
     {} \;
+
+# 2. Fix main executable imports
+MAIN_PY="$RESCAPP_DIR/bin/rescapp.py"
+mv "$RESCAPP_DIR/bin/rescapp" "$MAIN_PY"
+sed -i 's/from PyQt5 import QtGui, QtCore, QtWebKit, QtWidgets, QtWebKitWidgets/from PyQt5 import QtGui, QtCore, QtWidgets\nfrom PyQt5.QtWebEngineWidgets import QWebEngineView as QWebView/' "$MAIN_PY"
+
+# 3. Fix menu paths
+sed -i "s|share/rescapp/menus|menus|g" "$MAIN_PY"
+if [ ! -d "$RESCAPP_DIR/share" ]; then
+    mkdir -p "$RESCAPP_DIR/share/rescapp"
+    ln -s "$RESCAPP_DIR/menus" "$RESCAPP_DIR/share/rescapp/menus"
+fi
+
+# 4. Create proper wrapper script
+cat > /usr/local/bin/rescapp <<'EOL'
+#!/bin/bash
+# Rescapp wrapper script to ensure proper environment
+
+# Set environment variables for graphics
+export LIBGL_ALWAYS_SOFTWARE=1
+export QT_XCB_GL_INTEGRATION=none
+
+# Set Python path and execute main program
+PYTHONPATH="/usr/local/share/rescapp/lib" \
+/usr/bin/python3 /usr/local/share/rescapp/bin/rescapp.py "$@"
+EOL
+chmod +x /usr/local/bin/rescapp
 
 # Create desktop shortcut
 echo "Creating desktop shortcut..."
@@ -85,38 +102,17 @@ Type=Application
 Categories=System;Utility;
 EOL
 
-# Create symlink in /usr/local/bin
-echo "Creating symlink in /usr/local/bin..."
-ln -sf "$MAIN_EXECUTABLE" /usr/local/bin/rescapp
-
 # Set permissions
 echo "Setting permissions..."
-chmod +x "$MAIN_EXECUTABLE"
+chmod -R +x "$RESCAPP_DIR/bin"
 find "$RESCAPP_DIR" -name "*.py" -exec chmod +x {} \;
 find "$RESCAPP_DIR" -name "*.sh" -exec chmod +x {} \;
 
-# Update icon cache (if desktop environment is present)
+# Update icon cache
 if [ -x "$(command -v gtk-update-icon-cache)" ]; then
     echo "Updating icon cache..."
     gtk-update-icon-cache -f /usr/share/icons/hicolor
 fi
-
-# Create wrapper script as fallback
-echo "Creating compatibility wrapper..."
-cat > /usr/local/bin/rescapp-wrapper <<EOL
-#!/usr/bin/python3
-import os
-import sys
-from PyQt5 import QtGui, QtCore, QtWidgets
-from PyQt5.QtWebEngineWidgets import QWebEngineView as QWebView
-
-sys.path.insert(0, '/usr/local/share/rescapp/bin')
-from rescapp import main
-
-if __name__ == '__main__':
-    main()
-EOL
-chmod +x /usr/local/bin/rescapp-wrapper
 
 echo ""
 echo "Rescapp installation complete with all fixes applied!"
@@ -124,7 +120,4 @@ echo "You can now run Rescapp by:"
 echo "1. Typing 'rescapp' in a terminal"
 echo "2. Or through your application menu (look for 'Rescapp')"
 echo ""
-echo "If you encounter any issues, try running 'rescapp-wrapper' instead."
-echo ""
-echo "Note: Some features require additional configuration or may not work"
-echo "perfectly outside of the Rescatux live environment."
+echo "Note: The software renderer is being used to avoid graphics issues."
