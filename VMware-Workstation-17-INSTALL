@@ -35,7 +35,7 @@ sudo ./VMware-Workstation-Full-*.bundle
 
 # Copy KEYS-Config.txt to user's home directory
 echo "Copying KEYS-Config.txt to home directory..."
-cp KEYS-Config.txt /home/$USER/
+cp KEYS-Config.txt /home/
 
 # Start VMware
 echo "Installation complete. Starting VMware in 5 seconds..."
