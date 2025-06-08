@@ -1,0 +1,3 @@
+git clone https://github.com/GlitchLinux/Qemu_Boot_Me.git
+cd Qemu_Boot_Me && sudo chmod +x QEMU_Boot_ME_BIOS.sh && sudo chmod +x QEMU_Boot_ME_UEFI.sh
+ls
