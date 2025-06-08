@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# Exit immediately if any command fails
+set -e
+
+# Clone the repository into /tmp
+echo "Cloning the VMware Workstation 17 repository..."
+cd /tmp
+git clone https://github.com/GlitchLinux/WMware-Workstation-17.git
+cd WMware-Workstation-17
+
+# Ensure Git LFS is installed and pull the large file
+echo "Checking for Git LFS and downloading VMware package..."
+if ! command -v git-lfs &> /dev/null; then
+    echo "Installing Git LFS..."
+    sudo apt-get update
+    sudo apt-get install -y git-lfs
+    git lfs install
+fi
+git lfs pull
+
+# Extract the .tar.lzma archive
+echo "Extracting VMware-Workstation-17-LINUX.tar.lzma..."
+tar --lzma -xvf VMware-Workstation-17-LINUX.tar.lzma
+
+# Install required dependencies
+echo "Installing system dependencies..."
+sudo apt-get update
+sudo apt-get dist-upgrade -y
+sudo apt-get install -y linux-headers-$(uname -r)
+
+# Install VMware Workstation
+echo "Installing VMware Workstation..."
+sudo ./VMware-Workstation-Full-*.bundle
+
+# Copy KEYS-Config.txt to user's home directory
+echo "Copying KEYS-Config.txt to home directory..."
+cp KEYS-Config.txt /home/$USER/
+
+# Start VMware
+echo "Installation complete. Starting VMware in 5 seconds..."
+sleep 5
+vmware
