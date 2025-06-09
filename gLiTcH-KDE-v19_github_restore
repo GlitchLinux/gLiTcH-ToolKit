@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Exit immediately on error
-set -e
-
 # Variables
 REPO_URL="https://github.com/GlitchLinux/gLiTcH-Linux-KDE-v19.git"
 CLONE_DIR="/tmp/gLiTcH-Linux-KDE-v19"
