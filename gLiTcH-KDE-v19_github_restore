@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# Exit immediately on error
+set -e
+
+# Variables
+REPO_URL="https://github.com/GlitchLinux/gLiTcH-Linux-KDE-v19.git"
+CLONE_DIR="/tmp/gLiTcH-Linux-KDE-v19"
+OUTPUT_ISO="gLiTcH-Linux-KDE-v19.iso"
+DEST_DIR="/home"
+
+# Step 1: Clean up any previous clone
+echo "[*] Cleaning up previous clone (if any)..."
+rm -rf "$CLONE_DIR"
+
+# Step 2: Clone the repository
+echo "[*] Cloning ISO split repo to $CLONE_DIR..."
+git clone "$REPO_URL" "$CLONE_DIR"
+
+# Step 3: Rebuild the ISO from split parts
+echo "[*] Rebuilding the ISO using cat..."
+cd "$CLONE_DIR"
+cat ${OUTPUT_ISO}.* > "$OUTPUT_ISO"
+
+# Step 4: Copy the ISO to /home
+echo "[*] Copying rebuilt ISO to $DEST_DIR..."
+cp "$OUTPUT_ISO" "$DEST_DIR"
+
+echo "[✔] Done. ISO available at $DEST_DIR/$OUTPUT_ISO"
