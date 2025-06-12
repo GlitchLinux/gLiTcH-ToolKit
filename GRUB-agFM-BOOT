@@ -159,19 +159,7 @@ echo "Extracting and copying files from repository..."
 
 # Extract MULTIBOOTFILES without preserving ownership
 echo "Extracting MULTIBOOTFILES..."
-tar --lzma -xvf "$REPO_DIR/MULTIBOOTFILES.tar.lzma" --no-same-owner -C "$MOUNT_POINT"
-
-# Copy specific files from repository
-echo "Copying additional files..."
-cp "$REPO_DIR/grubfmx64.efi" "$MOUNT_POINT/EFI/BOOT/"
-cp "$REPO_DIR/grubfmia32.efi" "$MOUNT_POINT/EFI/BOOT/"
-cp "$REPO_DIR/grubfmaa64.efi" "$MOUNT_POINT/EFI/BOOT/"
-cp "$REPO_DIR/grubfm.elf" "$MOUNT_POINT/boot/grub/"
-cp "$REPO_DIR/grubfm_multiarch.iso" "$MOUNT_POINT/boot/grub/"
-cp "$REPO_DIR/loadfm" "$MOUNT_POINT/boot/grub/"
-cp "$REPO_DIR/fmldr" "$MOUNT_POINT/"
-cp "$REPO_DIR/ventoy.dat" "$MOUNT_POINT/"
-cp "$REPO_DIR/efi.img" "$MOUNT_POINT/"
+tar --lzma -xvf "$REPO_DIR/agFM-Custom-Bootfiles.tar.lzma" --no-same-owner -C "$MOUNT_POINT"
 
 # Set up UEFI fallback entries
 echo "Setting up UEFI fallback entries..."
@@ -180,6 +168,7 @@ cp "$MOUNT_POINT/EFI/BOOT/grubfmia32.efi" "$MOUNT_POINT/EFI/BOOT/bootia32.efi"
 cp "$MOUNT_POINT/EFI/BOOT/grubfmaa64.efi" "$MOUNT_POINT/EFI/BOOT/bootaa64.efi"
 
 # Clean up
+echo "  "
 echo "Cleaning up..."
 umount "$MOUNT_POINT"
 rm -rf "$MOUNT_POINT"
@@ -200,4 +189,3 @@ if [[ "$TARGET" == *.img ]]; then
     echo "You can test the image with:"
     echo "qemu-system-x86_64 -hda $TARGET -m 2G"
 fi
-
