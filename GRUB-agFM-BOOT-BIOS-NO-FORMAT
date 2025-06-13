@@ -57,7 +57,8 @@ done
 
 # Confirm with user
 echo ""
-echo "WARNING: This will install grub agFM (BIOS) on $USB_PARTITION"
+echo "WARNING: This will modify $USB_PARTITION"
+echo "The partition will NOT be formatted, but GRUB will be installed for BIOS."
 read -rp "Are you sure you want to continue? (y/N): " confirm
 if [ "${confirm,,}" != "y" ]; then
     # Clean up loop device if we created one
@@ -71,7 +72,7 @@ fi
 # Install required packages
 echo "Installing required packages..."
 apt-get update
-apt-get install grub-pc-bin git wget unzip mtools lzma
+apt-get install -y grub-pc-bin git wget unzip mtools lzma
 
 # Clone the repository
 echo "Cloning repository..."
@@ -132,12 +133,6 @@ echo "Extracting and copying files from repository..."
 echo "Extracting MULTIBOOTFILES..."
 tar --lzma -xvf "$REPO_DIR/agFM-Custom-Bootfiles.tar.lzma" --no-same-owner -C "$MOUNT_POINT"
 
-# Set up UEFI fallback entries
-echo "Setting up UEFI fallback entries..."
-cp "$MOUNT_POINT/EFI/BOOT/grubfmx64.efi" "$MOUNT_POINT/EFI/BOOT/bootx64.efi"
-cp "$MOUNT_POINT/EFI/BOOT/grubfmia32.efi" "$MOUNT_POINT/EFI/BOOT/bootia32.efi"
-cp "$MOUNT_POINT/EFI/BOOT/grubfmaa64.efi" "$MOUNT_POINT/EFI/BOOT/bootaa64.efi"
-
 # Clean up
 echo "  "
 echo "Cleaning up..."
@@ -154,5 +149,8 @@ echo ""
 echo "Success! Target $USB_PARTITION is now ready with:"
 echo "1. Direct agFM boot for BIOS"
 echo "2. Pre-configured boot menus for various ISOs and tools"
-echo "4. Support for x86_64, i386"
-sleep 10 && exit
+if [[ "$TARGET" == *.img ]]; then
+    echo ""
+    echo "You can test the image with:"
+    echo "qemu-system-x86_64 -hda $TARGET -m 2G"
+fi
