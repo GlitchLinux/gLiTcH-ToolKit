@@ -130,8 +130,6 @@ EOF
 echo "Extracting and copying files from repository..."
 
 # Extract MULTIBOOTFILES without preserving ownership
-echo "Extracting MULTIBOOTFILES..."
-tar --lzma -xvf "$REPO_DIR/agFM-Custom-Bootfiles.tar.lzma" --no-same-owner -C "$MOUNT_POINT"
 
 # Clean up
 echo "  "
