@@ -72,13 +72,7 @@ fi
 # Install required packages
 echo "Installing required packages..."
 apt-get update
-apt-get install -y grub-pc-bin git wget unzip mtools lzma
-
-# Clone the repository
-echo "Cloning repository..."
-REPO_DIR="Multibooters-agFM-rEFInd-GRUBFM"
-rm -rf "$REPO_DIR" 2>/dev/null
-git clone https://github.com/GlitchLinux/Multibooters-agFM-rEFInd-GRUBFM.git "$REPO_DIR"
+apt-get install -y grub-pc-bin wget p7zip-full
 
 # Prepare the USB partition
 echo "Preparing target partition..."
@@ -107,7 +101,7 @@ else
     grub-install --target=i386-pc --boot-directory="$MOUNT_POINT/boot" --force "$USB_DEVICE"
 fi
 
-# Create BIOS GRUB configuration that directly boots agFM
+# Create BIOS GRUB configuration
 echo "Creating BIOS GRUB configuration..."
 cat > "$MOUNT_POINT/boot/grub/grub.cfg" <<'EOF'
 # BIOS GRUB CONFIG - DO NOT EDIT MANUALLY
@@ -126,17 +120,23 @@ else
 fi
 EOF
 
-# Extract and copy files from repository without preserving ownership
-echo "Extracting and copying files from repository..."
+# Download and extract the essential files
+echo "Downloading and extracting GRUBFM ISO..."
+mkdir -p "$MOUNT_POINT/boot/grub"
+cd "$MOUNT_POINT/boot/grub"
+wget https://github.com/GlitchLinux/Multibooters-agFM-rEFInd-GRUBFM/raw/main/grubfm_multiarch.iso
 
-# Extract MULTIBOOTFILES without preserving ownership
+# Extract ISO contents to /boot/grub/
+echo "Extracting ISO contents..."
+7z x grubfm_multiarch.iso -o"$MOUNT_POINT/boot/grub" > /dev/null
+
+# Clean up ISO file if desired (comment this line to keep the ISO)
+# rm grubfm_multiarch.iso
 
 # Clean up
-echo "  "
 echo "Cleaning up..."
 umount "$MOUNT_POINT"
 rm -rf "$MOUNT_POINT"
-rm -rf "$REPO_DIR"
 
 # Detach loop device if we used one
 if [ -n "$LOOP_DEV" ]; then
@@ -146,7 +146,7 @@ fi
 echo ""
 echo "Success! Target $USB_PARTITION is now ready with:"
 echo "1. Direct agFM boot for BIOS"
-echo "2. Pre-configured boot menus for various ISOs and tools"
+echo "2. All GRUBFM files extracted to /boot/grub/"
 if [[ "$TARGET" == *.img ]]; then
     echo ""
     echo "You can test the image with:"
