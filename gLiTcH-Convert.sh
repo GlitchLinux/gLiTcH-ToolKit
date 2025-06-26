@@ -30,6 +30,77 @@ error() {
     exit 1
 }
 
+# Function to download and rebuild ISO from GitHub
+download_and_rebuild_iso() {
+    log "Downloading and rebuilding ISO from GitHub repository..."
+    
+    # Variables
+    REPO_URL="https://github.com/GlitchLinux/gLiTcH-Linux-KDE-v19.git"
+    CLONE_DIR="/root/gLiTcH-Linux-KDE-v19"
+    OUTPUT_ISO="gLiTcH-Linux-KDE-v19.iso"
+    
+    # Clean up any previous clone
+    if [ -d "$CLONE_DIR" ]; then
+        log "Cleaning up previous clone..."
+        rm -rf "$CLONE_DIR"
+    fi
+    
+    # Clone the repository to home directory
+    log "Cloning ISO split repo to $CLONE_DIR..."
+    echo -e "${BLUE}"
+    if ! git clone "$REPO_URL" "$CLONE_DIR"; then
+        echo -e "${NC}"
+        error "Failed to clone repository. Check your disk space and internet connection."
+    fi
+    echo -e "${NC}"
+    
+    # Change to the cloned directory
+    cd "$CLONE_DIR" || error "Failed to change to clone directory"
+    
+    # Check if split files exist
+    if ! ls ${OUTPUT_ISO}.* >/dev/null 2>&1; then
+        error "No split ISO files found in the repository!"
+    fi
+    
+    # Rebuild with error checking
+    log "Rebuilding the ISO using cat..."
+    if ! cat ${OUTPUT_ISO}.* > "/tmp/${OUTPUT_ISO}"; then
+        error "Failed to rebuild ISO. Check disk space and file permissions."
+    fi
+    
+    # Verify the output file exists
+    if [[ -f "/tmp/${OUTPUT_ISO}" ]]; then
+        log "Success! ISO available at /tmp/${OUTPUT_ISO}"
+        log "SHA256 checksum:"
+        sha256sum "/tmp/${OUTPUT_ISO}"
+    else
+        error "ISO creation failed - no output file found"
+    fi
+    
+    # Clean up split files and repository
+    log "Cleaning up split files and repository..."
+    rm -rf "$CLONE_DIR"
+    
+    log "ISO download and rebuild completed."
+}
+
+
+# Function for logging
+log() {
+    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] $1${NC}"
+}
+
+# Function for warnings
+warn() {
+    echo -e "${YELLOW}[WARNING] $1${NC}" >&2
+}
+
+# Function for errors
+error() {
+    echo -e "${RED}[ERROR] $1${NC}" >&2
+    exit 1
+}
+
 # Check if script is run as root
 if [ "$(id -u)" != "0" ]; then
     error "This script must be run as root"
@@ -485,6 +556,9 @@ if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
     exit 0
 fi
 
+# First download and rebuild the ISO
+download_and_rebuild_iso
+
 # Check system compatibility
 check_compatibility
 
@@ -493,49 +567,6 @@ check_disk_space
 
 # Create recovery script (do this early)
 create_recovery_script
-
-
-#!/bin/bash
-
-# Variables
-REPO_URL="https://github.com/GlitchLinux/gLiTcH-Linux-KDE-v19.git"
-CLONE_DIR="$HOME/gLiTcH-Linux-KDE-v19"  # Now in home directory
-OUTPUT_ISO="gLiTcH-Linux-KDE-v19.iso"
-DEST_DIR="$HOME"
-
-# Step 1: Clean up any previous clone
-echo "[*] Cleaning up previous clone (if any)..."
-rm -rf "$CLONE_DIR"
-
-# Step 2: Clone the repository to home directory
-echo "[*] Cloning ISO split repo to $CLONE_DIR..."
-if ! git clone "$REPO_URL" "$CLONE_DIR"; then
-    echo "[!] Failed to clone repository. Check your disk space and internet connection."
-    exit 1
-fi
-
-# Step 3: Rebuild the ISO from split parts
-echo "[*] Rebuilding the ISO using cat..."
-cd "$CLONE_DIR" || exit 1
-
-# Check if split files exist
-if ! ls ${OUTPUT_ISO}.* >/dev/null 2>&1; then
-    echo "[!] No split ISO files found in the repository!"
-    exit 1
-fi
-
-# Rebuild with error checking
-if ! cat ${OUTPUT_ISO}.* > "${DEST_DIR}/${OUTPUT_ISO}"; then
-    echo "[!] Failed to rebuild ISO. Check disk space and file permissions."
-    exit 1
-fi
-
-# Verify the output file exists
-if [[ -f "${DEST_DIR}/${OUTPUT_ISO}" ]]; then
-    echo "[✔] Success! ISO available at ${DEST_DIR}/${OUTPUT_ISO}"
-
-sudo mv "${DEST_DIR}/${OUTPUT_ISO}" /tmp/
-sudo rm -r "${DEST_DIR}"
 
 # Download and rebuild the ISO if needed
 log "Checking for gLiTcH Linux ISO..."
