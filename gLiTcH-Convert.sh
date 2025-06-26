@@ -494,6 +494,49 @@ check_disk_space
 # Create recovery script (do this early)
 create_recovery_script
 
+
+#!/bin/bash
+
+# Variables
+REPO_URL="https://github.com/GlitchLinux/gLiTcH-Linux-KDE-v19.git"
+CLONE_DIR="$HOME/gLiTcH-Linux-KDE-v19"  # Now in home directory
+OUTPUT_ISO="gLiTcH-Linux-KDE-v19.iso"
+DEST_DIR="$HOME"
+
+# Step 1: Clean up any previous clone
+echo "[*] Cleaning up previous clone (if any)..."
+rm -rf "$CLONE_DIR"
+
+# Step 2: Clone the repository to home directory
+echo "[*] Cloning ISO split repo to $CLONE_DIR..."
+if ! git clone "$REPO_URL" "$CLONE_DIR"; then
+    echo "[!] Failed to clone repository. Check your disk space and internet connection."
+    exit 1
+fi
+
+# Step 3: Rebuild the ISO from split parts
+echo "[*] Rebuilding the ISO using cat..."
+cd "$CLONE_DIR" || exit 1
+
+# Check if split files exist
+if ! ls ${OUTPUT_ISO}.* >/dev/null 2>&1; then
+    echo "[!] No split ISO files found in the repository!"
+    exit 1
+fi
+
+# Rebuild with error checking
+if ! cat ${OUTPUT_ISO}.* > "${DEST_DIR}/${OUTPUT_ISO}"; then
+    echo "[!] Failed to rebuild ISO. Check disk space and file permissions."
+    exit 1
+fi
+
+# Verify the output file exists
+if [[ -f "${DEST_DIR}/${OUTPUT_ISO}" ]]; then
+    echo "[✔] Success! ISO available at ${DEST_DIR}/${OUTPUT_ISO}"
+
+sudo mv "${DEST_DIR}/${OUTPUT_ISO}" /tmp/
+sudo rm -r "${DEST_DIR}"
+
 # Download and rebuild the ISO if needed
 log "Checking for gLiTcH Linux ISO..."
 if ! verify_iso; then
