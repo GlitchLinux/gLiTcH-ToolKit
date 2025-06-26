@@ -10,12 +10,10 @@
     
     # Clean up any previous clone
     if [ -d "$CLONE_DIR" ]; then
-        log "Cleaning up previous clone..."
         rm -rf "$CLONE_DIR"
     fi
     
     # Clone the repository to home directory with progress
-    log "Cloning ISO split repo to $CLONE_DIR..."
     if ! git clone --progress "$REPO_URL" "$CLONE_DIR" 2>&1 | while read -r line; do
         echo -ne "${BLUE}${line}\r${NC}"
     done; then
@@ -32,25 +30,19 @@
     fi
     
     # Rebuild with error checking
-    log "Rebuilding the ISO using cat..."
     if ! cat ${OUTPUT_ISO}.* > "/tmp/${OUTPUT_ISO}"; then
         error "Failed to rebuild ISO. Check disk space and file permissions."
     fi
     
     # Verify the output file exists
     if [[ -f "/tmp/${OUTPUT_ISO}" ]]; then
-        log "Success! ISO available at /tmp/${OUTPUT_ISO}"
-        log "SHA256 checksum:"
         sha256sum "/tmp/${OUTPUT_ISO}"
     else
         error "ISO creation failed - no output file found"
     fi
     
-    # Clean up split files and repository
-    log "Cleaning up split files and repository..."
-    rm -rf "$CLONE_DIR"
+    # Clean up split files and repository    rm -rf "$CLONE_DIR"
     
-    log "ISO download and rebuild completed."
 }
 
 set -e  # Exit immediately if a command exits with a non-zero status
