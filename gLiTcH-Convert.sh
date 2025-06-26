@@ -45,14 +45,14 @@ download_and_rebuild_iso() {
         rm -rf "$CLONE_DIR"
     fi
     
-    # Clone the repository to home directory
+    # Clone the repository to home directory with progress
     log "Cloning ISO split repo to $CLONE_DIR..."
-    echo -e "${BLUE}"
-    if ! git clone "$REPO_URL" "$CLONE_DIR"; then
-        echo -e "${NC}"
+    if ! git clone --progress "$REPO_URL" "$CLONE_DIR" 2>&1 | while read -r line; do
+        echo -ne "${BLUE}${line}\r${NC}"
+    done; then
         error "Failed to clone repository. Check your disk space and internet connection."
     fi
-    echo -e "${NC}"
+    echo ""  # Add a newline after the progress
     
     # Change to the cloned directory
     cd "$CLONE_DIR" || error "Failed to change to clone directory"
@@ -83,7 +83,6 @@ download_and_rebuild_iso() {
     
     log "ISO download and rebuild completed."
 }
-
 
 # Function for logging
 log() {
