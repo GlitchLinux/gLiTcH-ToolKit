@@ -4,37 +4,6 @@
 # This script converts a running Debian installation to gLiTcH Linux KDE v19.0
 # WARNING: This script modifies system files and should be used with caution
 
-set -e  # Exit immediately if a command exits with a non-zero status
-set -o pipefail  # Return value of a pipeline is the value of the last command to exit with non-zero status
-
-# Color codes for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Function for logging
-log() {
-    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] $1${NC}"
-}
-
-# Function for warnings
-warn() {
-    echo -e "${YELLOW}[WARNING] $1${NC}" >&2
-}
-
-# Function for errors
-error() {
-    echo -e "${RED}[ERROR] $1${NC}" >&2
-    exit 1
-}
-
-# Function to download and rebuild ISO from GitHub
-download_and_rebuild_iso() {
-    log "Downloading and rebuilding ISO from GitHub repository..."
-    
-    # Variables
     REPO_URL="https://github.com/GlitchLinux/gLiTcH-Linux-KDE-v19.git"
     CLONE_DIR="/root/gLiTcH-Linux-KDE-v19"
     OUTPUT_ISO="gLiTcH-Linux-KDE-v19.iso"
@@ -83,6 +52,33 @@ download_and_rebuild_iso() {
     
     log "ISO download and rebuild completed."
 }
+
+set -e  # Exit immediately if a command exits with a non-zero status
+set -o pipefail  # Return value of a pipeline is the value of the last command to exit with non-zero status
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function for logging
+log() {
+    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] $1${NC}"
+}
+
+# Function for warnings
+warn() {
+    echo -e "${YELLOW}[WARNING] $1${NC}" >&2
+}
+
+# Function for errors
+error() {
+    echo -e "${RED}[ERROR] $1${NC}" >&2
+    exit 1
+}
+
 
 # Function for logging
 log() {
@@ -555,8 +551,6 @@ if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
     exit 0
 fi
 
-# First download and rebuild the ISO
-download_and_rebuild_iso
 
 # Check system compatibility
 check_compatibility
