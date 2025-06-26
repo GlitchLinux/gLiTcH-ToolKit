@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Enhanced Debian to gLiTcH Linux Converter
-# This script converts a running Debian installation to gLiTcH Linux KDE v11.0
+# This script converts a running Debian installation to gLiTcH Linux KDE v19.0
 # WARNING: This script modifies system files and should be used with caution
 
 set -e  # Exit immediately if a command exits with a non-zero status
@@ -35,11 +35,9 @@ if [ "$(id -u)" != "0" ]; then
     error "This script must be run as root"
 fi
 
-#Install "sudo" - required if its a fresh debian netinstall.
-apt update && apt install sudo
-
-#Install dependencies
-sudo apt install -y bash wget rsync mount util-linux squashfs-tools coreutils dpkg apt initramfs-tools grub-common grep sed tar pciutils mokutil cryptsetup git
+# Install dependencies
+log "Installing required dependencies..."
+apt update && apt install -y sudo bash wget rsync mount util-linux squashfs-tools coreutils dpkg apt initramfs-tools grub-common grep sed tar pciutils mokutil cryptsetup git
 
 # Check for required tools
 for cmd in wget rsync mount umount mktemp unsquashfs md5sum dpkg apt update-initramfs update-grub git; do
@@ -59,9 +57,12 @@ BACKUP_DIR="/root/debian-backup-$(date +%Y%m%d%H%M%S)"
 PACKAGE_LIST_FILE="$TEMP_DIR/glitch-packages.list"
 CURRENT_PACKAGE_LIST="$TEMP_DIR/current-packages.list"
 NEW_USER="x"
-NEW_PASSWORD="9880"
 NEW_HOSTNAME="gLiTcH"
 LOGFILE="/var/log/glitch-conversion.log"
+
+# Prompt for new password
+read -sp "Enter new password for user '$NEW_USER': " NEW_PASSWORD
+echo ""
 
 # Create required directories
 mkdir -p "$ISO_MOUNT" "$SQUASHFS_MOUNT" "$BACKUP_DIR"
@@ -297,9 +298,12 @@ download_and_rebuild_iso() {
     
     # Clone the repository to home directory
     log "Cloning ISO split repo to $CLONE_DIR..."
-    if ! git clone "$REPO_URL" "$CLONE_DIR"; then
+    echo -e "${BLUE}"
+    git clone "$REPO_URL" "$CLONE_DIR" || {
+        echo -e "${NC}"
         error "Failed to clone repository. Check your disk space and internet connection."
-    fi
+    }
+    echo -e "${NC}"
     
     # Change to the cloned directory
     cd "$CLONE_DIR" || error "Failed to change to clone directory"
@@ -435,8 +439,6 @@ show_progress() {
 }
 
 # Start of main execution
-#log "=== gLiTcH Linux KDE CONVERSION Script ==="
-#log "Starting conversion from Debian to gLiTcH Linux..."
 echo -e "${GREEN}  ${NC}"
 echo -e "${GREEN}  ${NC}"
 echo -e "${GREEN}  ${NC}"
@@ -453,27 +455,26 @@ echo -e "${GREEN}| |   /____ / ||    |     |||    |   |\`   |          | |   /__
 echo -e "${GREEN} \|___|    | / |____|_____|/|____|   |____|           \|___|    | /|____| |____|${NC}"
 echo -e "${GREEN}   \( |____|/    \(    )/     \(       \(               \( |____|/   \(     )/${NC}"  
 echo -e "${GREEN}    '   )/        '    '       '        '                '   )/       '     '${NC}"   
-echo -e "${GREEN}       ____         ____  _____   ______    ____   ___                   _${NC}"                         
-echo -e "${GREEN}      |    |       |    ||\    \ |\     \  |    | |    |_____      _____${NC}"        
-echo -e "${GREEN}      |    |       |    | \\    \| \     \ |    | |    |\    \    /    /${NC}"        
-echo -e "${GREEN}      |    |       |    |  \|    \  \     ||    | |    | \    \  /    /${NC}"         
-echo -e "${GREEN}      |    |  ____ |    |   |     \  |    ||    | |    |  \____\/____/${NC}"          
-echo -e "${GREEN}      |    | |    ||    |   |      \ |    ||    | |    |  /    /\    \ ${NC}"          
-echo -e "${GREEN}      |    | |    ||    |   |    |\ \|    ||    | |    | /    /  \    \ ${NC}"         
-echo -e "${GREEN}      |____|/____/||____|   |____||\_____/||\___\_|____|/____/ /\ \____\ ${NC}"        
-echo -e "${GREEN}      |    |     |||    |   |    |/ \|   ||| |    |    ||    |/  \|    |${NC}"        
-echo -e "${GREEN}      |____|_____|/|____|   |____|   |___|/ \|____|____||____|    |____|${NC}"        
-echo -e "${GREEN}        \(    )/     \(       \(       )/      \(   )/    \(        )/${NC}"          
-echo -e "${GREEN}         '    '       '        '       '        '   '      '        '${NC}"           
+echo -e "${GREEN}        ____         ____  _____   ______    ____   ___                   _${NC}"                         
+echo -e "${GREEN}       |    |       |    ||\    \ |\     \  |    | |    |_____      _____${NC}"        
+echo -e "${GREEN}       |    |       |    | \\    \| \     \ |    | |    |\    \    /    /${NC}"        
+echo -e "${GREEN}       |    |       |    |  \|    \  \     ||    | |    | \    \  /    /${NC}"         
+echo -e "${GREEN}       |    |  ____ |    |   |     \  |    ||    | |    |  \____\/____/${NC}"          
+echo -e "${GREEN}       |    | |    ||    |   |      \ |    ||    | |    |  /    /\    \ ${NC}"          
+echo -e "${GREEN}       |    | |    ||    |   |    |\ \|    ||    | |    | /    /  \    \ ${NC}"         
+echo -e "${GREEN}       |____|/____/||____|   |____||\_____/||\___\_|____|/____/ /\ \____\ ${NC}"        
+echo -e "${GREEN}       |    |     |||    |   |    |/ \|   ||| |    |    ||    |/  \|    |${NC}"        
+echo -e "${GREEN}       |____|_____|/|____|   |____|   |___|/ \|____|____||____|    |____|${NC}"        
+echo -e "${GREEN}         \(    )/     \(       \(       )/      \(   )/    \(        )/${NC}"          
+echo -e "${GREEN}          '    '       '        '       '        '   '      '        '${NC}"           
 echo -e "${GREEN}                                                                      ${NC}"
 echo -e "${YELLOW}                  | FULL SYSTEM CONVERSION SCRIPT |${NC}"
 echo -e "${YELLOW}                  |  https://www.glitchlinux.wtf  | ${NC}"
 echo -e "${GREEN}  ${NC}"
 
-
 # Display warning and get confirmation
 echo -e "${GREEN}  ${NC}"
-echo -e "${RED}WARNING: This script will convert your Debian installation to gLiTcH Linux.${NC}"
+echo -e "${RED}WARNING: This script will convert your Debian installation to gLiTcH Linux v19.${NC}"
 echo -e "${GREEN}  ${NC}"
 echo "This is a potentially dangerous operation that could make your system unbootable."
 echo "Please ensure you have a backup of important data."
@@ -520,7 +521,7 @@ handle_packages &
 PACKAGE_PID=$!
 show_progress $PACKAGE_PID "Processing package information"
 
-# Backup critical system files in background
+# Backup critical system files (excluding user data)
 log "Backing up critical system files..."
 {
     critical_files=(
@@ -528,9 +529,6 @@ log "Backing up critical system files..."
         "/etc/crypttab"
         "/etc/default/grub"
         "/boot"
-        "/etc/passwd"
-        "/etc/shadow"
-        "/etc/group"
         "/etc/hostname"
         "/etc/hosts"
         "/etc/resolv.conf"
@@ -568,6 +566,7 @@ cat > "$TEMP_DIR/rsync-exclude" << "EOF"
 /var/lib/dpkg/status
 /var/lib/dpkg/available
 /var/log/*
+/home/*
 EOF
 
 # Copy files from gLiTcH Linux to the current system
@@ -579,7 +578,6 @@ rsync -av --exclude-from="$TEMP_DIR/rsync-exclude" "$SQUASHFS_MOUNT/" / || {
 
 # Integrate package databases
 log "Integrating package management databases..."
-# Merge package status files rather than replacing
 if [ -f "$SQUASHFS_MOUNT/var/lib/dpkg/status" ]; then
     # Ensure essential packages are marked as installed
     for pkg in $(cat "$TEMP_DIR/essential-packages.list"); do
@@ -664,6 +662,7 @@ if [ -d "$SQUASHFS_MOUNT/usr/share/plasma" ] || [ -d "$SQUASHFS_MOUNT/usr/share/
     chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER"
     log "KDE Plasma environment setup completed."
 fi
+
 # Manually apply gLiTcH theme if lookandfeeltool isn't available
 if [ -f "/usr/share/plasma/look-and-feel/org.gLiTcH.desktop/contents/defaults" ]; then
     log "Manually applying gLiTcH theme..."
@@ -713,18 +712,15 @@ fi
 
 if [ -f "$TEMP_DIR/initramfs_issues" ]; then
     log "Attempting additional initramfs fixes..."
-    # Try with more verbose output to diagnose issues
     update-initramfs -v -u -k all || warn "Initramfs update is still having issues. Check the log for details."
 fi
 
 if [ -f "$TEMP_DIR/reinstall_nvidia" ]; then
     log "Marking NVIDIA drivers for reinstallation after reboot..."
-    # Create a startup script to reinstall NVIDIA drivers
     cat > /etc/rc.local << EOF
 #!/bin/bash
 apt-get update
 apt-get install --reinstall nvidia-driver
-# Remove this file after execution
 rm -f /etc/rc.local
 exit 0
 EOF
