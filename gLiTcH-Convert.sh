@@ -435,7 +435,7 @@ show_progress() {
 }
 
 # Start of main execution
-#log "=== gLiTcH Linux KDE v13.0 Installation Script ==="
+#log "=== gLiTcH Linux KDE CONVERSION Script ==="
 #log "Starting conversion from Debian to gLiTcH Linux..."
 echo -e "${GREEN}  ${NC}"
 echo -e "${GREEN}  ${NC}"
@@ -765,7 +765,7 @@ EOF
 fi
 
 log "=== Installation Complete ==="
-log "Your system has been converted to gLiTcH Linux KDE v13.0."
+log "Your system has been converted to gLiTcH Linux KDE"
 log "A backup of critical system files has been saved to $BACKUP_DIR"
 log "A recovery script has been created at $BACKUP_DIR/recovery.sh"
 echo -e "${GREEN}  ${NC}"
