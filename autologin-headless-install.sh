@@ -1,29 +1,60 @@
 #!/bin/bash
 
-# Automatically get the current user (who invoked sudo or the script)
-CURRENT_USER=$(logname)
-
-# Check if the user exists (just to be safe)
-if ! id "$CURRENT_USER" &>/dev/null; then
-    echo "Error: Current user '$CURRENT_USER' does not exist or cannot be determined!"
+# Check if running as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root" >&2
     exit 1
 fi
 
-# Create systemd override for getty@tty1 to enable autologin
-echo "Configuring autologin for $CURRENT_USER..."
-sudo mkdir -p /etc/systemd/system/getty@tty1.service.d/
+# Check if system is using systemd
+if ! command -v systemctl >/dev/null 2>&1; then
+    echo "This script requires systemd" >&2
+    exit 1
+fi
 
-cat <<EOF | sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf > /dev/null
+# Get the default target user (usually the first user created)
+TARGET_USER=$(ls /home | head -n 1)
+
+if [ -z "$TARGET_USER" ]; then
+    echo "No user found in /home directory" >&2
+    exit 1
+fi
+
+echo "Configuring autologin for user: $TARGET_USER"
+
+# Configure getty automatic login for tty1 (regular console)
+mkdir -p /etc/systemd/system/getty@tty1.service.d
+
+cat > /etc/systemd/system/getty@tty1.service.d/override.conf <<EOF
 [Service]
 ExecStart=
-ExecStart=-/sbin/agetty --autologin $CURRENT_USER --noclear %I \$TERM
+ExecStart=-/sbin/agetty --autologin $TARGET_USER --noclear %I \$TERM
 EOF
 
-# Reload systemd and restart getty service
-sudo systemctl daemon-reload
-sudo systemctl restart getty@tty1
+# Configure getty automatic login for ttyS0 (serial console)
+mkdir -p /etc/systemd/system/serial-getty@ttyS0.service.d
 
-# Success message
-sleep 3
-echo "Autologin configured successfully for $CURRENT_USER"
-echo "$CURRENT_USER will be logged in automatically on next reboot."
+cat > /etc/systemd/system/serial-getty@ttyS0.service.d/override.conf <<EOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $TARGET_USER --keep-baud 115200,38400,9600 %I \$TERM
+EOF
+
+# Enable serial console if not already enabled
+if ! grep -q "console=ttyS0" /etc/default/grub; then
+    echo "Adding serial console to GRUB configuration..."
+    sed -i 's/GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 console=ttyS0,115200"/' /etc/default/grub
+    update-grub
+fi
+
+# Reload systemd to apply changes
+systemctl daemon-reload
+
+echo "Autologin configuration complete for:"
+echo "- Regular console (tty1)"
+echo "- Serial console (ttyS0 @ 115200 baud)"
+echo ""
+echo "The system will need to be rebooted for changes to take effect."
+echo "After reboot, you should be able to login via:"
+echo "1. Direct console access (autologin to $TARGET_USER)"
+echo "2. Serial connection (autologin to $TARGET_USER at 115200 baud)"
