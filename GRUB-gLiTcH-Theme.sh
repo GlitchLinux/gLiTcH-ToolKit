@@ -39,7 +39,7 @@ chmod 755 "$GRUB_CONFIG_DEST"
 
 # Download and set background
 echo "Setting GRUB background..."
-wget -q "https://raw.githubusercontent.com/GlitchLinux/Grub-Custom-Files/main/grub.d/splash.png" -O "$GRUB_BACKGROUND" || {
+wget -q "https://raw.githubusercontent.com/GlitchLinux/Grub-Custom-Files/refs/heads/main/boot/splash.png" -O "$GRUB_BACKGROUND" || {
     echo "Failed to download background image" >&2
 }
 
