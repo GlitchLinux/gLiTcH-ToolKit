@@ -12,12 +12,22 @@ if ! command -v systemctl >/dev/null 2>&1; then
     exit 1
 fi
 
-# Get the default target user (usually the first user created)
-TARGET_USER=$(ls /home | head -n 1)
+# Get username for autologin
+read -p "Enter username for autologin (NOT root unless absolutely necessary): " TARGET_USER
 
-if [ -z "$TARGET_USER" ]; then
-    echo "No user found in /home directory" >&2
+# Verify user exists
+if ! id -u "$TARGET_USER" >/dev/null 2>&1; then
+    echo "Error: User '$TARGET_USER' does not exist!" >&2
     exit 1
+fi
+
+# Security warning for root
+if [ "$TARGET_USER" = "root" ]; then
+    read -p "WARNING: Configuring autologin as root is a security risk! Continue? (y/N) " -r
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Aborted by user."
+        exit 1
+    fi
 fi
 
 echo "Configuring autologin for user: $TARGET_USER"
@@ -50,11 +60,17 @@ fi
 # Reload systemd to apply changes
 systemctl daemon-reload
 
+echo ""
 echo "Autologin configuration complete for:"
 echo "- Regular console (tty1)"
 echo "- Serial console (ttyS0 @ 115200 baud)"
 echo ""
-echo "The system will need to be rebooted for changes to take effect."
-echo "After reboot, you should be able to login via:"
-echo "1. Direct console access (autologin to $TARGET_USER)"
-echo "2. Serial connection (autologin to $TARGET_USER at 115200 baud)"
+echo "================================================"
+echo "Security Note:"
+echo "Autologin should ONLY be used on secured systems!"
+echo "Configure a password for $TARGET_USER if not set:"
+echo "  passwd $TARGET_USER"
+echo "================================================"
+echo ""
+echo "Reboot the system to apply changes:"
+echo "  systemctl reboot"
