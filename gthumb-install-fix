@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# gLiTcH-ToolKit: Fix for missing libLLVM-15.so.1 on Debian systems causing Mesa/Gallium driver load failures.
+
+set -e
+
+LIB_PATH="/usr/lib/x86_64-linux-gnu/libLLVM-15.so.1"
+PACKAGE_URL="https://snapshot.debian.org/archive/debian/20240314T143145Z/pool/main/l/llvm-toolchain-15/libllvm15_15.0.6-4+b1_amd64.deb"
+DEB_FILE="/tmp/libllvm15.deb"
+
+echo "=== [gLiTcH-ToolKit] Mesa DRI / libllvm15 Fix ==="
+
+if [ -f "$LIB_PATH" ]; then
+    echo "[+] libLLVM-15.so.1 already exists at $LIB_PATH."
+    echo "[✓] No action needed."
+    exit 0
+else
+    echo "[!] libLLVM-15.so.1 is missing."
+    echo "[*] Downloading correct libllvm15 package..."
+
+    wget -q --show-progress "$PACKAGE_URL" -O "$DEB_FILE"
+
+    echo "[*] Installing libllvm15 package..."
+    sudo dpkg -i "$DEB_FILE"
+
+    echo "[*] Verifying library installation..."
+    if [ -f "$LIB_PATH" ]; then
+        echo "[✓] libLLVM-15.so.1 successfully installed."
+    else
+        echo "[✗] Installation failed — please check package sources or install manually."
+        exit 1
+    fi
+
+    echo "[*] Cleaning up..."
+    rm -f "$DEB_FILE"
+
+    echo "[✓] Fix applied. You can now run 'gthumb' or other EGL/Gallium apps safely."
+fi
+
+echo "=== [Done] ==="
