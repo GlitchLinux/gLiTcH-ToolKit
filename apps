@@ -1,102 +1,123 @@
 #!/bin/bash
 
-# Set repository URL and local directory
-REPO_URL="https://github.com/GlitchLinux/gLiTcH-ToolKit.git"
-LOCAL_DIR="gLiTcH-ToolKit"
-TMP_DIR="/tmp/$LOCAL_DIR"
+cd /tmp || exit
 
-# Define ANSI color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-PINK='\033[1;35m'
-NC='\033[0m' # No Color
+# Colors
+G='\033[0;32m'  # Green
+Y='\033[0;33m'  # Yellow  
+C='\033[0;36m'  # Cyan
+N='\033[0m'     # Normal
 
-# Function to ensure toolkit directory exists and is accessible
-ensure_toolkit() {
-    if [ ! -d "$TMP_DIR" ] || [ ! -r "$TMP_DIR" ]; then
-        echo -e "${YELLOW}Toolkit directory missing or inaccessible. Reinitializing...${NC}"
-        rm -rf "$TMP_DIR" 2>/dev/null
-        git clone "$REPO_URL" "$TMP_DIR" || {
-            echo -e "${RED}Failed to clone repository.${NC}"
-            exit 1
-        }
-        chmod -R u+rw "$TMP_DIR"
-    fi
+REPO="https://github.com/GlitchLinux/gLiTcH-ToolKit.git"
+DIR="gLiTcH-ToolKit"
+
+# Clone function
+clone() {
+    rm -rf "$DIR" 2>/dev/null || sudo rm -rf "$DIR"
+    [ "$1" = "root" ] && sudo git clone "$REPO" "$DIR" || git clone "$REPO" "$DIR"
 }
 
-# Function to completely exit toolkit and sudo processes
-exit_fully() {
-    echo -e "${YELLOW}Exiting toolkit completely...${NC}"
-    # Kill all processes with the same name as this script
-    pkill -f "$(basename "$0")" 2>/dev/null
-    exit 0
-}
-
-# Cleanup function (runs on exit)
-cleanup() {
-    echo -e "${YELLOW}Cleaning up...${NC}"
-    if [ -d "$TMP_DIR" ]; then
-        sudo chown -R "$USER:$USER" "$TMP_DIR" 2>/dev/null || true
-        rm -rf "$TMP_DIR" 2>/dev/null || echo -e "${RED}Failed to clean up temporary files.${NC}"
-    fi
-}
-trap cleanup EXIT
-
-# Navigate to /tmp directory
-cd /tmp || { echo -e "${RED}Failed to navigate to /tmp.${NC}"; exit 1; }
-
-# Initialize toolkit
-ensure_toolkit
-
-# Main loop
-while true; do
-    # Verify toolkit is accessible before each iteration
-    ensure_toolkit
+# Calculate column layout
+calculate_layout() {
+    local items=$1
+    local min_cols=3
+    local max_cols=4
+    local terminal_width=${COLUMNS:-80}
+    local col_width=35
     
-    clear
-    echo -e "${YELLOW}gLiTcH-ToolKit - Linux System Tools${NC}"
-    echo ""
+    local possible_cols=$(( terminal_width / col_width ))
+    possible_cols=$(( possible_cols > max_cols ? max_cols : possible_cols ))
+    possible_cols=$(( possible_cols < min_cols ? min_cols : possible_cols ))
+    
+    local rows=$(( (items + possible_cols - 1) / possible_cols ))
+    echo "$possible_cols $rows"
+}
 
-    # Get sorted list of tools
-    mapfile -t entries < <(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -not -path "*/.git*" -type f -printf "%f\n" 2>/dev/null | sort -f)
-
-    # Display tools in columns
-    num_entries=${#entries[@]}
-    num_columns=3
-    num_rows=$(( (num_entries + num_columns - 1) / num_columns ))
-    max_width=35
-
-    for (( row=0; row<num_rows; row++ )); do
-        for (( col=0; col<num_columns; col++ )); do
-            index=$(( row + col * num_rows ))
-            if (( index < num_entries )); then
-                printf "${GREEN}%3d. ${PINK}%-*s${NC}" "$((index+1))" "$max_width" "${entries[index]}"
+# Display tools
+display_tools() {
+    local tools=("$@")
+    local count=${#tools[@]}
+    local cols rows
+    
+    read -r cols rows <<< "$(calculate_layout $count)"
+    
+    echo -e "${C}Glitch Toolkit - ${count} tools available${N}\n"
+    
+    for ((row=0; row<rows; row++)); do
+        for ((col=0; col<cols; col++)); do
+            local index=$((row + col*rows))
+            if (( index < count )); then
+                printf "${Y}%3d.${N} %-30s" "$((index+1))" "${tools[index]}"
             fi
         done
-        echo ""
+        echo
     done
+}
 
-    echo ""
-    echo -e -n "${YELLOW}Enter a number to execute (1-${#entries[@]}), or 0 to quit: ${NC}"
-    read -r choice
+# Initial clone
+[ ! -d "$DIR" ] && clone
+
+# Main
+while true; do
+    mapfile -t T < <(find "$DIR" -type f -not -path "*/.git*" -printf "%f\n" | sort -f)
     
-    if [[ "$choice" == "0" ]]; then
-        exit_fully
-    elif [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#entries[@]} )); then
-        selected="$TMP_DIR/${entries[$((choice-1))]}"
-        if [ -x "$selected" ]; then
-            echo -e "${YELLOW}Executing ${CYAN}$selected${NC}..."
-            "$selected"
-        else
-            bash "$selected"
-        fi
-        echo -e "\n${PINK}Press Enter to continue${NC}"
+    clear
+    display_tools "${T[@]}"
+    
+    # Modified prompt with cursor on same line and yellow letters
+    echo -en "\n${C}[Number|Search]: [${Y}R${C}]efresh [${Y}S${C}]udo [${Y}Q${C}]uit${N} > "
+    read -r IN
+    
+    if [[ "$IN" =~ ^[0-9]+$ ]] && ((IN > 0 && IN <= ${#T[@]})); then
+        clear
+        echo -e "${Y}Running: ${T[IN-1]}${N}\n"
+        F="$DIR/${T[IN-1]}"
+        [ -x "$F" ] && "$F" || bash "$F"
+        echo -en "\n${C}Press Enter to continue...${N}"
         read -r
-    else
-        echo -e "${RED}Invalid selection!${NC}"
-        sleep 1
+    elif [[ "${IN,,}" = "r" ]]; then
+        clone
+    elif [[ "${IN,,}" = "s" ]]; then
+        clone root
+    elif [[ "${IN,,}" = "q" ]]; then
+        rm -rf "$DIR"
+        exit
+    elif [ -n "$IN" ]; then
+        M=()
+        i=1
+        for t in "${T[@]}"; do
+            [[ "${t,,}" == *"${IN,,}"* ]] && M+=("$i:$t")
+            ((i++))
+        done
+        
+        if [ ${#M[@]} -eq 1 ]; then
+            IN="${M[0]%%:*}"
+            clear
+            echo -e "${Y}Running: ${T[IN-1]}${N}\n"
+            F="$DIR/${T[IN-1]}"
+            [ -x "$F" ] && "$F" || bash "$F"
+            echo -en "\n${C}Press Enter to continue...${N}"
+            read -r
+        elif [ ${#M[@]} -gt 1 ]; then
+            clear
+            echo -e "${C}Found ${#M[@]} matches:${N}\n"
+            for m in "${M[@]}"; do
+                echo -e "${Y}${m%%:*}.${N} ${m#*:}"
+            done
+            echo -en "\n${C}Select match [1-${#M[@]}] or any key to cancel:${N} "
+            read -r S
+            if [[ "$S" =~ ^[0-9]+$ ]] && ((S > 0 && S <= ${#M[@]})); then
+                IN="${M[S-1]%%:*}"
+                clear
+                echo -e "${Y}Running: ${T[IN-1]}${N}\n"
+                F="$DIR/${T[IN-1]}"
+                [ -x "$F" ] && "$F" || bash "$F"
+                echo -en "\n${C}Press Enter to continue...${N}"
+                read -r
+            fi
+        else
+            echo -e "${Y}No matches found${N}"
+            sleep 1
+        fi
     fi
 done
