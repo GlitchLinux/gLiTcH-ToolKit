@@ -87,6 +87,10 @@ download_isolinux_files() {
         exit 1
     fi
     
+    # Check for additional required modules and copy from system if needed
+    echo -e "${BLUE}Checking for additional SYSLINUX modules...${NC}"
+    add_missing_syslinux_modules "$iso_dir/isolinux"
+    
     # List extracted files for confirmation
     echo -e "${GREEN}ISOLINUX files extracted:${NC}"
     ls -la "$iso_dir/isolinux/" | while read -r line; do
@@ -95,6 +99,464 @@ download_isolinux_files() {
     
     rm -rf "$temp_dir"
     echo -e "${GREEN}ISOLINUX files installed successfully${NC}"
+}
+
+# Add missing SYSLINUX modules from system installation
+add_missing_syslinux_modules() {
+    local isolinux_dir="$1"
+    
+    # Required modules for advanced functionality
+    local required_modules=(
+        "chain.c32"      # For chainloading
+        "reboot.c32"     # For reboot option
+        "poweroff.c32"   # For poweroff option
+        "hdt.c32"        # Hardware detection tool
+        "menu.c32"       # Alternative menu system
+    )
+    
+    # System locations where SYSLINUX modules might be found
+    local syslinux_paths=(
+        "/usr/lib/syslinux/modules/bios"
+        "/usr/lib/SYSLINUX"
+        "/usr/share/syslinux"
+        "/usr/lib/syslinux"
+        "/boot/syslinux"
+    )
+    
+    echo -e "${YELLOW}Checking for missing SYSLINUX modules...${NC}"
+    
+    for module in "${required_modules[@]}"; do
+        if [ ! -f "$isolinux_dir/$module" ]; then
+            echo -e "  ${YELLOW}Missing: $module${NC}"
+            
+            # Try to find the module in system locations
+            local found=false
+            for path in "${syslinux_paths[@]}"; do
+                if [ -f "$path/$module" ]; then
+                    echo -e "    ${GREEN}Found in: $path${NC}"
+                    cp "$path/$module" "$isolinux_dir/"
+                    found=true
+                    break
+                fi
+            done
+            
+            if [ "$found" = false ]; then
+                echo -e "    ${RED}Not found in system - will create fallback${NC}"
+            fi
+        else
+            echo -e "  ${GREEN}Present: $module${NC}"
+        fi
+    done
+    
+    echo -e "${BLUE}Module check complete${NC}"
+}
+
+# Generate ISOLINUX configuration with fallbacks for missing modules
+generate_isolinux_config() {
+    local ISO_DIR="$1"
+    local NAME="$2"
+    local VMLINUZ="$3"
+    local INITRD="$4"
+    local HAS_LIVE="$5"
+    
+    mkdir -p "$ISO_DIR/isolinux"
+
+    cat > "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
+default vesamenu.c32
+prompt 0
+timeout 100
+noescape 1
+
+menu title $NAME LIVE - BIOS Boot Menu
+menu tabmsg Press TAB to edit boot options, ENTER to boot
+EOF
+
+    # Check if splash image exists and configure background
+    if [ -f "$ISO_DIR/isolinux/splash.png" ]; then
+        echo "menu background splash.png" >> "$ISO_DIR/isolinux/isolinux.cfg"
+        # Colors optimized for images with transparency
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+menu color screen       37;40      #80ffffff #00000000 std
+menu color border       30;44      #40ffffff #a0000000 std
+menu color title        1;36;44    #c0ffffff #00000000 std
+menu color unsel        37;44      #90ffffff #a0000000 std
+menu color hotkey       1;37;44    #ffffffff #a0000000 std
+menu color sel          7;37;40    #e0000000 #20ff8000 all
+menu color hotsel       1;7;37;40  #e0400000 #20ff8000 all
+menu color disabled     1;30;44    #60cccccc #a0000000 std
+menu color scrollbar    30;44      #40ffffff #a0000000 std
+menu color tabmsg       31;40      #90ffff00 #a0000000 std
+menu color cmdmark      1;36;40    #c000ffff #a0000000 std
+menu color cmdline      37;40      #c0ffffff #a0000000 std
+menu color pwdborder    30;47      #80ffffff #20ffffff std
+menu color pwdheader    31;47      #80ff8080 #20ffffff std
+menu color pwdentry     30;47      #80ffffff #20ffffff std
+menu color timeout_msg  37;40      #80ffffff #00000000 std
+menu color timeout      1;37;40    #c0ffffff #00000000 std
+menu color help         37;40      #c0ffffff #00000000 std
+menu color msg07        37;40      #90ffffff #a0000000 std
+EOF
+    else
+        # Fallback colors for no background image
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+menu color screen       37;40      #c0ffffff #00000000 std
+menu color border       30;44      #40ffffff #a0000000 std
+menu color title        1;36;44    #ffffffff #a0000000 std
+menu color unsel        37;44      #90ffffff #a0000000 std
+menu color hotkey       1;37;44    #ffffffff #a0000000 std
+menu color sel          7;37;40    #e0000000 #20ff8000 all
+menu color hotsel       1;7;37;40  #e0400000 #20ff8000 all
+menu color disabled     1;30;44    #60cccccc #a0000000 std
+menu color scrollbar    30;44      #40ffffff #a0000000 std
+menu color tabmsg       31;40      #90ffff00 #a0000000 std
+menu color cmdmark      1;36;40    #c000ffff #a0000000 std
+menu color cmdline      37;40      #c0ffffff #a0000000 std
+menu color pwdborder    30;47      #80ffffff #20ffffff std
+menu color pwdheader    31;47      #80ff8080 #20ffffff std
+menu color pwdentry     30;47      #80ffffff #20ffffff std
+menu color timeout_msg  37;40      #80ffffff #00000000 std
+menu color timeout      1;37;40    #c0ffffff #00000000 std
+menu color help         37;40      #c0ffffff #00000000 std
+menu color msg07        37;40      #90ffffff #a0000000 std
+EOF
+    fi
+
+    # Add menu margin and spacing for better layout
+    cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+menu margin 8
+menu rows 18
+menu vshift 2
+menu timeoutrow 20
+menu tabmsgrow 22
+menu cmdlinerow 22
+menu passwordrow 11
+menu endrow -1
+
+EOF
+
+    if [ "$HAS_LIVE" = "true" ]; then
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
+label live
+  menu label ^$NAME - LIVE
+  menu default
+  text help
+    Boot the live system with default settings
+  endtext
+  kernel /live/$VMLINUZ
+  append initrd=/live/$INITRD boot=live config quiet splash
+
+label live_ram
+  menu label $NAME - Boot to ^RAM
+  text help
+    Copy the entire system to RAM for faster performance
+  endtext
+  kernel /live/$VMLINUZ
+  append initrd=/live/$INITRD boot=live config quiet toram
+
+label encrypted_persistence
+  menu label $NAME - ^Encrypted Persistence
+  text help
+    Boot with encrypted persistent storage
+  endtext
+  kernel /live/$VMLINUZ
+  append initrd=/live/$INITRD boot=live components quiet splash persistent=cryptsetup persistence-encryption=luks persistence
+
+label live_nomodeset
+  menu label $NAME - Safe ^Graphics Mode
+  text help
+    Boot with safe graphics mode (nomodeset)
+  endtext
+  kernel /live/$VMLINUZ
+  append initrd=/live/$INITRD boot=live config quiet splash nomodeset
+
+label live_failsafe
+  menu label $NAME - ^Failsafe Mode
+  text help
+    Boot with minimal drivers and no quiet mode
+  endtext
+  kernel /live/$VMLINUZ
+  append initrd=/live/$INITRD boot=live config noquiet nosplash
+
+menu separator
+
+EOF
+    else
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
+label info
+  menu label ^No Live System Detected
+  text help
+    This ISO does not contain a live system
+  endtext
+  kernel vesamenu.c32
+  append isolinux/isolinux.cfg
+
+menu separator
+
+EOF
+    fi
+
+    # Add utility entries if files exist
+    if [ -f "$ISO_DIR/boot/grub/netboot.xyz/netboot.xyz.lkrn" ]; then
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
+label netboot_bios
+  menu label ^Netboot.xyz (BIOS)
+  text help
+    Network boot utility for various operating systems
+  endtext
+  kernel /boot/grub/netboot.xyz/netboot.xyz.lkrn
+
+EOF
+    fi
+
+    # Add memory test if available
+    if [ -f "$ISO_DIR/boot/memtest86+/memtest.bin" ] || [ -f "$ISO_DIR/memtest.bin" ] || [ -f "$ISO_DIR/isolinux/memtest" ]; then
+        local memtest_path=""
+        if [ -f "$ISO_DIR/boot/memtest86+/memtest.bin" ]; then
+            memtest_path="/boot/memtest86+/memtest.bin"
+        elif [ -f "$ISO_DIR/memtest.bin" ]; then
+            memtest_path="/memtest.bin"
+        elif [ -f "$ISO_DIR/isolinux/memtest" ]; then
+            memtest_path="/isolinux/memtest"
+        fi
+        
+        if [ -n "$memtest_path" ]; then
+            cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
+label memtest
+  menu label ^Memory Test
+  text help
+    Test system memory for errors
+  endtext
+  kernel $memtest_path
+
+EOF
+        fi
+    fi
+
+    # Add hardware detection tool if available
+    if [ -f "$ISO_DIR/isolinux/hdt.c32" ]; then
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
+label hdt
+  menu label ^Hardware Detection Tool
+  text help
+    Analyze and display hardware information
+  endtext
+  com32 hdt.c32
+
+EOF
+    fi
+
+    cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+menu separator
+
+EOF
+
+    # Check if chain.c32 is available before adding chainload entries
+    if [ -f "$ISO_DIR/isolinux/chain.c32" ]; then
+        echo -e "${GREEN}chain.c32 found - adding GRUB2 chainload options${NC}"
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+label grub_standalone
+  menu label Switch to ^GRUB2 Menu (Standalone)
+  text help
+    Load standalone GRUB2 image (recommended method)
+  endtext
+  com32 chain.c32
+  append file=/boot/grub/grub_standalone.img
+
+label grub_core
+  menu label Switch to GRUB2 Menu (^Core Image)
+  text help
+    Load GRUB2 core image directly (alternative method)
+  endtext
+  com32 chain.c32
+  append file=/boot/grub/core.img
+
+label grub_bios
+  menu label Switch to GRUB2 Menu (^BIOS Image)
+  text help
+    Load traditional GRUB2 BIOS image (legacy method)
+  endtext
+  com32 chain.c32
+  append file=/boot/grub/grub_bios.img
+
+EOF
+    else
+        echo -e "${YELLOW}chain.c32 not available - adding manual GRUB2 option${NC}"
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+label grub_manual
+  menu label ^GRUB2 Menu (Manual Boot)
+  text help
+    Restart and manually select GRUB2 from BIOS boot menu
+  endtext
+  kernel vesamenu.c32
+  append isolinux/grub_help.cfg
+
+EOF
+        
+        # Create helper menu for manual GRUB2 boot
+        create_grub_help_menu "$ISO_DIR"
+    fi
+
+    # Add reboot/poweroff with fallbacks
+    if [ -f "$ISO_DIR/isolinux/reboot.c32" ]; then
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+label reboot
+  menu label ^Reboot System
+  text help
+    Restart the computer
+  endtext
+  com32 reboot.c32
+
+EOF
+    else
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+label reboot
+  menu label ^Reboot System
+  text help
+    Restart the computer (manual)
+  endtext
+  kernel vesamenu.c32
+  append isolinux/reboot_help.cfg
+
+EOF
+    fi
+
+    if [ -f "$ISO_DIR/isolinux/poweroff.c32" ]; then
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+label poweroff
+  menu label ^Power Off
+  text help
+    Shutdown the computer
+  endtext
+  com32 poweroff.c32
+
+EOF
+    else
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+label poweroff
+  menu label ^Power Off
+  text help
+    Shutdown the computer (manual)
+  endtext
+  kernel /live/$VMLINUZ
+  append initrd=/live/$INITRD boot=live config quiet splash systemd.unit=poweroff.target
+
+EOF
+    fi
+
+    echo -e "${GREEN}ISOLINUX configuration created: $ISO_DIR/isolinux/isolinux.cfg${NC}"
+}
+
+# Create helper menu for manual GRUB2 access
+create_grub_help_menu() {
+    local iso_dir="$1"
+    
+    cat > "$iso_dir/isolinux/grub_help.cfg" <<'EOF'
+default vesamenu.c32
+prompt 0
+timeout 300
+
+menu title GRUB2 Access Instructions & Troubleshooting
+menu tabmsg Press any key to continue
+
+label instructions
+  menu label GRUB2 Manual Boot Instructions
+  menu default
+  kernel vesamenu.c32
+  append isolinux/isolinux.cfg
+
+text help
+To access the full GRUB2 menu with EFI and WIM boot options:
+
+TROUBLESHOOTING CHAINLOAD ISSUES:
+If you're seeing "sector won't be mapped" errors:
+
+1. UEFI MODE (RECOMMENDED):
+   - Restart your computer
+   - Enter BIOS/UEFI setup (usually F2, F12, Del)
+   - Look for UEFI boot options
+   - Select this ISO's UEFI entry
+   - GRUB2 will load automatically with full features
+
+2. GRUB2 DIRECT BOOT:
+   - Some systems can boot GRUB2 directly from BIOS
+   - Check BIOS boot menu for additional entries
+   - Look for entries mentioning GRUB or different boot modes
+
+3. ALTERNATIVE CHAINLOAD METHODS:
+   - Try different GRUB2 image options from main menu
+   - "Standalone" method usually works best
+   - "Core Image" method for minimal systems
+   - "BIOS Image" method for legacy compatibility
+
+4. SECTOR MAPPING CONFLICTS:
+   - This error occurs when chainloading conflicts with ISO layout
+   - UEFI mode avoids this issue entirely
+   - Some older BIOS systems have chainloading limitations
+
+The main live system and most tools work perfectly
+from this ISOLINUX menu without needing GRUB2.
+
+Press ENTER to return to main menu.
+endtext
+
+label return
+  menu label Return to Main Menu
+  kernel vesamenu.c32
+  append isolinux/isolinux.cfg
+
+label debug_info
+  menu label Show Debug Information
+  kernel vesamenu.c32
+  append isolinux/debug_info.cfg
+EOF
+
+    # Create debug information menu
+    cat > "$iso_dir/isolinux/debug_info.cfg" <<'EOF'
+default vesamenu.c32
+prompt 0
+timeout 300
+
+menu title GRUB2 Chainload Debug Information
+menu tabmsg Debug information for troubleshooting
+
+label debug
+  menu label View GRUB2 File Information
+  menu default
+  kernel vesamenu.c32
+  append isolinux/grub_help.cfg
+
+text help
+GRUB2 CHAINLOAD DEBUG INFO:
+
+Expected GRUB2 files for chainloading:
+- /boot/grub/grub_standalone.img (preferred)
+- /boot/grub/core.img (alternative)  
+- /boot/grub/grub_bios.img (legacy)
+- /boot/grub/grub.cfg (configuration)
+
+Common chainload issues:
+1. File not found: Check file paths
+2. Sector conflicts: File too large or wrong format
+3. Module missing: GRUB2 image incomplete
+4. BIOS limitations: Some systems can't chainload
+
+Solutions:
+1. Use UEFI mode instead of BIOS mode
+2. Try different GRUB2 image types
+3. Use live system directly from ISOLINUX
+4. Check BIOS settings for boot options
+
+For full functionality, boot in UEFI mode where
+GRUB2 loads natively without chainloading.
+
+Press ENTER to return.
+endtext
+
+label return
+  menu label Return to Help Menu
+  kernel vesamenu.c32
+  append isolinux/grub_help.cfg
+EOF
 }
 
 # Handle splash screen selection
@@ -145,22 +607,28 @@ set prefix=(\$root)/boot/grub
 configfile /boot/grub/grub.cfg
 EOF
     
-    # Create core.img with essential modules
-    grub-mkimage -O i386-pc -o /tmp/core.img -p /boot/grub -c /tmp/grub_embed.cfg \
+    # Create core.img with essential modules for BIOS chainloading
+    grub-mkimage -O i386-pc -o "$iso_dir/boot/grub/core.img" -p /boot/grub -c /tmp/grub_embed.cfg \
         -d "$grub_dir" \
         biosdisk iso9660 part_msdos fat ext2 normal boot linux configfile loopback chain \
-        search search_label search_fs_file search_fs_uuid
+        search search_label search_fs_file search_fs_uuid ls echo cat help reboot halt \
+        gfxterm gfxmenu png font video all_video vbe vga
     
-    # Combine with cdboot.img to create final BIOS image
-    cat "$grub_dir/cdboot.img" /tmp/core.img > "$iso_dir/boot/grub/bios.img"
+    # Create standalone GRUB2 BIOS bootable image for chainloading
+    cat "$grub_dir/boot.img" "$iso_dir/boot/grub/core.img" > "$iso_dir/boot/grub/grub_bios.img"
     
-    if [ ! -f "$iso_dir/boot/grub/bios.img" ]; then
-        echo -e "${RED}Error: Failed to create BIOS boot image${NC}"
+    # Also create the standard bios.img for primary booting
+    cat "$grub_dir/cdboot.img" "$iso_dir/boot/grub/core.img" > "$iso_dir/boot/grub/bios.img"
+    
+    if [ ! -f "$iso_dir/boot/grub/bios.img" ] || [ ! -f "$iso_dir/boot/grub/grub_bios.img" ]; then
+        echo -e "${RED}Error: Failed to create BIOS boot images${NC}"
         exit 1
     fi
     
-    rm -f /tmp/core.img /tmp/grub_embed.cfg
-    echo -e "${GREEN}GRUB2 BIOS boot image created${NC}"
+    rm -f /tmp/grub_embed.cfg
+    echo -e "${GREEN}GRUB2 BIOS boot images created${NC}"
+    echo -e "  Primary boot: boot/grub/bios.img"
+    echo -e "  Chainload target: boot/grub/grub_bios.img"
 }
 
 # Create GRUB2 UEFI boot image
@@ -209,19 +677,72 @@ generate_isolinux_config() {
 default vesamenu.c32
 prompt 0
 timeout 100
+noescape 1
 
-menu title $NAME LIVE - BIOS Boot
-menu tabmsg Press TAB key to edit menu options
-menu background splash.png
-menu color title        1;36;44    #FFFFFFFF #00000000 std
+menu title $NAME LIVE - BIOS Boot Menu
+menu tabmsg Press TAB to edit boot options, ENTER to boot
+EOF
+
+    # Check if splash image exists and configure background
+    if [ -f "$ISO_DIR/isolinux/splash.png" ]; then
+        echo "menu background splash.png" >> "$ISO_DIR/isolinux/isolinux.cfg"
+        # Colors optimized for images with transparency
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+menu color screen       37;40      #80ffffff #00000000 std
 menu color border       30;44      #40ffffff #a0000000 std
-menu color sel          7;37;40    #e0ffffff #20ffffff all
-menu color unsel        37;44      #50ffffff #a0000000 std
-menu color help         37;40      #c0ffffff #00000000 std
+menu color title        1;36;44    #c0ffffff #00000000 std
+menu color unsel        37;44      #90ffffff #a0000000 std
+menu color hotkey       1;37;44    #ffffffff #a0000000 std
+menu color sel          7;37;40    #e0000000 #20ff8000 all
+menu color hotsel       1;7;37;40  #e0400000 #20ff8000 all
+menu color disabled     1;30;44    #60cccccc #a0000000 std
+menu color scrollbar    30;44      #40ffffff #a0000000 std
+menu color tabmsg       31;40      #90ffff00 #a0000000 std
+menu color cmdmark      1;36;40    #c000ffff #a0000000 std
+menu color cmdline      37;40      #c0ffffff #a0000000 std
+menu color pwdborder    30;47      #80ffffff #20ffffff std
+menu color pwdheader    31;47      #80ff8080 #20ffffff std
+menu color pwdentry     30;47      #80ffffff #20ffffff std
 menu color timeout_msg  37;40      #80ffffff #00000000 std
 menu color timeout      1;37;40    #c0ffffff #00000000 std
+menu color help         37;40      #c0ffffff #00000000 std
 menu color msg07        37;40      #90ffffff #a0000000 std
-menu color tabmsg       31;40      #30ffffff #00000000 std
+EOF
+    else
+        # Fallback colors for no background image
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+menu color screen       37;40      #c0ffffff #00000000 std
+menu color border       30;44      #40ffffff #a0000000 std
+menu color title        1;36;44    #ffffffff #a0000000 std
+menu color unsel        37;44      #90ffffff #a0000000 std
+menu color hotkey       1;37;44    #ffffffff #a0000000 std
+menu color sel          7;37;40    #e0000000 #20ff8000 all
+menu color hotsel       1;7;37;40  #e0400000 #20ff8000 all
+menu color disabled     1;30;44    #60cccccc #a0000000 std
+menu color scrollbar    30;44      #40ffffff #a0000000 std
+menu color tabmsg       31;40      #90ffff00 #a0000000 std
+menu color cmdmark      1;36;40    #c000ffff #a0000000 std
+menu color cmdline      37;40      #c0ffffff #a0000000 std
+menu color pwdborder    30;47      #80ffffff #20ffffff std
+menu color pwdheader    31;47      #80ff8080 #20ffffff std
+menu color pwdentry     30;47      #80ffffff #20ffffff std
+menu color timeout_msg  37;40      #80ffffff #00000000 std
+menu color timeout      1;37;40    #c0ffffff #00000000 std
+menu color help         37;40      #c0ffffff #00000000 std
+menu color msg07        37;40      #90ffffff #a0000000 std
+EOF
+    fi
+
+    # Add menu margin and spacing for better layout
+    cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+menu margin 8
+menu rows 18
+menu vshift 2
+menu timeoutrow 20
+menu tabmsgrow 22
+menu cmdlinerow 22
+menu passwordrow 11
+menu endrow -1
 
 EOF
 
@@ -230,36 +751,58 @@ EOF
 label live
   menu label ^$NAME - LIVE
   menu default
+  text help
+    Boot the live system with default settings
+  endtext
   kernel /live/$VMLINUZ
   append initrd=/live/$INITRD boot=live config quiet splash
 
 label live_ram
-  menu label $NAME - Boot ^to RAM
+  menu label $NAME - Boot to ^RAM
+  text help
+    Copy the entire system to RAM for faster performance
+  endtext
   kernel /live/$VMLINUZ
   append initrd=/live/$INITRD boot=live config quiet toram
 
 label encrypted_persistence
   menu label $NAME - ^Encrypted Persistence
+  text help
+    Boot with encrypted persistent storage
+  endtext
   kernel /live/$VMLINUZ
   append initrd=/live/$INITRD boot=live components quiet splash persistent=cryptsetup persistence-encryption=luks persistence
 
 label live_nomodeset
   menu label $NAME - Safe ^Graphics Mode
+  text help
+    Boot with safe graphics mode (nomodeset)
+  endtext
   kernel /live/$VMLINUZ
   append initrd=/live/$INITRD boot=live config quiet splash nomodeset
 
 label live_failsafe
   menu label $NAME - ^Failsafe Mode
+  text help
+    Boot with minimal drivers and no quiet mode
+  endtext
   kernel /live/$VMLINUZ
   append initrd=/live/$INITRD boot=live config noquiet nosplash
+
+menu separator
 
 EOF
     else
         cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
 label info
   menu label ^No Live System Detected
+  text help
+    This ISO does not contain a live system
+  endtext
   kernel vesamenu.c32
   append isolinux/isolinux.cfg
+
+menu separator
 
 EOF
     fi
@@ -269,42 +812,132 @@ EOF
         cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
 label netboot_bios
   menu label ^Netboot.xyz (BIOS)
+  text help
+    Network boot utility for various operating systems
+  endtext
   kernel /boot/grub/netboot.xyz/netboot.xyz.lkrn
 
 EOF
     fi
 
-    cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
+    # Add memory test if available
+    if [ -f "$ISO_DIR/boot/memtest86+/memtest.bin" ] || [ -f "$ISO_DIR/memtest.bin" ] || [ -f "$ISO_DIR/isolinux/memtest" ]; then
+        local memtest_path=""
+        if [ -f "$ISO_DIR/boot/memtest86+/memtest.bin" ]; then
+            memtest_path="/boot/memtest86+/memtest.bin"
+        elif [ -f "$ISO_DIR/memtest.bin" ]; then
+            memtest_path="/memtest.bin"
+        elif [ -f "$ISO_DIR/isolinux/memtest" ]; then
+            memtest_path="/isolinux/memtest"
+        fi
+        
+        if [ -n "$memtest_path" ]; then
+            cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
+label memtest
+  menu label ^Memory Test
+  text help
+    Test system memory for errors
+  endtext
+  kernel $memtest_path
+
+EOF
+        fi
+    fi
+
+    # Add hardware detection tool if available
+    if [ -f "$ISO_DIR/isolinux/hdt.c32" ]; then
+        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
+label hdt
+  menu label ^Hardware Detection Tool
+  text help
+    Analyze and display hardware information
+  endtext
+  com32 hdt.c32
+
+EOF
+    fi
+
+    cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+menu separator
+
+label grub_bios
+  menu label Switch to ^GRUB2 Menu (BIOS)
+  text help
+    Load GRUB2 bootloader and access the full GRUB menu
+  endtext
+  com32 chain.c32
+  append file=/boot/grub/grub_bios.img
+
 label grub_uefi
-  menu label Switch to ^GRUB2 (UEFI Mode)
+  menu label Switch to ^UEFI Mode
+  text help
+    Attempt to switch to UEFI boot mode
+  endtext
   com32 chain.c32
   append efi=/EFI/BOOT/bootx64.efi
 
-label separator1
-  menu label ---
-
-label memtest
-  menu label ^Memory Test
-  kernel /boot/memtest86+/memtest.bin
-
-label hdt
-  menu label ^Hardware Detection Tool
-  com32 hdt.c32
-
-label separator2
-  menu label ---
+menu separator
 
 label reboot
-  menu label ^Reboot
+  menu label ^Reboot System
+  text help
+    Restart the computer
+  endtext
   com32 reboot.c32
 
 label poweroff
   menu label ^Power Off
+  text help
+    Shutdown the computer
+  endtext
   com32 poweroff.c32
 
 EOF
 
     echo -e "${GREEN}ISOLINUX configuration created: $ISO_DIR/isolinux/isolinux.cfg${NC}"
+}
+
+# Handle splash screen selection
+handle_splash_screen() {
+    local iso_dir="$1"
+    local splash_path=""
+    
+    echo -e "\n${YELLOW}=== Splash Screen Configuration ===${NC}"
+    echo "Would you like to add a custom splash.png for boot menus?"
+    echo -e "${BLUE}Requirements for ISOLINUX background:${NC}"
+    echo "  - PNG format (recommended)"
+    echo "  - Resolution: 640x480 or 800x600"
+    echo "  - 256 colors or less for best compatibility"
+    echo "  - Avoid pure black (#000000) as it may be transparent"
+    read -p "Enter 'y' for custom splash or 'n' for default: " use_custom
+    
+    if [[ "$use_custom" =~ ^[Yy]$ ]]; then
+        read -p "Enter the full path to your splash.png file: " splash_path
+        splash_path=$(realpath "$splash_path" 2>/dev/null)
+        
+        if [ -f "$splash_path" ]; then
+            echo -e "${GREEN}Copying custom splash screen...${NC}"
+            mkdir -p "$iso_dir/boot/grub"
+            mkdir -p "$iso_dir/isolinux"
+            
+            # Copy to all locations
+            cp "$splash_path" "$iso_dir/boot/grub/splash.png"
+            cp "$splash_path" "$iso_dir/isolinux/splash.png"
+            cp "$splash_path" "$iso_dir/splash.png"
+            
+            # Check image properties and provide advice
+            if command -v identify &>/dev/null; then
+                echo -e "${BLUE}Image properties:${NC}"
+                identify "$splash_path" 2>/dev/null || echo "Could not analyze image properties"
+                echo -e "${YELLOW}Note: For best ISOLINUX compatibility, use 640x480 or 800x600 resolution${NC}"
+            fi
+        else
+            echo -e "${RED}Warning: Splash file not found at $splash_path${NC}"
+            echo -e "${YELLOW}Using default splash screen...${NC}"
+        fi
+    else
+        echo -e "${BLUE}Using default splash screen...${NC}"
+    fi
 }
 
 # Scan directory for WIM files and create boot configuration
@@ -694,19 +1327,19 @@ menuentry "$NAME - Encrypted Persistence" {
     initrd /live/$INITRD
 }
 
-menuentry "Netboot.xyz (UEFI)" {
-    chainloader /boot/grub/netboot.xyz/EFI/BOOT/BOOTX64.EFI
+menuentry "GRUBFM (UEFI)" {
+    chainloader /EFI/GRUB-FM/E2B-bootx64.efi
 }
 
 menuentry "SUPERGRUB (UEFI)" {
     configfile /boot/grub/sgd/main.cfg
 }
 
-menuentry "GRUBFM (UEFI)" {
-    chainloader /EFI/GRUB-FM/E2B-bootx64.efi
+menuentry "Netboot.xyz (UEFI)" {
+    chainloader /boot/grub/netboot.xyz/EFI/BOOT/BOOTX64.EFI
 }
 
-menuentry "EFI Chainloader" {
+menuentry "EFI Chainloader Menu" {
     configfile /boot/grub/EFI-Chainloader.cfg
 }
 
@@ -936,6 +1569,7 @@ main() {
     
     # Create boot images and configurations
     echo -e "\n${BLUE}Setting up boot systems...${NC}"
+    create_grub_bios_image "$ISO_DIR"
     create_grub_uefi_image "$ISO_DIR"
     scan_and_create_efi_chainloader "$ISO_DIR"
     scan_and_create_wim_boot "$ISO_DIR"
