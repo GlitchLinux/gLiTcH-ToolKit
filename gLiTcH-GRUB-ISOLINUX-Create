@@ -194,6 +194,12 @@ EOF
 
     if [ "$HAS_LIVE" = "true" ]; then
         cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
+
+label GRUB2
+menu label Chainload GRUB2 Bootloader
+Linux /boot/grub/lnxboot.img
+INITRD /boot/grub/core.img
+
 label live
   menu label ^$NAME - LIVE
   menu default
@@ -218,22 +224,6 @@ label encrypted_persistence
   endtext
   kernel /live/$VMLINUZ
   append initrd=/live/$INITRD boot=live components quiet splash persistent=cryptsetup persistence-encryption=luks persistence
-
-label live_nomodeset
-  menu label $NAME - Safe ^Graphics Mode
-  text help
-    Boot with safe graphics mode (nomodeset)
-  endtext
-  kernel /live/$VMLINUZ
-  append initrd=/live/$INITRD boot=live config quiet splash nomodeset
-
-label live_failsafe
-  menu label $NAME - ^Failsafe Mode
-  text help
-    Boot with minimal drivers and no quiet mode
-  endtext
-  kernel /live/$VMLINUZ
-  append initrd=/live/$INITRD boot=live config noquiet nosplash
 
 menu separator
 
@@ -311,13 +301,10 @@ EOF
     cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
 menu separator
 
-label grub2_chainload
-  menu label ^Chainload GRUB2 Bootloader
-  text help
-    Load GRUB2 with full menu (recommended method)
-  endtext
-  linux /boot/grub/lnxboot.img
-  initrd /boot/grub/core.img
+label GRUB2
+menu label Chainload GRUB2 Bootloader
+Linux /boot/grub/lnxboot.img
+INITRD /boot/grub/core.img
 
 menu separator
 
@@ -675,6 +662,12 @@ EOF
 
     if [ "$HAS_LIVE" = "true" ]; then
         cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<EOF
+
+label GRUB2
+menu label Chainload GRUB2 Bootloader
+Linux /boot/grub/lnxboot.img
+INITRD /boot/grub/core.img
+
 label live
   menu label ^$NAME - LIVE
   menu default
@@ -707,14 +700,6 @@ label live_nomodeset
   endtext
   kernel /live/$VMLINUZ
   append initrd=/live/$INITRD boot=live config quiet splash nomodeset
-
-label live_failsafe
-  menu label $NAME - ^Failsafe Mode
-  text help
-    Boot with minimal drivers and no quiet mode
-  endtext
-  kernel /live/$VMLINUZ
-  append initrd=/live/$INITRD boot=live config noquiet nosplash
 
 menu separator
 
@@ -792,8 +777,8 @@ label grub_bios
   text help
     Load GRUB2 bootloader and access the full GRUB menu
   endtext
-  com32 chain.c32
-  append file=/boot/grub/grub_bios.img
+Linux /boot/grub/lnxboot.img
+INITRD /boot/grub/core.img
 
 label grub_uefi
   menu label Switch to ^UEFI Mode
