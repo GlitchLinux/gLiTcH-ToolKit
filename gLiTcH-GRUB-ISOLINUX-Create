@@ -694,19 +694,19 @@ menuentry "$NAME - Encrypted Persistence" {
     initrd /live/$INITRD
 }
 
-menuentry "GRUBFM (UEFI)" {
-    chainloader /EFI/GRUB-FM/E2B-bootx64.efi
+menuentry "Netboot.xyz (UEFI)" {
+    chainloader /boot/grub/netboot.xyz/EFI/BOOT/BOOTX64.EFI
 }
 
 menuentry "SUPERGRUB (UEFI)" {
     configfile /boot/grub/sgd/main.cfg
 }
 
-menuentry "Netboot.xyz (UEFI)" {
-    chainloader /boot/grub/netboot.xyz/EFI/BOOT/BOOTX64.EFI
+menuentry "GRUBFM (UEFI)" {
+    chainloader /EFI/GRUB-FM/E2B-bootx64.efi
 }
 
-menuentry "EFI Chainloader Menu" {
+menuentry "EFI Chainloader" {
     configfile /boot/grub/EFI-Chainloader.cfg
 }
 
