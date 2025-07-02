@@ -15,143 +15,101 @@ install_dependencies() {
     echo -e "${BLUE}Installing required packages...${NC}"
     if [ -x "$(command -v apt-get)" ]; then
         sudo apt-get update
-        sudo apt-get install -y xorriso mtools wget grub2-common grub-efi-amd64-bin isolinux syslinux-utils unzip
+        sudo apt-get install -y xorriso mtools wget grub2-common grub-efi-amd64-bin isolinux syslinux-utils unzip lzma
     elif [ -x "$(command -v dnf)" ]; then
-        sudo dnf install -y xorriso mtools wget grub2-tools grub2-efi-x64 syslinux unzip
+        sudo dnf install -y xorriso mtools wget grub2-tools grub2-efi-x64 syslinux unzip lzma
     elif [ -x "$(command -v yum)" ]; then
-        sudo yum install -y xorriso mtools wget grub2-tools grub2-efi-x64 syslinux unzip
+        sudo yum install -y xorriso mtools wget grub2-tools grub2-efi-x64 syslinux unzip lzma
     elif [ -x "$(command -v pacman)" ]; then
-        sudo pacman -S --noconfirm xorriso mtools wget grub efibootmgr syslinux unzip
+        sudo pacman -S --noconfirm xorriso mtools wget grub efibootmgr syslinux unzip lzma
     else
         echo -e "${RED}ERROR: Could not detect package manager to install dependencies.${NC}"
         exit 1
     fi
 }
 
-# Download and extract bootfiles
-download_bootfiles() {
+# Download and extract hybrid bootfiles (replaces separate GRUB2 and ISOLINUX downloads)
+download_hybrid_bootfiles() {
     local iso_dir="$1"
-    local grub_files_url="https://github.com/GlitchLinux/gLiTcH-ISO-Creator/raw/refs/heads/main/GRUB2-BOOTFILES.tar.gz"
-    local temp_dir="/tmp/grub_bootfiles_$RANDOM"
+    local hybrid_files_url="https://github.com/GlitchLinux/gLiTcH-ISO-Creator/raw/refs/heads/main/HYBRID-BOOTFILES.tar.lzma"
+    local temp_dir="/tmp/hybrid_bootfiles_$RANDOM"
     
-    echo -e "${BLUE}Downloading GRUB2 bootfiles from GitHub...${NC}"
+    echo -e "${BLUE}Downloading HYBRID-BOOTFILES from GitHub...${NC}"
     mkdir -p "$temp_dir"
     
-    if ! wget --progress=bar:force "$grub_files_url" -O "$temp_dir/GRUB2-BOOTFILES.tar.gz"; then
-        echo -e "${RED}Error: Failed to download GRUB2 bootfiles${NC}"
-        echo -e "${YELLOW}Please ensure GRUB2-BOOTFILES.tar.gz exists in your GitHub repository${NC}"
+    if ! wget --progress=bar:force "$hybrid_files_url" -O "$temp_dir/HYBRID-BOOTFILES.tar.lzma"; then
+        echo -e "${RED}Error: Failed to download HYBRID-BOOTFILES${NC}"
+        echo -e "${YELLOW}Please ensure HYBRID-BOOTFILES.tar.lzma exists in your GitHub repository${NC}"
         rm -rf "$temp_dir"
         exit 1
     fi
     
-    echo -e "${BLUE}Extracting GRUB2 files...${NC}"
-    tar -xzf "$temp_dir/GRUB2-BOOTFILES.tar.gz" -C "$iso_dir"
+    echo -e "${BLUE}Extracting hybrid bootfiles...${NC}"
     
-    if [ ! -f "$iso_dir/boot/grub/i386-pc/cdboot.img" ] || [ ! -d "$iso_dir/boot/grub/x86_64-efi" ]; then
-        echo -e "${RED}Error: GRUB2 files extraction incomplete${NC}"
+    # Check if lzma/unlzma is available
+    if command -v unlzma &>/dev/null; then
+        unlzma "$temp_dir/HYBRID-BOOTFILES.tar.lzma"
+        tar -xf "$temp_dir/HYBRID-BOOTFILES.tar" -C "$iso_dir" --strip-components=1
+    elif command -v lzma &>/dev/null; then
+        lzma -d "$temp_dir/HYBRID-BOOTFILES.tar.lzma"
+        tar -xf "$temp_dir/HYBRID-BOOTFILES.tar" -C "$iso_dir" --strip-components=1
+    elif command -v xz &>/dev/null; then
+        # Try xz as fallback (some systems have xz but not lzma)
+        xz -d "$temp_dir/HYBRID-BOOTFILES.tar.lzma" 2>/dev/null || {
+            echo -e "${RED}Error: Cannot decompress LZMA file${NC}"
+            echo -e "${YELLOW}Please install lzma or xz-utils package${NC}"
+            rm -rf "$temp_dir"
+            exit 1
+        }
+        tar -xf "$temp_dir/HYBRID-BOOTFILES.tar" -C "$iso_dir" --strip-components=1
+    else
+        echo -e "${RED}Error: No LZMA decompression tool found${NC}"
+        echo -e "${YELLOW}Please install lzma, xz-utils, or similar package${NC}"
         rm -rf "$temp_dir"
         exit 1
     fi
     
-    rm -rf "$temp_dir"
-    echo -e "${GREEN}GRUB2 bootfiles installed successfully${NC}"
-}
-
-# Download and extract isolinux files
-download_isolinux_files() {
-    local iso_dir="$1"
-    local isolinux_url="https://github.com/GlitchLinux/gLiTcH-ISO-Creator/raw/refs/heads/main/isolinux.zip"
-    local temp_dir="/tmp/isolinux_files_$RANDOM"
-    
-    echo -e "${BLUE}Downloading ISOLINUX files from GitHub...${NC}"
-    mkdir -p "$temp_dir"
-    
-    if ! wget --progress=bar:force "$isolinux_url" -O "$temp_dir/isolinux.zip"; then
-        echo -e "${RED}Error: Failed to download ISOLINUX files${NC}"
-        echo -e "${YELLOW}Please ensure isolinux.zip exists in your GitHub repository${NC}"
-        rm -rf "$temp_dir"
-        exit 1
-    fi
-    
-    echo -e "${BLUE}Extracting ISOLINUX files...${NC}"
-    unzip -q "$temp_dir/isolinux.zip" -d "$iso_dir"
-    
-    # Verify essential isolinux files exist in the expected structure
-    # isolinux.zip contains: isolinux/ directory with files inside
-    if [ ! -f "$iso_dir/isolinux/isolinux.bin" ] || [ ! -f "$iso_dir/isolinux/vesamenu.c32" ]; then
-        echo -e "${RED}Error: Essential ISOLINUX files missing${NC}"
-        echo -e "${YELLOW}Expected structure: isolinux/isolinux.bin and isolinux/vesamenu.c32${NC}"
-        echo -e "${BLUE}Found files:${NC}"
-        find "$iso_dir/isolinux" -type f 2>/dev/null || echo "No isolinux directory found"
-        rm -rf "$temp_dir"
-        exit 1
-    fi
-    
-    # Check for additional required modules and copy from system if needed
-    echo -e "${BLUE}Checking for additional SYSLINUX modules...${NC}"
-    add_missing_syslinux_modules "$iso_dir/isolinux"
-    
-    # List extracted files for confirmation
-    echo -e "${GREEN}ISOLINUX files extracted:${NC}"
-    ls -la "$iso_dir/isolinux/" | while read -r line; do
-        echo -e "  $line"
-    done
-    
-    rm -rf "$temp_dir"
-    echo -e "${GREEN}ISOLINUX files installed successfully${NC}"
-}
-
-# Add missing SYSLINUX modules from system installation
-add_missing_syslinux_modules() {
-    local isolinux_dir="$1"
-    
-    # Required modules for advanced functionality
-    local required_modules=(
-        "chain.c32"      # For chainloading
-        "reboot.c32"     # For reboot option
-        "poweroff.c32"   # For poweroff option
-        "hdt.c32"        # Hardware detection tool
-        "menu.c32"       # Alternative menu system
+    # Verify essential files exist
+    local essential_files=(
+        "isolinux/isolinux.bin"
+        "isolinux/vesamenu.c32"
+        "boot/grub/lnxboot.img"
+        "boot/grub/core.img"
+        "EFI/BOOT/bootx64.efi"
     )
     
-    # System locations where SYSLINUX modules might be found
-    local syslinux_paths=(
-        "/usr/lib/syslinux/modules/bios"
-        "/usr/lib/SYSLINUX"
-        "/usr/share/syslinux"
-        "/usr/lib/syslinux"
-        "/boot/syslinux"
-    )
-    
-    echo -e "${YELLOW}Checking for missing SYSLINUX modules...${NC}"
-    
-    for module in "${required_modules[@]}"; do
-        if [ ! -f "$isolinux_dir/$module" ]; then
-            echo -e "  ${YELLOW}Missing: $module${NC}"
-            
-            # Try to find the module in system locations
-            local found=false
-            for path in "${syslinux_paths[@]}"; do
-                if [ -f "$path/$module" ]; then
-                    echo -e "    ${GREEN}Found in: $path${NC}"
-                    cp "$path/$module" "$isolinux_dir/"
-                    found=true
-                    break
-                fi
-            done
-            
-            if [ "$found" = false ]; then
-                echo -e "    ${RED}Not found in system - will create fallback${NC}"
-            fi
+    echo -e "${YELLOW}Verifying essential files...${NC}"
+    local missing_files=()
+    for file in "${essential_files[@]}"; do
+        if [ -f "$iso_dir/$file" ]; then
+            echo -e "  ✅ ${GREEN}$file${NC}"
         else
-            echo -e "  ${GREEN}Present: $module${NC}"
+            echo -e "  ❌ ${RED}$file${NC} - Missing"
+            missing_files+=("$file")
         fi
     done
     
-    echo -e "${BLUE}Module check complete${NC}"
+    if [ ${#missing_files[@]} -gt 0 ]; then
+        echo -e "${RED}Error: Essential bootfiles missing after extraction${NC}"
+        rm -rf "$temp_dir"
+        exit 1
+    fi
+    
+    rm -rf "$temp_dir"
+    echo -e "${GREEN}HYBRID-BOOTFILES installed successfully${NC}"
+    
+    # Show summary of what was installed
+    echo -e "\n${BLUE}Installed components:${NC}"
+    echo -e "  • ISOLINUX bootloader and modules"
+    echo -e "  • GRUB2 BIOS and UEFI components"
+    echo -e "  • Netboot.xyz for network booting"
+    echo -e "  • GRUB File Manager (GRUBFM)"
+    echo -e "  • Super GRUB2 Disk"
+    echo -e "  • rEFInd boot manager"
+    echo -e "  • Fonts and themes"
 }
 
-# Generate ISOLINUX configuration with fallbacks for missing modules
+# Generate ISOLINUX configuration with successful chainloading method
 generate_isolinux_config() {
     local ISO_DIR="$1"
     local NAME="$2"
@@ -350,53 +308,22 @@ menu separator
 
 EOF
 
-    # Check if chain.c32 is available before adding chainload entries
-    if [ -f "$ISO_DIR/isolinux/chain.c32" ]; then
-        echo -e "${GREEN}chain.c32 found - adding GRUB2 chainload options${NC}"
-        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
-label grub_standalone
-  menu label Switch to ^GRUB2 Menu (Standalone)
-  text help
-    Load standalone GRUB2 image (recommended method)
-  endtext
-  com32 chain.c32
-  append file=/boot/grub/grub_standalone.img
+    cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
+menu separator
 
-label grub_core
-  menu label Switch to GRUB2 Menu (^Core Image)
+label grub2_chainload
+  menu label ^Chainload GRUB2 Bootloader
   text help
-    Load GRUB2 core image directly (alternative method)
+    Load GRUB2 with full menu (recommended method)
   endtext
-  com32 chain.c32
-  append file=/boot/grub/core.img
+  linux /boot/grub/lnxboot.img
+  initrd /boot/grub/core.img
 
-label grub_bios
-  menu label Switch to GRUB2 Menu (^BIOS Image)
-  text help
-    Load traditional GRUB2 BIOS image (legacy method)
-  endtext
-  com32 chain.c32
-  append file=/boot/grub/grub_bios.img
+menu separator
 
 EOF
-    else
-        echo -e "${YELLOW}chain.c32 not available - adding manual GRUB2 option${NC}"
-        cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
-label grub_manual
-  menu label ^GRUB2 Menu (Manual Boot)
-  text help
-    Restart and manually select GRUB2 from BIOS boot menu
-  endtext
-  kernel vesamenu.c32
-  append isolinux/grub_help.cfg
 
-EOF
-        
-        # Create helper menu for manual GRUB2 boot
-        create_grub_help_menu "$ISO_DIR"
-    fi
-
-    # Add reboot/poweroff with fallbacks
+    # Add reboot/poweroff
     if [ -f "$ISO_DIR/isolinux/reboot.c32" ]; then
         cat >> "$ISO_DIR/isolinux/isolinux.cfg" <<'EOF'
 label reboot
@@ -940,6 +867,22 @@ handle_splash_screen() {
     fi
 }
 
+# Create autorun.inf for Windows compatibility
+create_autorun_inf() {
+    local iso_dir="$1"
+    local iso_name="$2"
+    
+    echo -e "${BLUE}Creating autorun.inf...${NC}"
+    
+    cat > "$iso_dir/autorun.inf" <<EOF
+[Autorun]
+icon=glitch.ico
+label=$iso_name
+EOF
+    
+    echo -e "${GREEN}autorun.inf created: $iso_dir/autorun.inf${NC}"
+}
+
 # Scan directory for WIM files and create boot configuration
 scan_and_create_wim_boot() {
     local iso_dir="$1"
@@ -1291,11 +1234,14 @@ if loadfont $prefix/fonts/unicode.pf2 ; then
   terminal_output gfxterm
 fi
 
-# Theme configuration
+# Theme configuration - try multiple splash locations
 if background_image /boot/grub/splash.png; then
   set color_normal=light-gray/black
   set color_highlight=white/black
 elif background_image /splash.png; then
+  set color_normal=light-gray/black
+  set color_highlight=white/black
+elif background_image /isolinux/splash.png; then
   set color_normal=light-gray/black
   set color_highlight=white/black
 else
@@ -1327,50 +1273,45 @@ menuentry "$NAME - Encrypted Persistence" {
     initrd /live/$INITRD
 }
 
-menuentry "GRUBFM (UEFI)" {
-    chainloader /EFI/GRUB-FM/E2B-bootx64.efi
-}
-
-menuentry "SUPERGRUB (UEFI)" {
-    configfile /boot/grub/sgd/main.cfg
-}
-
-menuentry "Netboot.xyz (UEFI)" {
-    chainloader /boot/grub/netboot.xyz/EFI/BOOT/BOOTX64.EFI
-}
-
-menuentry "EFI Chainloader Menu" {
-    configfile /boot/grub/EFI-Chainloader.cfg
-}
-
-menuentry "WIM Boot Menu" {
-    configfile /boot/grub/WIM-Boot.cfg
-}
-
-menuentry "Power Off" {
-    halt
-}
-
-menuentry "Reboot" {
-    reboot
-}
-
 EOF
     else
         cat >> "$ISO_DIR/boot/grub/grub.cfg" <<EOF
 
 # Custom ISO - No Live System Detected
 
+EOF
+    fi
+
+    # Add the network boot and utility tools with both BIOS and UEFI options
+    cat >> "$ISO_DIR/boot/grub/grub.cfg" <<'EOF'
+menuentry "Netboot.xyz (UEFI)" {
+    chainloader /boot/grub/netboot.xyz/EFI/BOOT/BOOTX64.EFI
+}
+
+menuentry "Netboot.xyz (BIOS)" {
+    linux /boot/grub/netboot.xyz/netboot.xyz.lkrn
+}
+
 menuentry "GRUBFM (UEFI)" {
     chainloader /EFI/GRUB-FM/E2B-bootx64.efi
+}
+
+menuentry "GRUBFM (BIOS)" --class grubfm {
+    linux /boot/grub/loadfm
+    initrd /boot/grub/grubfm_multiarch.iso
+    boot
 }
 
 menuentry "SUPERGRUB (UEFI)" {
     configfile /boot/grub/sgd/main.cfg
 }
 
-menuentry "Netboot.xyz (UEFI)" {
-    chainloader /boot/grub/netboot.xyz/EFI/BOOT/BOOTX64.EFI
+menuentry "rEFInd (UEFI)" --class refind {
+    insmod part_gpt
+    insmod fat
+    insmod chain
+    search --file --no-floppy --set=root /EFI/refind/bootx64.efi
+    chainloader /EFI/refind/bootx64.efi
 }
 
 menuentry "EFI Chainloader Menu" {
@@ -1388,10 +1329,6 @@ menuentry "Power Off" {
 menuentry "Reboot" {
     reboot
 }
-EOF
-    fi
-
-    cat >> "$ISO_DIR/boot/grub/grub.cfg" <<'EOF'
 
 EOF
 
@@ -1505,11 +1442,16 @@ main() {
     
     # Check dependencies
     missing_deps=()
-    for cmd in xorriso mkfs.vfat grub-mkimage unzip wget; do
+    for cmd in xorriso mkfs.vfat grub-mkimage wget; do
         if ! command -v "$cmd" &>/dev/null; then
             missing_deps+=("$cmd")
         fi
     done
+    
+    # Check for LZMA decompression tools
+    if ! command -v unlzma &>/dev/null && ! command -v lzma &>/dev/null && ! command -v xz &>/dev/null; then
+        missing_deps+=("lzma/unlzma/xz")
+    fi
     
     if [ ${#missing_deps[@]} -gt 0 ]; then
         echo -e "${YELLOW}Missing dependencies: ${missing_deps[*]}${NC}"
@@ -1528,9 +1470,8 @@ main() {
     
     echo -e "${GREEN}Working with directory: $ISO_DIR${NC}"
     
-    # Download bootfiles
-    download_bootfiles "$ISO_DIR"
-    download_isolinux_files "$ISO_DIR"
+    # Download hybrid bootfiles (contains everything needed)
+    download_hybrid_bootfiles "$ISO_DIR"
     
     # Handle splash screen
     handle_splash_screen "$ISO_DIR"
@@ -1569,12 +1510,14 @@ main() {
     
     # Create boot images and configurations
     echo -e "\n${BLUE}Setting up boot systems...${NC}"
-    create_grub_bios_image "$ISO_DIR"
     create_grub_uefi_image "$ISO_DIR"
     scan_and_create_efi_chainloader "$ISO_DIR"
     scan_and_create_wim_boot "$ISO_DIR"
     generate_isolinux_config "$ISO_DIR" "$NAME" "$VMLINUZ" "$INITRD" "$HAS_LIVE"
     generate_grub_config "$ISO_DIR" "$NAME" "$VMLINUZ" "$INITRD" "$HAS_LIVE"
+    
+    # Create autorun.inf for Windows compatibility
+    create_autorun_inf "$ISO_DIR" "$NAME"
     
     # Get output filename
     read -p "Enter the output ISO filename (e.g., MyDistro.iso): " iso_name
