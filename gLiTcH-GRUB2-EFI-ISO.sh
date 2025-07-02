@@ -216,8 +216,16 @@ menuentry "$NAME - Encrypted Persistence" {
     initrd /live/$INITRD
 }
 
-menuentry "GRUBFM - (UEFI)" {
+menuentry "GRUBFM (UEFI)" {
     chainloader /EFI/GRUB-FM/E2B-bootx64.efi
+}
+
+menuentry "SUPERGRUB (UEFI)" {
+    configfile /boot/grub/sgd/main.cfg
+}
+
+menuentry "Netboot.xyz (UEFI)" {
+    chainloader /boot/grub/netboot.xyz/EFI/BOOT/BOOTX64.EFI
 }
 
 menuentry "Power Off" {
@@ -234,11 +242,11 @@ EOF
 
 # Custom ISO - No Live System Detected
 
-menuentry "GRUBFM - (UEFI)" {
+menuentry "GRUBFM (UEFI)" {
     chainloader /EFI/GRUB-FM/E2B-bootx64.efi
 }
 
-menuentry "SUPERGRUB" (UEFI) {
+menuentry "SUPERGRUB (UEFI)" {
     configfile /boot/grub/sgd/main.cfg
 }
 
