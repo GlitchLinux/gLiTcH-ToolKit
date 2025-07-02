@@ -238,6 +238,14 @@ menuentry "GRUBFM - (UEFI)" {
     chainloader /EFI/GRUB-FM/E2B-bootx64.efi
 }
 
+menuentry "Load /boot/grub/sgd/main.cfg" {
+    configfile /boot/grub/sgd/main.cfg
+}
+
+menuentry "Netboot.xyz (UEFI)" {
+    chainloader /boot/grub/netboot.xyz/EFI/BOOT/BOOTX64.EFI
+}
+
 menuentry "Power Off" {
     halt
 }
