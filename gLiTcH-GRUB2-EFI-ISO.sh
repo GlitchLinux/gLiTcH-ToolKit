@@ -238,7 +238,7 @@ menuentry "GRUBFM - (UEFI)" {
     chainloader /EFI/GRUB-FM/E2B-bootx64.efi
 }
 
-menuentry "SUPERGRUB" {
+menuentry "SUPERGRUB" (UEFI) {
     configfile /boot/grub/sgd/main.cfg
 }
 
