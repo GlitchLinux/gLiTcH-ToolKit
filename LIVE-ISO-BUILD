@@ -182,12 +182,12 @@ EOF
 
     cat >> "$iso_dir/boot/grub/grub.cfg" <<'EOF'
 
-menuentry "Reboot" {
-    reboot
-}
-
 menuentry "Power Off" {
     halt
+}
+
+menuentry "Reboot" {
+    reboot
 }
 EOF
 
