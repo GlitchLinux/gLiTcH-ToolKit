@@ -43,7 +43,7 @@ download_bootfiles() {
     mkdir -p "$temp_dir"
     
     if ! wget -q --progress=bar:force \
-        "https://github.com/GlitchLinux/gLiTcH-ISO-Creator/raw/refs/heads/main/HYBRID-BASE.tar.lzma" \
+        "https://github.com/GlitchLinux/gLiTcH-ISO-Creator/raw/refs/heads/main/CUSTOM-ISO-BOOTFILES.tar.lzma" \
         -O "$temp_dir/bootfiles.tar.lzma"; then
         echo -e "${RED}Error: Failed to download bootfiles${NC}"
         rm -rf "$temp_dir"
