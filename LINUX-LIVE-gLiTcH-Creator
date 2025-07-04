@@ -1,0 +1,536 @@
+#!/bin/bash
+
+# Live System ISO Creator with YAD GUI
+# Creates bootable live system ISO with SquashFS compression
+
+set -e
+
+# Color codes for terminal output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Global variables
+PROGRESS_PIPE="/tmp/live_iso_progress_$$"
+SYSTEM_NAME=""
+ISO_NAME=""
+WORK_DIR=""
+
+# Cleanup function
+cleanup() {
+    rm -f "$PROGRESS_PIPE"
+    if [ -n "$WORK_DIR" ] && [ -d "$WORK_DIR" ]; then
+        rm -rf "$WORK_DIR"
+    fi
+}
+
+trap cleanup EXIT
+
+# Check if running as root
+check_root() {
+    if [ "$EUID" -ne 0 ]; then
+        yad --error \
+            --title="Root Required" \
+            --text="This script must be run as root.\nPlease run with sudo." \
+            --width=300
+        exit 1
+    fi
+}
+
+# Install dependencies
+install_dependencies() {
+    local missing_deps=()
+    local all_deps=(yad mksquashfs xorriso wget lzma tar)
+    
+    for cmd in "${all_deps[@]}"; do
+        if ! command -v "$cmd" &>/dev/null; then
+            missing_deps+=("$cmd")
+        fi
+    done
+    
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        echo "Installing required packages: ${missing_deps[*]}"
+        
+        # Map commands to package names
+        local packages=""
+        for dep in "${missing_deps[@]}"; do
+            case $dep in
+                mksquashfs) packages="$packages squashfs-tools" ;;
+                *) packages="$packages $dep" ;;
+            esac
+        done
+        
+        if [ -x "$(command -v apt-get)" ]; then
+            apt-get update && apt-get install -y $packages
+        elif [ -x "$(command -v dnf)" ]; then
+            dnf install -y $packages
+        elif [ -x "$(command -v pacman)" ]; then
+            pacman -S --noconfirm $packages
+        else
+            yad --error \
+                --title="Installation Failed" \
+                --text="Cannot install dependencies automatically.\nPlease install: $packages" \
+                --width=400
+            exit 1
+        fi
+    fi
+}
+
+# Get system information from user
+get_system_info() {
+    local info=$(yad --form \
+        --title="Live System ISO Creator" \
+        --text="Enter system information:" \
+        --width=400 \
+        --field="System Name:" \
+        --field="ISO Filename:" \
+        --field="Volume Label:" \
+        "MyLiveSystem" \
+        "mylive.iso" \
+        "MYLIVE")
+    
+    if [ $? -ne 0 ] || [ -z "$info" ]; then
+        exit 0
+    fi
+    
+    SYSTEM_NAME=$(echo "$info" | cut -d'|' -f1)
+    ISO_NAME=$(echo "$info" | cut -d'|' -f2)
+    local volume=$(echo "$info" | cut -d'|' -f3)
+    
+    # Ensure .iso extension
+    [[ "$ISO_NAME" != *.iso ]] && ISO_NAME="${ISO_NAME}.iso"
+    
+    # Clean volume label
+    VOLUME_LABEL=$(echo "$volume" | tr '[:lower:]' '[:upper:]' | tr -cd '[:alnum:]_-' | cut -c1-32)
+    
+    # Set work directory
+    WORK_DIR="/home/${SYSTEM_NAME// /_}"
+}
+
+# Create SquashFS with progress
+create_squashfs() {
+    local squashfs_file="$WORK_DIR/live/filesystem.squashfs"
+    mkdir -p "$WORK_DIR/live"
+    
+    mkfifo "$PROGRESS_PIPE"
+    
+    # List of directories to exclude
+    local EXCLUDE_DIRS=(
+        "/proc"
+        "/sys"
+        "/dev"
+        "/run"
+        "/tmp"
+        "/mnt"
+        "/media"
+        "/lost+found"
+        "/home/*/.cache"
+        "/home/*/.local/share/Trash"
+        "/var/cache"
+        "/var/tmp"
+        "/var/log"
+        "/var/run"
+        "/var/lock"
+        "/var/lib/apt/lists"
+        "/var/lib/dpkg/info"
+        "/snap"
+        "/swapfile"
+        "/swap.img"
+        "*.tmp"
+        "*.temp"
+        "*.swp"
+        "*.swo"
+        "*/lost+found"
+        "/boot/grub/grub.cfg"
+        "/etc/fstab"
+        "/etc/mtab"
+        "/etc/machine-id"
+        "$WORK_DIR"
+    )
+    
+    # Build exclude parameters
+    local EXCLUDE_PARAMS=""
+    for dir in "${EXCLUDE_DIRS[@]}"; do
+        EXCLUDE_PARAMS="$EXCLUDE_PARAMS -e $dir"
+    done
+    EXCLUDE_PARAMS="$EXCLUDE_PARAMS -wildcards"
+    
+    # Start progress dialog
+    (
+        echo "# Creating SquashFS filesystem..."
+        echo "10"
+        
+        # Get approximate size for progress estimation
+        local total_size=$(du -sb / 2>/dev/null | awk '{print $1}' || echo "1000000000")
+        
+        # Create squashfs with progress monitoring
+        mksquashfs / "$squashfs_file" \
+            -comp xz \
+            -Xbcj x86 \
+            -Xdict-size 100% \
+            -b 1048576 \
+            -no-duplicates \
+            -noappend \
+            -always-use-fragments \
+            -no-exports \
+            $EXCLUDE_PARAMS \
+            -processors $(nproc) \
+            -progress 2>&1 | while read line; do
+                if [[ "$line" =~ ([0-9]+)% ]]; then
+                    percent="${BASH_REMATCH[1]}"
+                    echo "$((10 + percent * 60 / 100))"
+                    echo "# Creating SquashFS: $percent% complete"
+                fi
+            done
+        
+        echo "70"
+        echo "# Verifying SquashFS integrity..."
+        
+        if unsquashfs -stat "$squashfs_file" &> /dev/null; then
+            echo "75"
+            echo "# SquashFS created successfully!"
+        else
+            echo "# ERROR: SquashFS verification failed!"
+            exit 1
+        fi
+        
+    ) | yad --progress \
+        --title="Creating SquashFS" \
+        --text="Compressing filesystem..." \
+        --width=400 \
+        --auto-close \
+        --auto-kill
+    
+    if [ ${PIPESTATUS[0]} -ne 0 ]; then
+        yad --error \
+            --title="SquashFS Creation Failed" \
+            --text="Failed to create SquashFS filesystem" \
+            --width=300
+        exit 1
+    fi
+    
+    rm -f "$PROGRESS_PIPE"
+}
+
+# Copy kernel and initrd
+copy_boot_files() {
+    echo "Copying boot files..."
+    
+    # Find newest kernel
+    local vmlinuz=$(ls -t /boot/vmlinuz-* 2>/dev/null | head -1)
+    if [ -z "$vmlinuz" ]; then
+        yad --error \
+            --title="Kernel Not Found" \
+            --text="No kernel found in /boot" \
+            --width=300
+        exit 1
+    fi
+    
+    # Find matching initrd
+    local kernel_version=$(basename "$vmlinuz" | sed 's/vmlinuz-//')
+    local initrd="/boot/initrd.img-$kernel_version"
+    
+    if [ ! -f "$initrd" ]; then
+        # Try generic initrd
+        initrd=$(ls -t /boot/initrd.img-* 2>/dev/null | head -1)
+        if [ -z "$initrd" ]; then
+            yad --error \
+                --title="Initrd Not Found" \
+                --text="No initrd found in /boot" \
+                --width=300
+            exit 1
+        fi
+    fi
+    
+    # Copy to live directory
+    cp "$vmlinuz" "$WORK_DIR/live/vmlinuz"
+    cp "$initrd" "$WORK_DIR/live/initrd.img"
+    
+    echo "Boot files copied successfully"
+}
+
+# Download hybrid bootfiles
+download_bootfiles() {
+    local temp_dir="/tmp/bootfiles_$$"
+    mkdir -p "$temp_dir"
+    
+    (
+        echo "# Downloading boot files..."
+        echo "10"
+        
+        wget --progress=bar:force \
+            "https://github.com/GlitchLinux/gLiTcH-ISO-Creator/raw/refs/heads/main/HYBRID-BASE-grub2-tux-splash.tar.lzma" \
+            -O "$temp_dir/bootfiles.tar.lzma" 2>&1 | while read line; do
+                if [[ "$line" =~ ([0-9]+)% ]]; then
+                    percent="${BASH_REMATCH[1]}"
+                    echo "$((10 + percent * 30 / 100))"
+                fi
+            done
+        
+        echo "40"
+        echo "# Extracting boot files..."
+        
+        unlzma "$temp_dir/bootfiles.tar.lzma"
+        tar -xf "$temp_dir/bootfiles.tar" -C "$WORK_DIR" --strip-components=1
+        
+        echo "50"
+        echo "# Boot files installed"
+        
+    ) | yad --progress \
+        --title="Downloading Boot Files" \
+        --text="Preparing boot system..." \
+        --width=400 \
+        --auto-close
+    
+    rm -rf "$temp_dir"
+}
+
+# Create GRUB configuration
+create_grub_config() {
+    mkdir -p "$WORK_DIR/boot/grub"
+    
+    # Copy splash if exists
+    if [ -f "$WORK_DIR/isolinux/splash.png" ]; then
+        cp "$WORK_DIR/isolinux/splash.png" "$WORK_DIR/boot/grub/splash.png"
+    fi
+    
+    # Create theme config
+    cat > "$WORK_DIR/boot/grub/theme.cfg" <<'EOF'
+title-color: "white"
+title-text: " "
+title-font: "Sans Regular 16"
+desktop-color: "black"
+desktop-image: "/boot/grub/splash.png"
+message-color: "white"
+message-bg-color: "black"
+terminal-font: "Sans Regular 12"
+
++ boot_menu {
+  top = 150
+  left = 15%
+  width = 75%
+  height = 150
+  item_font = "Sans Regular 12"
+  item_color = "grey"
+  selected_item_color = "white"
+  item_height = 20
+  item_padding = 15
+  item_spacing = 5
+}
+EOF
+    
+    # Create GRUB config
+    cat > "$WORK_DIR/boot/grub/grub.cfg" <<EOF
+# GRUB2 Configuration
+
+if loadfont \$prefix/fonts/font.pf2 ; then
+  set gfxmode=800x600
+  set gfxpayload=keep
+  insmod efi_gop
+  insmod efi_uga
+  insmod video_bochs
+  insmod video_cirrus
+  insmod gfxterm
+  insmod png
+  terminal_output gfxterm
+fi
+
+if background_image "/boot/grub/splash.png"; then
+  set color_normal=light-gray/black
+  set color_highlight=white/black
+else
+  set menu_color_normal=cyan/blue
+  set menu_color_highlight=white/blue
+fi
+
+set default=0
+set timeout=10
+
+menuentry "$SYSTEM_NAME - LIVE" {
+    linux /live/vmlinuz boot=live config quiet splash
+    initrd /live/initrd.img
+}
+
+menuentry "$SYSTEM_NAME - Boot to RAM" {
+    linux /live/vmlinuz boot=live config quiet splash toram
+    initrd /live/initrd.img
+}
+
+menuentry "$SYSTEM_NAME - Encrypted Persistence" {
+    linux /live/vmlinuz boot=live components quiet splash persistent=cryptsetup persistence-encryption=luks persistence
+    initrd /live/initrd.img
+}
+EOF
+}
+
+# Create ISOLINUX config
+create_isolinux_config() {
+    cat > "$WORK_DIR/isolinux/isolinux.cfg" <<'EOF'
+default grub2_chainload
+timeout 1
+prompt 0
+
+label grub2_chainload
+  linux /boot/grub/lnxboot.img
+  initrd /boot/grub/core.img
+EOF
+}
+
+# Create autorun.inf
+create_autorun() {
+    cat > "$WORK_DIR/autorun.inf" <<EOF
+[Autorun]
+icon=glitch.ico
+label=$SYSTEM_NAME
+EOF
+}
+
+# Create ISO with progress
+create_iso() {
+    local output_file="/home/$ISO_NAME"
+    
+    # Find MBR file
+    local mbr_file="$WORK_DIR/isolinux/isohdpfx.bin"
+    if [ ! -f "$mbr_file" ]; then
+        mbr_file="/usr/lib/ISOLINUX/isohdpfx.bin"
+    fi
+    
+    (
+        echo "# Creating ISO image..."
+        echo "10"
+        
+        xorriso -as mkisofs \
+            -iso-level 3 \
+            -volid "$VOLUME_LABEL" \
+            -full-iso9660-filenames \
+            -R -J -joliet-long \
+            -isohybrid-mbr "$mbr_file" \
+            -b isolinux/isolinux.bin \
+            -c isolinux/boot.cat \
+            -no-emul-boot \
+            -boot-load-size 4 \
+            -boot-info-table \
+            -eltorito-alt-boot \
+            -e boot/grub/efi.img \
+            -no-emul-boot \
+            -isohybrid-gpt-basdat \
+            -append_partition 2 0xEF "$WORK_DIR/boot/grub/efi.img" \
+            -o "$output_file" \
+            "$WORK_DIR" 2>&1 | while read line; do
+                if [[ "$line" =~ ([0-9]+\.[0-9]+)% ]]; then
+                    percent=$(echo "${BASH_REMATCH[1]}" | cut -d. -f1)
+                    echo "$((10 + percent * 90 / 100))"
+                    echo "# Building ISO: $percent% complete"
+                fi
+            done
+        
+        echo "100"
+        echo "# ISO created successfully!"
+        
+    ) | yad --progress \
+        --title="Creating ISO" \
+        --text="Building ISO image..." \
+        --width=400 \
+        --auto-close
+    
+    if [ -f "$output_file" ]; then
+        local size=$(du -h "$output_file" | cut -f1)
+        yad --info \
+            --title="Success!" \
+            --text="ISO created successfully!\n\nLocation: $output_file\nSize: $size" \
+            --width=400
+    else
+        yad --error \
+            --title="ISO Creation Failed" \
+            --text="Failed to create ISO image" \
+            --width=300
+        exit 1
+    fi
+}
+
+# Main process with overall progress
+main_process() {
+    (
+        echo "# Starting Live ISO creation process..."
+        echo "5"
+        
+        echo "# Creating SquashFS filesystem..."
+        echo "10"
+        create_squashfs
+        
+        echo "# Copying boot files..."
+        echo "75"
+        copy_boot_files
+        
+        echo "# Downloading hybrid boot system..."
+        echo "80"
+        download_bootfiles
+        
+        echo "# Creating boot configurations..."
+        echo "85"
+        create_grub_config
+        create_isolinux_config
+        create_autorun
+        
+        echo "# Building final ISO..."
+        echo "90"
+        create_iso
+        
+        echo "100"
+        echo "# Process completed!"
+        
+    ) | yad --progress \
+        --title="Live System ISO Creator" \
+        --text="Creating live system..." \
+        --width=500 \
+        --height=150 \
+        --auto-close \
+        --no-cancel
+}
+
+# Main function
+main() {
+    # Check root
+    check_root
+    
+    # Install dependencies
+    echo "Checking dependencies..."
+    install_dependencies
+    
+    # Show welcome dialog
+    yad --info \
+        --title="Live System ISO Creator" \
+        --text="This tool will create a bootable Live System ISO with:\n\n• Compressed SquashFS filesystem\n• Hybrid UEFI/BIOS boot support\n• Auto-chainloading from ISOLINUX to GRUB2\n• Maximum XZ compression\n\nThe process may take 15-30 minutes depending on system size." \
+        --width=450 \
+        --height=250
+    
+    if [ $? -ne 0 ]; then
+        exit 0
+    fi
+    
+    # Get system information
+    get_system_info
+    
+    # Confirm settings
+    yad --question \
+        --title="Confirm Settings" \
+        --text="Ready to create Live ISO with:\n\nSystem Name: $SYSTEM_NAME\nISO Name: $ISO_NAME\nVolume Label: $VOLUME_LABEL\nWork Directory: $WORK_DIR\n\nThis will compress your entire system (excluding temp files).\nContinue?" \
+        --width=400
+    
+    if [ $? -ne 0 ]; then
+        exit 0
+    fi
+    
+    # Create work directory
+    mkdir -p "$WORK_DIR"
+    
+    # Run main process
+    main_process
+    
+    # Cleanup is handled by trap
+}
+
+# Run main
+main "$@"
