@@ -216,6 +216,12 @@ menuentry "$NAME - Encrypted Persistence" {
     initrd /live/$INITRD
 }
 
+if [ -f /boot/grub/custom.cfg ]; then
+    menuentry "Custom Options" {
+        configfile /boot/grub/custom.cfg
+    }
+fi
+
 menuentry "GRUBFM (UEFI)" {
     chainloader /EFI/GRUB-FM/E2B-bootx64.efi
 }
@@ -253,6 +259,12 @@ menuentry "SUPERGRUB (UEFI)" {
 menuentry "Netboot.xyz (UEFI)" {
     chainloader /boot/grub/netboot.xyz/EFI/BOOT/BOOTX64.EFI
 }
+
+if [ -f /boot/grub/custom.cfg ]; then
+    menuentry "Custom Options" {
+        configfile /boot/grub/custom.cfg
+    }
+fi
 
 menuentry "Power Off" {
     halt
