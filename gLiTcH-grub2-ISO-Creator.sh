@@ -1,6 +1,3 @@
-
-
-
 #!/bin/bash
 
 # Nano ISO Creator - Minimal Live System ISO Builder
@@ -163,10 +160,18 @@ menuentry "$name - Boot to RAM" {
     initrd /casper/$initrd
 }
 
-menuentry "$name - Safe Graphics" {
-    linux /casper/$vmlinuz boot=casper quiet splash nomodeset
-    initrd /casper/$initrd
+menuentry "$name - Encrypted Persistence" {
+    linux /live/$vmlinuz boot=live components quiet splash persistent=cryptsetup persistence-encryption=luks persistence
+    initrd /live/$initrd
+
 }
+
+if [ -f /boot/grub/custom.cfg ]; then
+    menuentry "Custom Options" {
+        configfile /boot/grub/custom.cfg
+    }
+fi
+
 EOF
     else
         # Debian Live configuration
@@ -185,18 +190,17 @@ menuentry "$name - Encrypted Persistence" {
     linux /live/$vmlinuz boot=live components quiet splash persistent=cryptsetup persistence-encryption=luks persistence
     initrd /live/$initrd
 }
+
+if [ -f /boot/grub/custom.cfg ]; then
+    menuentry "Custom Options" {
+        configfile /boot/grub/custom.cfg
+    }
+fi
+
 EOF
     fi
 
     cat >> "$iso_dir/boot/grub/grub.cfg" <<'EOF'
-
-menuentry "Power Off" {
-    halt
-}
-
-menuentry "Reboot" {
-    reboot
-}
 
 EOF
 
