@@ -1,3 +1,4 @@
+rm -rf /tmp/FastCat
 cd /tmp
 echo "If 'unzip' is not installed script will fail"
 echo "if missing, run: sudo apt install unzip"
@@ -5,4 +6,4 @@ sleep 4
 echo "Cloning FastCat git repo to /tmp..."
 git clone --depth 1 https://github.com/m3tozz/FastCat.git && cd FastCat && bash ./fastcat.sh --shell
 echo "Cleaning up fastcat files..."
-rm -rf /tmp/FastCat && sleep 8
+rm -rf /tmp/FastCat && sleep 8 && cd
