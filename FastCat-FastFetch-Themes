@@ -4,4 +4,4 @@ Sudo apt install unzip -y
 echo "Cloning FastCat git repo to /tmp..."
 sud0 git clone --depth 1 https://github.com/m3tozz/FastCat.git && cd FastCat && bash ./fastcat.sh --shell
 echo "Cleaning up fastcat files..."
-sleep 6 && sudo mv -r /tmp/FastCat /tmp/trash && sleep 2
+sleep 6 && sudo mv -f /tmp/FastCat /tmp/trash && sleep 2
