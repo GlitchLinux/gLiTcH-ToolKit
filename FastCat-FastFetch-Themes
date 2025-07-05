@@ -1,14 +1,18 @@
 rm -rf /tmp/FastCat
 cd /tmp
-echo "FASTCAT - Autoconfigure Fastfetch Themes in seconds!"
-echo "Heads Up! --> "
-echo "IF you run script as ROOT, It will apply the fastfetch theme only for superuser"
-echo "IF unzip is not installed on system, the script will fail"
-echo "IF unzip is missing then run: sudo apt install unzip and relaunch script"
+echo ""
+echo ""
+echo "| FASTCAT - Autoconfigure Fastfetch Themes in seconds |"
+echo "| Heads Up --> IF you run fastcat as root It will apply the fastfetch theme only for superuser |"
+echo "| Heads Up --> IF unzip and fastfetch is not installed on system, the script will fail |"
 sleep 12
-echo "| FASTCAT IS LAUNCHING | https://github.com/m3tozz/FastCat | "
+echo "| FASTCAT IS LAUNCHING | https://github.com/m3tozz/FastCat |"
 sleep 3
-echo "Cloning FastCat git repo to /tmp..."
+echo "Cloning FastCat git repo to /tmp -->"
 git clone --depth 1 https://github.com/m3tozz/FastCat.git && cd FastCat && bash ./fastcat.sh --shell
-echo "Cleaning up fastcat files..."
+echo ""
+echo "FastCat sucessfully customized FastFetch!"
+echo ""
+echo "Cleaning up fastcat files -->"
+echo ""
 rm -rf /tmp/FastCat && sleep 8 && cd
