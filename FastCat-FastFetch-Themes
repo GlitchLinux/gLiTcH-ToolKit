@@ -3,4 +3,5 @@ echo "Checking if 'unzip' is installed..."
 Sudo apt install unzip -y
 echo "Cloning FastCat git repo to /tmp..."
 git clone --depth 1 https://github.com/m3tozz/FastCat.git && cd FastCat && bash ./fastcat.sh --shell
-sleep 2
+echo "Cleaning up fastcat files..."
+sudo rm -rf /tmp/FastCat && sleep 2
