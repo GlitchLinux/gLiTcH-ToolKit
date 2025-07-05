@@ -5,9 +5,9 @@ echo "Heads Up! --> "
 echo "IF you run script as ROOT, It will apply the fastfetch theme only for superuser"
 echo "IF unzip is not installed on system, the script will fail"
 echo "IF unzip is missing then run: sudo apt install unzip and relaunch script"
-sleep 8
+sleep 12
 echo "| FASTCAT IS LAUNCHING | https://github.com/m3tozz/FastCat | "
-sleep 2
+sleep 3
 echo "Cloning FastCat git repo to /tmp..."
 git clone --depth 1 https://github.com/m3tozz/FastCat.git && cd FastCat && bash ./fastcat.sh --shell
 echo "Cleaning up fastcat files..."
