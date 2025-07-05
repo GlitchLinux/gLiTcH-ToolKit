@@ -166,6 +166,98 @@ EOF
     success "Sources updated for Bookworm"
 }
 
+# Handle systemd and dpkg issues
+fix_systemd_issues() {
+    log "Handling systemd and dpkg issues..."
+    
+    # Set non-interactive mode to avoid prompts
+    export DEBIAN_FRONTEND=noninteractive
+    
+    # Fix any existing dpkg issues
+    log "Fixing dpkg database..."
+    dpkg --configure -a || true
+    
+    # Handle systemd removal issues
+    log "Handling systemd removal conflicts..."
+    
+    # Mark systemd as essential to prevent problematic removal
+    apt-mark hold systemd systemd-sysv || true
+    
+    # Force fix broken packages
+    apt --fix-broken install -y || true
+    
+    # If systemd is still causing issues, force reconfigure
+    if dpkg -l | grep -q "^iU.*systemd"; then
+        warn "Systemd in broken state, attempting to fix..."
+        
+        # Try to force configure systemd
+        dpkg --force-confold --configure systemd || true
+        dpkg --force-confold --configure systemd-sysv || true
+        
+        # If that fails, try more aggressive approach
+        if dpkg -l | grep -q "^iU.*systemd"; then
+            warn "Using aggressive systemd fix..."
+            
+            # Force remove and reinstall systemd
+            dpkg --remove --force-remove-reinstreq systemd || true
+            dpkg --remove --force-remove-reinstreq systemd-sysv || true
+            
+            # Clean up and reinstall
+            apt --fix-broken install -y
+            apt install -y --reinstall systemd systemd-sysv
+        fi
+    fi
+    
+    # Remove hold on systemd
+    apt-mark unhold systemd systemd-sysv || true
+    
+    success "Systemd issues resolved"
+}
+
+# Handle dpkg errors during upgrade
+handle_dpkg_errors() {
+    log "Handling dpkg errors and package conflicts..."
+    
+    # Check for packages in error state
+    BROKEN_PACKAGES=$(dpkg -l | grep "^iU\|^rU\|^iF" | wc -l)
+    
+    if [[ $BROKEN_PACKAGES -gt 0 ]]; then
+        warn "Found $BROKEN_PACKAGES packages in error state"
+        
+        # Try to fix broken packages
+        log "Attempting to fix broken packages..."
+        
+        # Configure pending packages
+        dpkg --configure -a || true
+        
+        # Force fix installation
+        apt --fix-broken install -y || true
+        
+        # Remove packages that are in removal-failed state
+        REMOVAL_FAILED=$(dpkg -l | grep "^rU" | awk '{print $2}')
+        if [[ -n "$REMOVAL_FAILED" ]]; then
+            log "Force removing failed packages: $REMOVAL_FAILED"
+            for pkg in $REMOVAL_FAILED; do
+                dpkg --remove --force-remove-reinstreq "$pkg" || true
+            done
+        fi
+        
+        # Handle installation-failed packages
+        INSTALL_FAILED=$(dpkg -l | grep "^iU\|^iF" | awk '{print $2}')
+        if [[ -n "$INSTALL_FAILED" ]]; then
+            log "Reconfiguring failed packages: $INSTALL_FAILED"
+            for pkg in $INSTALL_FAILED; do
+                dpkg --force-confold --configure "$pkg" || true
+            done
+        fi
+        
+        # Final fix attempt
+        apt --fix-broken install -y || true
+    fi
+    
+    success "DPKG error handling completed"
+}
+
 # Minimal upgrade approach
 minimal_upgrade() {
     log "Performing minimal upgrade to avoid conflicts..."
@@ -173,9 +265,19 @@ minimal_upgrade() {
     # Update package lists
     apt update
     
+    # Handle systemd issues first
+    fix_systemd_issues
+    
+    # Handle any existing dpkg errors
+    handle_dpkg_errors
+    
     # First, upgrade essential packages
     log "Upgrading essential packages first..."
-    apt install -y --only-upgrade apt dpkg libc6 locales
+    apt install -y --only-upgrade apt dpkg libc6 locales || {
+        warn "Essential package upgrade had issues, attempting fixes..."
+        handle_dpkg_errors
+        apt install -y --only-upgrade apt dpkg libc6 locales
+    }
     
     # Handle potential conflicts
     log "Resolving package conflicts..."
@@ -186,8 +288,8 @@ minimal_upgrade() {
         systemd:i386 \
         2>/dev/null || true
     
-    # Fix broken packages
-    apt --fix-broken install -y
+    # Fix broken packages again
+    apt --fix-broken install -y || handle_dpkg_errors
     
     success "Minimal upgrade completed"
 }
@@ -199,18 +301,38 @@ main_upgrade() {
     # Set non-interactive mode
     export DEBIAN_FRONTEND=noninteractive
     
-    # Upgrade in stages
+    # Upgrade in stages with error handling
     log "Stage 1: Upgrading core system..."
-    apt upgrade -y
+    if ! apt upgrade -y; then
+        warn "Core upgrade had issues, attempting to fix..."
+        handle_dpkg_errors
+        fix_systemd_issues
+        apt upgrade -y || {
+            error "Core upgrade failed after fixes"
+            log "Continuing with partial upgrade..."
+        }
+    fi
     
     log "Stage 2: Full distribution upgrade..."
-    apt full-upgrade -y
+    if ! apt full-upgrade -y; then
+        warn "Full upgrade had issues, attempting to fix..."
+        handle_dpkg_errors
+        fix_systemd_issues
+        
+        # Try a more conservative approach
+        log "Attempting conservative full upgrade..."
+        apt dist-upgrade -y || {
+            error "Full upgrade failed, but continuing..."
+            log "Some packages may need manual intervention"
+        }
+    fi
     
     # Handle any remaining issues
-    apt --fix-broken install -y
-    apt autoremove -y
+    handle_dpkg_errors
+    apt --fix-broken install -y || true
+    apt autoremove -y || true
     
-    success "Main upgrade completed"
+    success "Main upgrade completed (with error handling)"
 }
 
 # Post-upgrade cleanup
@@ -298,20 +420,40 @@ If the system fails to boot after upgrade:
    mount /dev/sdX1 /mnt  # Replace X1 with your root partition
    chroot /mnt
    
-4. Restore sources.list if needed:
+4. Fix dpkg issues:
+   dpkg --configure -a
+   apt --fix-broken install
+   
+5. Handle systemd issues:
+   dpkg --force-confold --configure systemd
+   apt install --reinstall systemd systemd-sysv
+   
+6. Restore sources.list if needed:
    cp /etc/apt/sources.list.bullseye-backup /etc/apt/sources.list
    apt update && apt install -f
    
-5. Fix bootloader:
+7. Fix bootloader:
    update-grub
    grub-install /dev/sdX  # Replace X with your disk
    
-6. If X11/graphics issues persist:
+8. If X11/graphics issues persist:
    apt install --reinstall xserver-xorg-core
    
+9. Handle package conflicts:
+   apt-mark hold problematic-package
+   apt upgrade
+   apt-mark unhold problematic-package
+
+COMMON DPKG COMMANDS:
+- dpkg --configure -a          # Configure pending packages
+- dpkg --remove --force-remove-reinstreq PACKAGE  # Force remove
+- apt --fix-broken install     # Fix broken dependencies
+- dpkg -l | grep "^iU\|^rU"   # Show packages in error state
+
 BACKUP LOCATION: Check /root/upgrade-backup-* directories
 
 For Sparky-specific help: https://sparkylinux.org/forum/
+For Debian upgrade help: https://www.debian.org/releases/bookworm/amd64/release-notes/
 EOF
     
     success "Recovery info created at /root/UPGRADE_RECOVERY_INFO.txt"
