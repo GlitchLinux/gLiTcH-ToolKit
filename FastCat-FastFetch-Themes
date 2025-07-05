@@ -1,4 +1,3 @@
-sudo rm -rf /tmp/FastCat
 cd /tmp
 echo "Checking if 'unzip' is installed..."
 Sudo apt install unzip -y
