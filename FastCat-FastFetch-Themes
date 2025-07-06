@@ -75,23 +75,21 @@ clear
 rm -rf /tmp/FastCat
 cd /tmp
 
-echo "┌───────────────────────────────────────────────────┐"              
-typewriter_effect "│ WELCOME TO FASTCAT AUTOCONFIGURATOR ⛛│"                          
-typewriter_effect "│THEMING UTILITY FOR FASTFETCH CLI    ⛛│"                              
-#typewriter_effect "https://github.com/m3tozz/FastCat  ⛛"      
-#typewriter_effect "https://github.com/fastfetch-cli   ⛛"
-echo "└───────────────────────────────────────────────────┘" 
-echo -e "${GREEN}          ⋏    ⋏"
-echo -e "${GREEN}	      /ʌ)__/ʌ)   ${CYAN}=======================================================================${NC}"                              
-echo -e "${GREEN}        /  	  \ ${PINK}⛛ F-A-S-T-C-A-T ⛛ ⟹ CLI to autoconfigure fastfetch themes in seconds${NC}"
-echo -e "${GREEN}  　    ╏ (Θ) (Θ) ╏ ${PINK}  TAKE NOTICE  ⟹ RUNNING as root, theme will only be applied for superuser${NC}"
-echo -e "${GREEN}  　  _⋰ ≽v--v≼ ﾉ ${PINK}   REQUIREMENTS ⟹ Packages unzip & fastfetch, if missing the script fail${NC}"
-echo -e "${GREEN}    /　		  | ${CYAN}=======================================================================${NC}"  		 
-echo -e "${GREEN}   / 		      │   
-echo -e "${GREEN}   ( 　 ヽ    Y   ﾉ      
-echo -e "${GREEN}  _ﾉ　 　|    |   |
-echo -e "${GREEN} /  ____ﾉ    ╏   |       
-echo -e "${GREEN}( (__╭=╮(m)m)m)m)───────────────────────────────⟹"echo
+#echo "┌───────────────────────────────────────────────────┐"              
+#typewriter_effect " WELCOME TO FASTCAT AUTOCONFIGURATOR⛛ │"                          
+#typewriter_effect "  THEMING UTILITY FOR FASTFETCH CLI ⛛ │"                              
+#echo "└───────────────────────────────────────────────────┘" 
+echo -e "${GREEN}          ⋏    ⋏ "
+echo -e "${GREEN}	      /ʌ)__/ʌ) ${CYAN}─────────────────────────────────────────────────────────────────────────${NC}"                              
+echo -e "${GREEN}        /  	  \ ${PINK} ⛛ F-A-S-T-C-A-T ⛛ ⟹ CLI to autoconfigure fastfetch themes in seconds${NC}"
+echo -e "${GREEN}  　    ╏ (Θ) (Θ) ╏ ${PINK} TAKE NOTICE - RUNNING as ROOT theme will only be applied for superuser${NC}"
+echo -e "${GREEN}  　  _⋰ ≽v--v≼ ﾉ ${PINK} REQUIREMENTS - PACKAGES unzip & fastfetch, if missing the script fail${NC}"
+echo -e "${GREEN}    /　		  | ${CYAN}───────────────────────────────────────────────────────────────────────${NC}"  		 
+echo -e "${GREEN}   / 		      │  echo "┌─────────────────────────────────────────────────────┐"   
+echo -e "${GREEN}   ( 　 ヽ    Y   ﾉ  typewriter_effect "WELCOME TO FASTCAT AUTOCONFIGURATORV  ⛛ │" "$BRIGHT_GREEN"                            
+echo -e "${GREEN}  _ﾉ　 　|    |   |  typewriter_effect "THEMING UTILITY FOR FASTFETCH CLIVV   ⛛ │" "$BRIGHT_GREEN"                             
+echo -e "${GREEN} /  ____ﾉ    ╏   |  echo "└─────────────────────────────────────────────────────┘"      
+echo -e "${GREEN}( (___╭=╮(m)m)m)m)──────────────────⟹"echo
 echo -e "${PINK}  ＼____/ ⛛ F A S T C A T ⛛"
 echo ""
 echo -e "${PINK}${BOLD}$(figlet -f digital "WELCOME TO FASTCAT")${NC}"
