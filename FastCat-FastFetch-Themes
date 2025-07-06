@@ -15,9 +15,15 @@ NC='\033[0m' # No Color
 rm -rf /tmp/FastCat
 cd /tmp
 
-echo ""    
-echo -e "${YELLOW}          ʌ____ʌ                                         ʌ___ʌ${NC}"
-echo -e "${YELLOW} 　     ／ _   _ l   <3   ${BOLD}FASTCAT${NC} ${MAGENTA}〲⚆ܫ⚆〉${NC}${GREEN}AUTOCONFIGURATOR${NC}"
+echo ""         echo -e "${BRIGHT_CYAN}${BOLD}"
+echo 
+echo                                                                   
+echo          "╔═══════════════════════════════════════════╗"                                     
+echo          "║                                           ║" 
+echo          "║                                           ║"
+echo -e "${NC}"╚═════════════════════╗╔════════════════════╝"
+echo -e "${YELLOW}          ʌ____ʌ   ║║                                      ʌ___ʌ${NC}"
+echo -e "${YELLOW} 　     ／ _   _ l //   ${BOLD}FASTCAT${NC} ${MAGENTA}〲⚆ܫ⚆〉${NC}${GREEN}AUTOCONFIGURATOR${NC}"
 echo -e "${YELLOW} 　     l ⚆ ܫ ⚆ l        ${WHITE}Theming Tool for FastFetch CLI${NC}" 
 echo -e "${YELLOW} 　   ／＼  V--V ノ        ${BLUE}https://github.com/m3tozz/FastCat${NC}"
 echo -e "${YELLOW}     /　　　     |           ${BLUE}https://github.com/fastfetch-cli${NC}"
