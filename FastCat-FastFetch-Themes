@@ -16,7 +16,7 @@ rm -rf /tmp/FastCat
 cd /tmp
 
 echo ""
-echo -e "${CYAN}           ʌ)____ʌ)                                  ʌ___ʌ${NC}"
+echo -e "${CYAN}          ʌ)____ʌ)                                  ʌ___ʌ${NC}"
 echo -e "${YELLOW} 　     ／       l       ${BOLD}FASTCAT${NC} ${MAGENTA}〲⚆ܫ⚆〉${NC}${GREEN}AUTOCONFIGURATOR${NC}"
 echo -e "${YELLOW} 　    |   x  x   l        ${WHITE}Theming Tool for FastFetch CLI${NC}" 
 echo -e "${YELLOW} 　   ／＼  w-w  ノ        ${BLUE}https://github.com/m3tozz/FastCat${NC}"
