@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# SparkyLinux GPG Key Fix Script
+# This script downloads and installs the correct GPG keyring for SparkyLinux repositories
+
+set -e  # Exit on any error
+
+echo "=== SparkyLinux GPG Key Fix Script ==="
+echo "This script will fix GPG key verification errors for SparkyLinux repositories"
+echo ""
+
+# Check if running as root
+if [[ $EUID -eq 0 ]]; then
+   echo "Please do not run this script as root. It will use sudo when needed."
+   exit 1
+fi
+
+# Create temporary directory
+TEMP_DIR=$(mktemp -d)
+cd "$TEMP_DIR"
+
+echo "Step 1: Downloading SparkyLinux keyring..."
+wget -q --show-progress "https://sourceforge.net/projects/sparkylinux/files/repo/pool/main/s/sparky-keyring/sparky-keyring_20241204-1.debian.tar.xz/download" -O sparky-keyring.tar.xz
+
+echo ""
+echo "Step 2: Extracting keyring archive..."
+tar -xf sparky-keyring.tar.xz
+
+echo ""
+echo "Step 3: Installing keyring files..."
+# Install the keyring files to the appropriate system directories
+sudo cp debian/sparky-keyring.gpg /usr/share/keyrings/
+sudo cp debian/sparky-keyring.gpg /etc/apt/trusted.gpg.d/
+
+echo ""
+echo "Step 4: Setting correct permissions..."
+sudo chmod 644 /usr/share/keyrings/sparky-keyring.gpg
+sudo chmod 644 /etc/apt/trusted.gpg.d/sparky-keyring.gpg
+
+echo ""
+echo "Step 5: Removing old problematic keys (if any)..."
+# Remove any old or corrupted keys that might be causing issues
+sudo apt-key del "sparky" 2>/dev/null || true
+
+echo ""
+echo "Step 6: Updating package lists..."
+sudo apt update
+
+echo ""
+echo "Step 7: Cleaning up temporary files..."
+cd /
+rm -rf "$TEMP_DIR"
+
+echo ""
+echo "=== Fix Complete ==="
+echo "SparkyLinux GPG keys have been successfully installed and updated!"
+echo "You should now be able to update your package lists without GPG errors."
+echo ""
+echo "If you still encounter issues, try running:"
+echo "  sudo apt-get clean"
+echo "  sudo apt-get update"
