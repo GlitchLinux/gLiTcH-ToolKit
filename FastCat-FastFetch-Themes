@@ -1,7 +1,6 @@
 rm -rf /tmp/FastCat
 cd /tmp
 echo""
-echo""
 echo"         ʌ __ʌ                ʌ__ʌ"
 echo" 　    ／       l    FASTCAT 〲⚆ܫ⚆〉AUTOCONFIGURATOR"
 echo" 　   | 　x　 x  l   A Theming Tool for FastFetch CLI" 
@@ -25,3 +24,6 @@ echo ""
 echo "Cleaning up fastcat files -->"
 echo ""
 rm -rf /tmp/FastCat && sleep 8 && cd
+echo"            Cʌ__ʌ"
+echo" THANK YOU 〲⚆ܫ⚆〉See you Later!"   
+echo "           w   w  "
