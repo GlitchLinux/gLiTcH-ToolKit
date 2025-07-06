@@ -46,7 +46,7 @@ echo ""
 rm -rf /tmp/FastCat && sleep 8 && cd
 
 echo -e "${CYAN}     ʌ___ʌ     ====================${NC}      ${CYAN}ʌ___ ʌ${NC}"
-echo -e "${MAGENTA}      〈=^ェ^=〉 ${BOLD}THANK YOU FOR USING${NC} :    ${MAGENTA}〈=^ェ^=〉${NC}"
+echo -e "${MAGENTA}U+00A0	〈=^ェ^=〉U+00A0	 ${BOLD}THANK YOU FOR USING${NC} :    ${MAGENTA}〈=^ェ^=〉${NC}"
 echo -e "${GREEN}   (≧<=3≦)    ${RED}[̲̅F]-[̲̅A]-[̲̅S]-[̲̅T]-[̲̅C]-[̲̅A]-[̲̅T]${NC}        ${GREEN}(≧<=3≦)${NC}"
 echo -e "${CYAN}     W-M-W  =====================  |W-M-W|${NC}"
 echo ""
