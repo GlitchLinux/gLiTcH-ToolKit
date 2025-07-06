@@ -1,29 +1,52 @@
+|#!/bin/bash
+
+# Color definitions
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# Clean up and setup
 rm -rf /tmp/FastCat
 cd /tmp
-echo""
-echo"         ʌ __ʌ                 ʌ__ʌ"
-echo" 　    ／       l     FASTCAT 〲⚆ܫ⚆〉AUTOCONFIGURATOR"
-echo" 　   | 　x　 x  l    a Theming Tool for FastFetch CLI" 
-echo" 　   ／＼ w  wノ     https://github.com/m3tozz/FastCat"
-echo"     /　　　  　|"    https://github.com/fastfetch-cli"
-echo"    /　 ヽ　 　 ﾉ"
-echo"    │　　|　|　|"     
-echo" ／￣|　　 |　|　|"
-echo"| (￣ヽ＿_ヽ_)__)"
-echo"＼二つ FASTCAT ->  Autoconfigure fastfetch Themes in seconds"
-echo "TAKE NOTICE  ->  IF you run fastcat as root It will apply the fastfetch theme only for superuser "
-echo "REQUIRMENTS  ->  IF unzip and fastfetch is not installed on system, the script WILL fail"
+
+echo ""
+echo -e "${CYAN}           ʌ)____ʌ)                                  ʌ___ʌ${NC}"
+echo -e "${YELLOW} 　     ／       l       ${BOLD}FASTCAT${NC} ${MAGENTA}〲⚆ܫ⚆〉${NC}${GREEN}AUTOCONFIGURATOR${NC}"
+echo -e "${YELLOW} 　    |   x  x   l        ${WHITE}Theming Tool for FastFetch CLI${NC}" 
+echo -e "${YELLOW} 　   ／＼  w-w  ノ        ${BLUE}https://github.com/m3tozz/FastCat${NC}"
+echo -e "${YELLOW}     /　　　    |           ${BLUE}https://github.com/fastfetch-cli${NC}"
+echo -e "${YELLOW}    /　 ヽ　  　 ﾉ	               ${CYAN}ʌ___ʌ                                                      ʌ___ʌ${NC}"
+echo -e "${YELLOW}    │　　|　 |  |            ${MAGENTA}〈=^ェ^=〉          ${BOLD}WELCOME TO${NC}        ${MAGENTA}〈=^ェ^=〉${NC}"
+echo -e "${YELLOW} ／￣|　　|  |　|           ${GREEN}     (≧<3≦) ${RED}[̲̅F]-[̲̅A]-[̲̅S]-[̲̅T]-[̲̅C]-[̲̅A]-[̲̅T]${NC}     ${GREEN}(≧<=3≦)${NC}"
+echo -e "${YELLOW}| (￣ヽ＿_ヽ_)__)        ${CYAN}         W-M-W  ====================${NC}                    ${CYAN}|W-M-W|${NC}"
+echo -e "${YELLOW}＼二つ ${BOLD}FASTCAT${NC} ${WHITE}-> CLI Utility that will autoconfigure fastfetch themes in seconds${NC}"
+echo -e "${RED}${BOLD}TAKE NOTICE${NC} ${WHITE}-> IF you run fastcat as root It will apply the fastfetch theme only for superuser${NC}"
+echo -e "${YELLOW}${BOLD}REQUIREMENTS${NC} ${WHITE}-> IF unzip and fastfetch is not installed on system, the script WILL fail${NC}"
+
 sleep 12
-echo "FASTCAT IS LAUNCHING"
+
+echo -e "${GREEN}${BOLD}FASTCAT IS LAUNCHING${NC}"
 sleep 3
-echo "Cloning FastCat git repo to /tmp -->"
+
+echo -e "${BLUE}Cloning FastCat git repo to /tmp -->${NC}"
 git clone --depth 1 https://github.com/m3tozz/FastCat.git && cd FastCat && bash ./fastcat.sh --shell
+
 echo ""
-echo "FastCat sucessfully customized FastFetch!"
+echo -e "${GREEN}${BOLD}FastCat successfully customized FastFetch!${NC}"
 echo ""
-echo "Cleaning up fastcat files -->"
+echo -e "${YELLOW}Cleaning up fastcat files${NC}"
 echo ""
+
 rm -rf /tmp/FastCat && sleep 8 && cd
-echo"             ʌ__ʌ"
-echo" THANK YOU 〲⚆ܫ⚆〉See you Later!"   
-echo "           w-.-W"
+
+echo -e "${CYAN}     ʌ___ʌ     ====================${NC}      ${CYAN}ʌ___ ʌ${NC}"
+echo -e "${MAGENTA}〈=^ェ^=〉 ${BOLD}THANK YOU FOR USING${NC} :    ${MAGENTA}〈=^ェ^=〉${NC}"
+echo -e "${GREEN}   (≧<=3≦)    ${RED}[̲̅F]-[̲̅A]-[̲̅S]-[̲̅T]-[̲̅C]-[̲̅A]-[̲̅T]${NC}        ${GREEN}(≧<=3≦)${NC}"
+echo -e "${CYAN}     W-M-W  =====================  |W-M-W|${NC}"
+echo ""
