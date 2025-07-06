@@ -2,9 +2,18 @@ rm -rf /tmp/FastCat
 cd /tmp
 echo ""
 echo ""
-echo "| FASTCAT - Autoconfigure Fastfetch Themes in seconds |"
-echo "| Heads Up --> IF you run fastcat as root It will apply the fastfetch theme only for superuser |"
-echo "| Heads Up --> IF unzip and fastfetch is not installed on system, the script will fail |"
+echo"      ʌ __ʌ   "            ʌ__ʌ
+echo" 　 ／       l    FASTCAT 〲⚆ܫ⚆〉AUTOCONFIGURATOR"
+echo" 　| 　x　 x  l   A Theming Tool for FastFetch" 
+echo" 　／＼ w  wノ "
+echo"  /　　　 　 |"
+echo" /　 ヽ　　 ﾉ"
+echo"│　　|　|　|"
+echo"／￣|　　 |　|　|"
+echo"| (￣ヽ＿_ヽ_)__)"
+echo"＼二つ FASTCAT  -> Autoconfigure Fastfetch Themes in seconds "
+echo "TAKE NOTICE -> IF you run fastcat as root It will apply the fastfetch theme only for superuser "
+echo "REQUIRMENTS -> IF unzip and fastfetch is not installed on system, the script will fail "
 sleep 12
 echo "| FASTCAT IS LAUNCHING | https://github.com/m3tozz/FastCat |"
 sleep 3
