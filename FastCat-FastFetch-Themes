@@ -21,16 +21,17 @@ echo
 echo          "╔══════════════════════════════════════════╗"  ʌ___ʌ                                    
 echo          "║                                          ║" 〲⚆ܫ⚆〉
 echo          "║                                          ║"  (≧<3≦)
-echo -e "${NC}"╚═════════════════════╗════════════════════╝"   W-=-W
-echo -e "${YELLOW}         ʌ)____ʌ)   ║                                  ${NC}"
-echo -e "${YELLOW} 　     ／ _   _ l /   ${BOLD}FASTCAT${NC} ${MAGENTA}〉${NC}${GREEN}AUTOCONFIGURATOR${NC}"
-echo -e "${YELLOW} 　     l ⚆ ܫ ⚆ l        ${WHITE}Theming Tool for FastFetch CLI${NC}" 
-echo -e "${YELLOW} 　   ／＼       ノ        ${BLUE}https://github.com/m3tozz/FastCat${NC}"
-echo -e "${YELLOW}     /　　　     |           ${BLUE}https://github.com/fastfetch-cli${NC}"
-echo -e "${YELLOW}    /　 ヽ　  　 ﾉ   ʌ___ʌ     ${CYAN}     ʌ)___ʌ) PIMP THAT TERMINAL!                   ʌ___ʌ${NC}"
-echo -e "${YELLOW}    │　　|　 |  |  〈=^ェ^=〉  ${MAGENTA} 〈=⚆ܫ⚆=〉/  ${BOLD}WELCOME TO${NC} ${MAGENTA}〈=^ェ^=〉${NC}"
-echo -e "${YELLOW} ／￣|　　|  |　 |  (≧<3≦)   ${GREEN}    (≧<3≦)   ${RED}[̲̅F]-[̲̅A]-[̲̅S]-[̲̅T]-[̲̅C]-[̲̅A]-[̲̅T]${NC}${GREEN}(≧<=3≦)${NC}"
-echo -e "${YELLOW}| (￣ヽ＿_ヽ_)___)   W-M-W    ${CYAN}      W-=-W     ====================${NC}  ${CYAN}|W-M-W|${NC}"
+echo -e "${YELL╚═════════════════════╗╔  ${BOLD}FASTCAT${NC} ${MAGENTA}〉${NC}${GREEN}AUTOCONFIGURATOR${NC}"
+echo ""                              ║║ 
+echo -e "${CYAN}           ʌ)____ʌ)  /                                ʌ___ʌ${NC}"
+echo -e "${YELLOW} 　     ／       l      ${BOLD}FASTCAT${NC} ${MAGENTA}〲⚆ܫ⚆〉${NC}${GREEN}AUTOCONFIGURATOR${NC}"
+echo -e "${YELLOW} 　    |   x  x  l        ${WHITE}Theming Tool for FastFetch CLI${NC}" 
+echo -e "${YELLOW} 　   ／＼  w-w  ノ        ${BLUE}https://github.com/m3tozz/FastCat${NC}"
+echo -e "${YELLOW}     /　　　    |           ${BLUE}https://github.com/fastfetch-cli${NC}"
+echo -e "${YELLOW}    /　 ヽ　  　 ﾉ	             ${CYAN}ʌ___ʌ                                                      ʌ___ʌ${NC}"
+echo -e "${YELLOW}    │　　|　 |  |            ${MAGENTA}〈=^ェ^=〉          ${BOLD}WELCOME TO${NC}        ${MAGENTA}〈=^ェ^=〉${NC}"
+echo -e "${YELLOW} ／￣|　　|  |　|           ${GREEN}     (≧<3≦) ${RED}[̲̅F]-[̲̅A]-[̲̅S]-[̲̅T]-[̲̅C]-[̲̅A]-[̲̅T]${NC}     ${GREEN}(≧<=3≦)${NC}"
+echo -e "${YELLOW}| (￣ヽ＿_ヽ_)__)        ${CYAN}         W-M-W  ====================${NC}                    ${CYAN}|W-M-W|${NC}"
 echo -e "${YELLOW}＼二つ ${BOLD}FASTCAT${NC} ${WHITE}-> CLI Utility that will autoconfigure fastfetch themes in seconds${NC}"
 echo -e "${RED}${BOLD}TAKE NOTICE${NC} ${WHITE}-> IF you run fastcat as root It will apply the fastfetch theme only for superuser${NC}"
 echo -e "${YELLOW}${BOLD}REQUIREMENTS${NC} ${WHITE}-> IF unzip and fastfetch is not installed on system, the script WILL fail${NC}"
