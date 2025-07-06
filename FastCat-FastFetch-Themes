@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Color definitions
+# ULTIMATE COLOR PALETTE 🎨
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -8,70 +8,45 @@ BLUE='\033[0;34m'
 MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 WHITE='\033[1;37m'
+PINK='\033[1;35m'
 BOLD='\033[1m'
+DIM='\033[2m'
+ITALIC='\033[3m'
+UNDERLINE='\033[4m'
+BLINK='\033[5m'
+REVERSE='\033[7m'
+STRIKETHROUGH='\033[9m'
+
+# GRADIENT COLORS 🌈
+BRIGHT_RED='\033[1;31m'
+BRIGHT_GREEN='\033[1;32m'
+BRIGHT_YELLOW='\033[1;33m'
+BRIGHT_BLUE='\033[1;34m'
+BRIGHT_MAGENTA='\033[1;35m'
+BRIGHT_CYAN='\033[1;36m'
+
+# BACKGROUND COLORS 🎭
+BG_RED='\033[41m'
+BG_GREEN='\033[42m'
+BG_YELLOW='\033[43m'
+BG_BLUE='\033[44m'
+BG_MAGENTA='\033[45m'
+BG_CYAN='\033[46m'
+BG_WHITE='\033[47m'
+
 NC='\033[0m' # No Color
 
-# Clean up and setup
-rm -rf /tmp/FastCat
-cd /tmp
-
-echo ""         echo -e "${BRIGHT_CYAN}${BOLD}"
-echo 
-echo                                                                   
-echo           ┌───────────────────────────────────────────────┐"  ʌ___ʌ                                    
-echo           │${BOLD}FASTCAT${NC}AUTOCONFIGURATOR${NC}"      │                          ║" 〲⚆ܫ⚆ (≧<3≦)
-echo           │${WHITE}THEMING UTILITY FOR FASTFETCH CLI{NC}" │                             ║  
-echo           │${GREEN}https://github.com/m3tozz/FastCat${NC}"│      
-               │${GREEN}https://github.com/fastfetch-cli${NC}" │
-               └─────────────────────╗╔────────────────────────┘" 
-      echo -e "${YELLOW}   ／ʌ)_／ʌ)  /                                   ʌ___ʌ${NC}"
-      echo -e "${YELLOW} ／        l  
-echo -e "${YELLOW} 　    |   0  0  l   
-echo -e "${YELLOW} 　   ／＼= v-v =ノ      
-echo -e "${YELLOW}     /　　　     |     
-echo -e "${YELLOW}    /　 ヽ　  　 ﾉ	 ${CYAN}    ʌ___ʌ                                    ʌ___ʌ${NC}"
-echo -e "${YELLOW}    │　　|　 |  |  ${MAGENTA}〈=^ェ^=〉${BOLD}WELCOME TO${NC}${MAGENTA}〈=^ェ^=〉${NC}"
-echo -e "${YELLOW} ／￣|　　|  |　|  ${GREEN}    (≧<3≦) ${RED}[̲̅F]-[̲̅A]-[̲̅S]-[̲̅T]-[̲̅C]-[̲̅A]-[̲̅T]${NC}     ${GREEN}(≧<=3≦)${NC}"
-echo -e "${YELLOW}| (￣ヽ＿_ヽ_)__)  ${CYAN}     W-M-W  ====================${NC}                    ${CYAN}|W-M-W|${NC}"
-echo -e "${YELLOW}＼二つ ${BOLD}FASTCAT${NC} ${WHITE}-> CLI Utility that will autoconfigure fastfetch themes in seconds${NC}"
-echo -e "${RED}${BOLD}TAKE NOTICE${NC} ${WHITE}-> IF you run fastcat as root It will apply the fastfetch theme only for superuser${NC}"
-echo -e "${YELLOW}${BOLD}REQUIREMENTS${NC} ${WHITE}-> IF unzip and fastfetch is not ins talled on system, the script WILL fail${NC}"
-echo -e "${BRIGHT_CYAN}${BOLD}Initializing FastCat in ${NC}"
-for i in {10..1}; do
-    echo -ne "${BRIGHT_GREEN}${BOLD}${i}${NC} "
-    sleep 1
-done
-echo -e "${BRIGHT_GREEN}${BOLD}🚀 BLAST OFF! 🚀${NC}"
-echo ""
-
-sleep 12
-
-echo -e "${GREEN}${BOLD}FASTCAT IS LAUNCHING${NC}"
-sleep 3
-
-echo -e "${BLUE}Cloning FastCat git repo to /tmp -->${NC}"
-git clone --depth 1 https://github.com/m3tozz/FastCat.git && cd FastCat && bash ./fastcat.sh --shell
-
-echo ""
-echo -e "${GREEN}${BOLD}FastCat successfully customized FastFetch!${NC}"
-echo ""
-echo -e "${YELLOW}Cleaning up fastcat files${NC}"
-echo ""
-
-echo ""
-echo -e "${BRIGHT_BLUE}${BOLD}┌─────────────────────────────────────────────────────┐${NC}"
-echo -e "${BRIGHT_BLUE}${BOLD}│${NC} ${BRIGHT_CYAN}Cloning FastCat git repo to /tmp${NC} ${BRIGHT_BLUE}${BOLD}│${NC}"
-echo -e "${BRIGHT_BLUE}${BOLD}└─────────────────────────────────────────────────────┘${NC}"
-
-
-rm -rf /tmp/FastCat && sleep 8 && cd
-
-echo -e "${CYAN}      ʌ___ʌ ====================${NC}      ${CYAN}ʌ___ ʌ${NC}"
-echo -e "${MAGENTA} 〈=^ェ^=〉${BOLD}THANK YOU FOR USING${NC} :    ${MAGENTA}〈=^ェ^=〉${NC}"
-echo -e "${GREEN}   (|≧<3≦|) ${RED}[̲̅F]-[̲̅A]-[̲̅S]-[̲̅T]-[̲̅C]-[̲̅A]-[̲̅T]${NC}        ${GREEN}(≧<=3≦)${NC}"
-echo -e "${CYAN}     'W-=-W'  =====================  |W-M-W|${NC}"
-echo ""
-
+# EPIC FUNCTIONS 🚀
+rainbow_text() {
+    local text="$1"
+    local colors=("$BRIGHT_RED" "$BRIGHT_YELLOW" "$BRIGHT_GREEN" "$BRIGHT_CYAN" "$BRIGHT_BLUE" "$BRIGHT_MAGENTA")
+    local result=""
+    for (( i=0; i<${#text}; i++ )); do
+        local color_index=$((i % 6))
+        result+="${colors[$color_index]}${text:$i:1}"
+    done
+    echo -e "$result$NC"
+}
 
 typewriter_effect() {
     local text="$1"
@@ -82,3 +57,67 @@ typewriter_effect() {
     done
     echo ""
 }
+
+loading_bar() {
+    local duration=$1
+    local message="$2"
+    local color="$3"
+    echo -ne "${color}${message} ${NC}"
+    for i in {1..20}; do
+        echo -ne "${BRIGHT_CYAN}█${NC}"
+        sleep $(echo "scale=2; $duration/20" | bc)
+    done
+    echo -e " ${GREEN}✓${NC}"
+}
+
+# CLEAR SCREEN AND START THE SHOW!
+clear
+rm -rf /tmp/FastCat
+cd /tmp
+
+echo "┌──────────────────────────────────────┐"              
+typewriter_effect " WELCOME TO FASTCAT AUTOCONFIGURATOR! "                          
+typewriter_effect " THEMING UTILITY FOR FASTFETCH CLI"                                
+typewriter_effect "  https://github.com/m3tozz/FastCat ✔  "      
+typewriter_effect "  https://github.com/fastfetch-cli       ✔   "
+echo "└────────────────────────────────────╔─┘" 
+echo -e "${GREEN}          ⋏    ⋏       ╔═╝"
+echo -e "${GREEN}	  /ʌ)__/ʌ)    ╔═╝"                               
+echo -e "${GREEN}        /  	  \ ◀╝		${PINK}⛛  F A S T C A T ⛛ ⟹ CLI to autoconfigure fastfetch themes in seconds${NC}"
+echo -e "${GREEN}  　    ╏ (Θ) (Θ) ╏           ${PINK}⛛  TAKE NOTICE ⛛  ⟹ IF you run fastcat as root the fastfetch theme will be applied for superuser only${NC}"
+echo -e "${GREEN}  　  _⋰  ≽v--v≼ ﾉ        ${PINK}⛛  REQUIREMENTS⛛ ⟹ IF packages unzip and fastfetch is not installed on system, the script WILL fail${NC}"
+echo -e "${GREEN}    /　		  |    		  ${CYAN}ʌ____ʌ ====================${NC}      ${CYAN}ʌ___ ʌ${NC}"
+echo -e "${GREEN}   / 		  │ 	         	  ${GREEN}〈=^ェ^=〉${BOLD}THANK YOU FOR USING${NC} :    ${MAGENTA}〈=^ェ^=〉${NC}"
+echo -e "${GREEN}   ( 　 ヽ    Y   ﾉ		  ${GREEN}(|≧<3≦|) ${RED}[̲̅F]-[̲̅A]-[̲̅S]-[̲̅T]-[̲̅C]-[̲̅A]-[̲̅T]${NC}        ${GREEN}(≧<=3≦)${NC}"       
+echo -e "${GREEN}  _ﾉ　 　 |    |   |	        ${CYAN}'W-=-W'  =====================  |W-M-W|${NC}"
+echo -e "${GREEN} /  ____ﾉ    ╏   |${NC}"        
+echo -e "${GREEN}( (__╭=╮(m)m)m)m)─────────────────────────────────────────────⟹${NC}"
+echo -e "${GREEN}  ＼____/${NC}"
+
+echo ""
+echo -e "${PINK}${BOLD}$(figlet -f digital "WELCOME TO FASTCAT")${NC}"
+echo ""
+
+echo -e "${BRIGHT_CYAN}${BOLD}Initializing FastCat in ${NC}"
+for i in {15..1}; do
+    echo -ne "${BRIGHT_GREEN}${BOLD}${i}${NC} "
+    sleep 1
+done
+echo -e "${BRIGHT_GREEN}${BOLD} EXECUTING FASTCATS ${NC}"
+echo ""
+echo -e "${BRIGHT_BLUE}${BOLD}┌─────────────────────────────────────────────┐${NC}"
+echo -e "${BRIGHT_BLUE}${BOLD}│${NC} ${BRIGHT_CYAN}Cloning FastCat git repo to /tmp${NC} ${BRIGHT_BLUE}${BOLD}│${NC}"
+echo -e "${BRIGHT_BLUE}${BOLD}└─────────────────────────────────────────────┘${NC}"
+echo -e "${BLUE}Cloning FastCat git repo to /tmp -->${NC}"
+git clone --depth 1 https://github.com/m3tozz/FastCat.git && cd FastCat && bash ./fastcat.sh --shell
+echo ""
+echo -e "${GREEN}${BOLD}FastCat successfully customized FastFetch!${NC}"
+echo ""
+echo -e "${YELLOW}Cleaning up fastcat files${NC}"
+echo ""
+
+
+rm -rf /tmp/FastCat && sleep 8 && cd
+
+# Display final message with typewriter effect
+typewriter_effect "FastCat configuration complete!" "$BRIGHT_GREEN"
