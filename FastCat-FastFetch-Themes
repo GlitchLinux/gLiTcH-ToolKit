@@ -18,13 +18,12 @@ cd /tmp
 echo ""         echo -e "${BRIGHT_CYAN}${BOLD}"
 echo 
 echo                                                                   
-echo          "╔══════════════════════════════════════════╗"  ʌ___ʌ                                    
-echo          "║                                          ║" 〲⚆ܫ⚆〉
-echo          "║                                          ║"  (≧<3≦)
-echo -e "${YELL╚═════════════════════╗╔  ${BOLD}FASTCAT${NC} ${MAGENTA}〉${NC}${GREEN}AUTOCONFIGURATOR${NC}"
-echo ""                              ║║ 
+echo          "╔══════════════════════════════════════╗"  ʌ___ʌ                                    
+echo          "║                                      ║" 〲⚆ܫ⚆ (≧<3≦)
+echo -e "${YELL║                                      ║  
+echo ""        ╚═════════════════════╗╔═══════════════╝" 
 echo -e "${CYAN}           ʌ)____ʌ)  /                                ʌ___ʌ${NC}"
-echo -e "${YELLOW} 　     ／       l      ${BOLD}FASTCAT${NC} ${MAGENTA}〲⚆ܫ⚆〉${NC}${GREEN}AUTOCONFIGURATOR${NC}"
+echo -e "${YELLOW} 　     ／       l       ${BOLD}FASTCAT${NC} ${MAGENTA}〲⚆ܫ⚆〉${NC}${GREEN}AUTOCONFIGURATOR${NC}"
 echo -e "${YELLOW} 　    |   x  x  l        ${WHITE}Theming Tool for FastFetch CLI${NC}" 
 echo -e "${YELLOW} 　   ／＼  w-w  ノ        ${BLUE}https://github.com/m3tozz/FastCat${NC}"
 echo -e "${YELLOW}     /　　　    |           ${BLUE}https://github.com/fastfetch-cli${NC}"
@@ -57,3 +56,14 @@ echo -e "${MAGENTA} 〈=^ェ^=〉${BOLD}THANK YOU FOR USING${NC} :    ${MAGENTA}
 echo -e "${GREEN}   (|≧<3≦|) ${RED}[̲̅F]-[̲̅A]-[̲̅S]-[̲̅T]-[̲̅C]-[̲̅A]-[̲̅T]${NC}        ${GREEN}(≧<=3≦)${NC}"
 echo -e "${CYAN}     'W-=-W'  =====================  |W-M-W|${NC}"
 echo ""
+
+
+typewriter_effect() {
+    local text="$1"
+    local color="$2"
+    for (( i=0; i<${#text}; i++ )); do
+        echo -ne "${color}${text:$i:1}${NC}"
+        sleep 0.05
+    done
+    echo ""
+}
