@@ -15,8 +15,8 @@ NC='\033[0m' # No Color
 rm -rf /tmp/FastCat
 cd /tmp
 
-echo ""ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ
-echo -e "${YELLOW}          ʌ)___ʌ)                 ㅤㅤㅤ                 ʌ___ʌ${NC}"
+echo ""    
+echo -e "${YELLOW}          ʌ __ ʌ                                       ʌ___ʌ${NC}"
 echo -e "${YELLOW} 　     ／       l       ${BOLD}FASTCAT${NC} ${MAGENTA}〲⚆ܫ⚆〉${NC}${GREEN}AUTOCONFIGURATOR${NC}"
 echo -e "${YELLOW} 　    |   x  x  l        ${WHITE}Theming Tool for FastFetch CLI${NC}" 
 echo -e "${YELLOW} 　   ／＼  V-V  ノ        ${BLUE}https://github.com/m3tozz/FastCat${NC}"
