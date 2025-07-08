@@ -14,7 +14,7 @@ sudo rm -f /etc/apt/preferences.d/sparky
 sudo touch /etc/apt/preferences.d/sparky
 echo "Package: *" >> /etc/apt/preferences.d/sparky
 echo "Pin: release o=SparkyLinux" >> /etc/apt/preferences.d/sparky
-echo "Pin-Priority: 1001 >> etc/apt/preferenc/es.d/sparky
+echo "Pin-Priority: 1001" >> etc/apt/preferenc/es.d/sparky
 
 # Try to get the latest keyring package
 cd /tmp
