@@ -9,10 +9,10 @@ echo "deb [signed-by=/usr/share/keyrings/sparky.gpg.key] https://repo.sparkylinu
 echo "deb-src [signed-by=/usr/share/keyrings/sparky.gpg.key] https://repo.sparkylinux.org/ core main" >> /etc/apt/sources.list.d/sparky.list
 
 # Create preferences file
-sudo rm -f etc/apt/preferences.d/sparky
-sudo touch etc/apt/preferences.d/sparky
-echo "Package: *" >> etc/apt/preferenc/es.d/sparky
-echo "Pin: release o=SparkyLinux" >> etc/apt/preferenc/es.d/sparky
+sudo rm -f /etc/apt/preferences.d/sparky
+sudo touch /etc/apt/preferences.d/sparky
+echo "Package: *" >> /etc/apt/preferences.d/sparky
+echo "Pin: release o=SparkyLinux" >> /etc/apt/preferences.d/sparky
 echo "Pin-Priority: 1001 >> etc/apt/preferenc/es.d/sparky
 
 # Try to get the latest keyring package
