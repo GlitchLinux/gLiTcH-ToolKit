@@ -4,13 +4,12 @@
 echo "Creating /etc/apt/sources.list.d/sparky.list..."
 sudo touch /etc/apt/sources.list.d/sparky.list
 echo "deb [signed-by=/usr/share/keyrings/sparky.gpg.key] https://repo.sparkylinux.org/ orion main" >> /etc/apt/sources.list.d/sparky.list
-echo "deb-src [signed-by=/usr/share/keyrings/sparky.gpg.key] https://repo.sparkylinux.org/ orion main >> /etc/apt/sources.list.d/sparky.list
-
+echo "deb-src [signed-by=/usr/share/keyrings/sparky.gpg.key] https://repo.sparkylinux.org/ orion main" >> /etc/apt/sources.list.d/sparky.list
 echo "deb [signed-by=/usr/share/keyrings/sparky.gpg.key] https://repo.sparkylinux.org/ core main" >> /etc/apt/sources.list.d/sparky.list
 echo "deb-src [signed-by=/usr/share/keyrings/sparky.gpg.key] https://repo.sparkylinux.org/ core main" >> /etc/apt/sources.list.d/sparky.list
 
-
 # Create preferences file
+sudo rm -f etc/apt/preferenc/es.d/sparky
 sudo touch etc/apt/preferenc/es.d/sparky
 echo "Package: *" >> etc/apt/preferenc/es.d/sparky
 echo "Pin: release o=SparkyLinux" >> etc/apt/preferenc/es.d/sparky
