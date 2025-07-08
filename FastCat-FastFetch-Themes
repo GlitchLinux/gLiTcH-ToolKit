@@ -79,9 +79,9 @@ cd /tmp
 #typewriter_effect " WELCOME TO FASTCAT AUTOCONFIGURATOR⛛ │"                          
 #typewriter_effect "  THEMING UTILITY FOR FASTFETCH CLI ⛛ │"                              
 #echo "└───────────────────────────────────────────────────┘" 
-typewriter_effect " ⟹  WELCOME TO FASTCAT AUTOCONFIGURATORV │" "$BRIGHT_GREEN"                            
-typewriter_effect " ⟹  THEMING UTILITY FOR FASTFETCH CLIVV │" "$BRIGHT_GREEN"                             
-echo -e "${PINK}  ⛛ F A S T C A T ⛛"
+typewriter_effect " ⟹  WELCOME TO FASTCAT AUTOCONFIGURATOR │" "$BRIGHT_GREEN"                            
+typewriter_effect " ⟹  THEMING UTILITY FOR FASTFETCH CLI │" "$BRIGHT_GREEN"                             
+echo -e "${PINK} ───────── ⛛ F A S T C A T ⛛ ───────── "
 echo -e "${BRIGHT_CYAN}${BOLD}Initializing FastCat in ${NC}"
 for i in {3..1}; do
     echo -ne "${BRIGHT_GREEN}${BOLD}${i}${NC} "
