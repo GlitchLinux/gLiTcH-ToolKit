@@ -20,6 +20,6 @@ echo "Pin-Priority: 1001" >> /etc/apt/preferences.d/sparky
 cd /tmp
 sudo wget -O - https://sourceforge.net/projects/sparkylinux/files/repo/sparky.gpg.key | sudo tee /usr/share/keyrings/sparky.gpg.key
 
-apt update 
+sudo apt update && sudo apt install sparky-aptus-appcenter -y
 
 echo "Sparky repository setup complete."
