@@ -1,7 +1,9 @@
-sudo cp -r /boot/efi/EFI/Debian /boot/efi/EFI/BOOT
-sudo cp -r /boot/efi/EFI/debian /boot/efi/EFI/BOOT
-sudo cp sudo cp -r /boot/efi/EFI/Debian/grubx64.efi /boot/efi/EFI/BOOT/BOOTx64.EFI
+sudo rm -rf /boot/efi/EFI/BOOT
+sudo rm -rf /boot/efi/EFI/Boot
+sudo rm -rf /boot/efi/EFI/boot
+sudo cp -r /boot/efi/EFI/*ebian /boot/efi/EFI/BOOT
+sudo cp sudo cp -r /boot/efi/EFI/BOOT/grubx64.efi /boot/efi/EFI/BOOT/BOOTx64.EFI
 
-ls  /boot/efi/EFI/BOOT && sleep 3
+ls  /boot/efi/EFI/BOOT && sleep 3 && update-grub
 
 exit
