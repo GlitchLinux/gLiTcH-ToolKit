@@ -347,6 +347,7 @@ main() {
     fi
     
     update_packages
+    fix_apt_issues
     install_dependencies
     create_build_dir
     download_dwm
