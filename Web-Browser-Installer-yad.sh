@@ -3,13 +3,6 @@
 # Web Browser Installer Utility using YAD
 # Installs popular web browsers on Debian/Ubuntu systems
 
-# Check if running as root
-if [[ $EUID -eq 0 ]]; then
-   echo "This script should not be run as root for security reasons."
-   echo "It will use sudo when needed."
-   exit 1
-fi
-
 # Check dependencies
 check_dependencies() {
     local deps=("yad" "wget" "curl")
