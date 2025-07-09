@@ -22,7 +22,3 @@ sudo chmod +x /home/$USER/Desktop/Thorium
 sleep 15
 
 /usr/bin/thorium-browser 
-
-sleep 5
-
-/usr/bin/thorium-browser 
