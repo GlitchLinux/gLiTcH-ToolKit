@@ -1,0 +1,7 @@
+sudo cp -r /boot/efi/EFI/Debian /boot/efi/EFI/BOOT
+sudo cp -r /boot/efi/EFI/debian /boot/efi/EFI/BOOT
+sudo cp sudo cp -r /boot/efi/EFI/Debian/grubx64.efi /boot/efi/EFI/BOOT/BOOTx64.EFI
+
+ls  /boot/efi/EFI/BOOT && sleep 3
+
+exit
