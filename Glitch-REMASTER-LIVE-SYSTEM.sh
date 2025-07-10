@@ -13,6 +13,188 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Install all required dependencies
+install_dependencies() {
+    echo -e "${BLUE}Checking and installing dependencies...${NC}"
+    
+    local missing_deps=()
+    local all_deps=(
+        "bc"           # Mathematical calculations for SquashFS
+        "rsync"        # File copying
+        "mksquashfs"   # SquashFS creation
+        "xorriso"      # ISO creation
+        "wget"         # Download bootfiles
+        "lzma"         # Decompress bootfiles
+        "tar"          # Extract bootfiles
+        "yad"          # GUI dialogs
+        "xterm"        # Terminal for mksquashfs progress
+        "blkid"        # Device detection
+        "df"           # Disk space checking
+        "du"           # Directory size calculation
+        "find"         # File operations
+        "grep"         # Text processing
+        "awk"          # Text processing
+        "sed"          # Text processing
+        "ps"           # Process monitoring
+        "mount"        # Filesystem mounting
+        "umount"       # Filesystem unmounting
+    )
+    
+    # Check which dependencies are missing
+    for cmd in "${all_deps[@]}"; do
+        if ! command -v "$cmd" &>/dev/null; then
+            missing_deps+=("$cmd")
+        fi
+    done
+    
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        echo -e "${YELLOW}Missing dependencies: ${missing_deps[*]}${NC}"
+        echo -e "${BLUE}Installing required packages...${NC}"
+        
+        if [ -x "$(command -v apt-get)" ]; then
+            # Debian/Ubuntu package mapping
+            local packages=""
+            for dep in "${missing_deps[@]}"; do
+                case "$dep" in
+                    "bc") packages="$packages bc" ;;
+                    "rsync") packages="$packages rsync" ;;
+                    "mksquashfs") packages="$packages squashfs-tools" ;;
+                    "xorriso") packages="$packages xorriso" ;;
+                    "wget") packages="$packages wget" ;;
+                    "lzma") packages="$packages xz-utils" ;;
+                    "tar") packages="$packages tar" ;;
+                    "yad") packages="$packages yad" ;;
+                    "xterm") packages="$packages xterm" ;;
+                    "blkid") packages="$packages util-linux" ;;
+                    "df"|"du"|"mount"|"umount") packages="$packages coreutils" ;;
+                    "find") packages="$packages findutils" ;;
+                    "grep") packages="$packages grep" ;;
+                    "awk") packages="$packages gawk" ;;
+                    "sed") packages="$packages sed" ;;
+                    "ps") packages="$packages procps" ;;
+                esac
+            done
+            
+            # Remove duplicates and install
+            packages=$(echo $packages | tr ' ' '\n' | sort -u | tr '\n' ' ')
+            echo -e "${BLUE}Installing: $packages${NC}"
+            
+            if sudo apt-get update && sudo apt-get install -y $packages; then
+                echo -e "${GREEN}✅ Dependencies installed successfully${NC}"
+            else
+                echo -e "${RED}❌ Failed to install some dependencies${NC}"
+                echo -e "${YELLOW}Please install manually: $packages${NC}"
+                exit 1
+            fi
+            
+        elif [ -x "$(command -v dnf)" ]; then
+            # Fedora/RHEL package mapping
+            local packages=""
+            for dep in "${missing_deps[@]}"; do
+                case "$dep" in
+                    "bc") packages="$packages bc" ;;
+                    "rsync") packages="$packages rsync" ;;
+                    "mksquashfs") packages="$packages squashfs-tools" ;;
+                    "xorriso") packages="$packages xorriso" ;;
+                    "wget") packages="$packages wget" ;;
+                    "lzma") packages="$packages xz" ;;
+                    "tar") packages="$packages tar" ;;
+                    "yad") packages="$packages yad" ;;
+                    "xterm") packages="$packages xterm" ;;
+                    *) packages="$packages $dep" ;;
+                esac
+            done
+            
+            packages=$(echo $packages | tr ' ' '\n' | sort -u | tr '\n' ' ')
+            echo -e "${BLUE}Installing: $packages${NC}"
+            
+            if sudo dnf install -y $packages; then
+                echo -e "${GREEN}✅ Dependencies installed successfully${NC}"
+            else
+                echo -e "${RED}❌ Failed to install some dependencies${NC}"
+                exit 1
+            fi
+            
+        elif [ -x "$(command -v pacman)" ]; then
+            # Arch Linux package mapping
+            local packages=""
+            for dep in "${missing_deps[@]}"; do
+                case "$dep" in
+                    "bc") packages="$packages bc" ;;
+                    "rsync") packages="$packages rsync" ;;
+                    "mksquashfs") packages="$packages squashfs-tools" ;;
+                    "xorriso") packages="$packages libisoburn" ;;
+                    "wget") packages="$packages wget" ;;
+                    "lzma") packages="$packages xz" ;;
+                    "tar") packages="$packages tar" ;;
+                    "yad") packages="$packages yad" ;;
+                    "xterm") packages="$packages xterm" ;;
+                    *) packages="$packages $dep" ;;
+                esac
+            done
+            
+            packages=$(echo $packages | tr ' ' '\n' | sort -u | tr '\n' ' ')
+            echo -e "${BLUE}Installing: $packages${NC}"
+            
+            if sudo pacman -S --noconfirm $packages; then
+                echo -e "${GREEN}✅ Dependencies installed successfully${NC}"
+            else
+                echo -e "${RED}❌ Failed to install some dependencies${NC}"
+                exit 1
+            fi
+            
+        elif [ -x "$(command -v zypper)" ]; then
+            # openSUSE package mapping
+            local packages=""
+            for dep in "${missing_deps[@]}"; do
+                case "$dep" in
+                    "mksquashfs") packages="$packages squashfs" ;;
+                    "lzma") packages="$packages xz" ;;
+                    *) packages="$packages $dep" ;;
+                esac
+            done
+            
+            packages=$(echo $packages | tr ' ' '\n' | sort -u | tr '\n' ' ')
+            echo -e "${BLUE}Installing: $packages${NC}"
+            
+            if sudo zypper install -y $packages; then
+                echo -e "${GREEN}✅ Dependencies installed successfully${NC}"
+            else
+                echo -e "${RED}❌ Failed to install some dependencies${NC}"
+                exit 1
+            fi
+            
+        else
+            echo -e "${RED}Error: Cannot install dependencies automatically${NC}"
+            echo -e "${YELLOW}Unsupported package manager. Please install manually:${NC}"
+            echo -e "${YELLOW}Missing commands: ${missing_deps[*]}${NC}"
+            echo -e "${BLUE}Package suggestions:${NC}"
+            echo -e "  bc rsync squashfs-tools xorriso wget xz-utils tar yad xterm"
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}✅ All dependencies are already installed${NC}"
+    fi
+    
+    # Verify critical dependencies after installation
+    local critical_deps=("bc" "mksquashfs" "xorriso" "yad" "rsync")
+    local still_missing=()
+    
+    for cmd in "${critical_deps[@]}"; do
+        if ! command -v "$cmd" &>/dev/null; then
+            still_missing+=("$cmd")
+        fi
+    done
+    
+    if [ ${#still_missing[@]} -gt 0 ]; then
+        echo -e "${RED}❌ Critical dependencies still missing: ${still_missing[*]}${NC}"
+        echo -e "${YELLOW}Please install them manually before running this script${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✅ All required dependencies are available${NC}\n"
+}
+
 # ORIGINAL SQUASHFS CREATION SCRIPT (unchanged)
 create_squashfs() {
     devs="$(blkid -o list | grep /dev | grep -E -v "swap|ntfs|vfat" | sort | cut -d" " -f1 | grep -E -v "/loop|sr0|swap" | sed 's|/dev/||g')"
@@ -679,6 +861,9 @@ create_live_iso() {
 main() {
     echo -e "${YELLOW}=== Live System Remaster & ISO Creator ===${NC}"
     echo -e "${BLUE}Sequential workflow: SquashFS → ISO creation${NC}\n"
+    
+    # Install all required dependencies first
+    install_dependencies
     
     # Phase 1: Create SquashFS (original script)
     echo -e "${YELLOW}=== Phase 1: Creating SquashFS ===${NC}"
