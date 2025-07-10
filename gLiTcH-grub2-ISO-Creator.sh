@@ -37,7 +37,7 @@ install_dependencies() {
 # Download hybrid bootfiles
 download_bootfiles() {
     local target_dir="$1"
-    local temp_dir="/tmp/nano_bootfiles_$"
+    local temp_dir="/tmp/nano_bootfiles"
     
     echo -e "${BLUE}Downloading bootfiles...${NC}"
     mkdir -p "$temp_dir"
@@ -241,6 +241,10 @@ create_iso() {
     local volume_label="$3"
     
     echo -e "${BLUE}Creating ISO: $output_file${NC}"
+
+    echo "You can now add custom files that you wish to include in the iso"
+    echo "Add your files to: $target_dir"
+    read -p "Press Enter when ready to continue with ISO creation: "
     
     # Use isohdpfx.bin from bootfiles if available
     local mbr_file="$source_dir/isolinux/isohdpfx.bin"
