@@ -456,6 +456,57 @@ TimeoutSec=10s
 WantedBy=local-fs.target
 EOF
 
+    # Create systemd-tmpfiles-setup-dev.service override to fix device setup errors
+    cat > "$WORK"/etc/systemd/system/systemd-tmpfiles-setup-dev.service <<'EOF'
+[Unit]
+Description=Create Static Device Nodes in /dev (disabled for live)
+Documentation=man:tmpfiles.d(5)
+Documentation=man:systemd-tmpfiles(8)
+DefaultDependencies=no
+Before=local-fs-pre.target systemd-udevd.service
+ConditionCapability=CAP_SYS_MODULE
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+TimeoutSec=10s
+
+[Install]
+WantedBy=local-fs-pre.target
+EOF
+
+    # Create additional systemd service overrides for common live boot issues
+    cat > "$WORK"/etc/systemd/system/systemd-fsck@.service <<'EOF'
+[Unit]
+Description=File System Check on %f (disabled for live)
+Documentation=man:systemd-fsck@.service(8)
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+TimeoutSec=0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    cat > "$WORK"/etc/systemd/system/systemd-fsck-root.service <<'EOF'
+[Unit]
+Description=File System Check on Root Device (disabled for live)
+Documentation=man:systemd-fsck-root.service(8)
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+TimeoutSec=0
+
+[Install]
+WantedBy=local-fs.target
+EOF
+
     # Create live-friendly fstab
     cat > "$WORK"/etc/fstab <<'EOF'
 # Live system fstab
