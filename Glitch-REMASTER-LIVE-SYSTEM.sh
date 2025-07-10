@@ -526,20 +526,24 @@ EOF
     if [ -f "$SQFS" ]; then
         yad --title="RemasterDog" --center --text=" Done creating '$SQFS' \n Do you want to remove '$WORK'? " --button="gtk-yes:0" --button="gtk-no:1"
         ret=$?
-        [[ $ret -ne 0 ]] && exit 0
-        if [[ -n "$SFS" && -n "$DRV" ]]; then
-            rm -rf "$WORK"
+        # Only remove work directory if user clicked "Yes" (ret=0)
+        if [[ $ret -eq 0 ]]; then
+            if [[ -n "$SFS" && -n "$DRV" ]]; then
+                rm -rf "$WORK"
+            fi
         fi
         
-        # MODIFIED: Instead of exit, return the squashfs path
+        # MODIFIED: Always return the squashfs path if file exists, regardless of cleanup choice
         echo "$SQFS"
         return 0
     else
         yad --title="RemasterDog" --center --text=" Error: '$SQFS' is not created. \n Do you want to remove '$WORK'? " --button="gtk-yes:0" --button="gtk-no:1"
         ret=$?
-        [[ $ret -ne 0 ]] && exit 0
-        if [[ -n "$SFS" && -n "$DRV" ]]; then
-            rm -rf "$WORK"
+        # Only exit if user wants to exit, otherwise just clean up and return error
+        if [[ $ret -eq 0 ]]; then
+            if [[ -n "$SFS" && -n "$DRV" ]]; then
+                rm -rf "$WORK"
+            fi
         fi
         return 1
     fi
