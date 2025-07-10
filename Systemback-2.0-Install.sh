@@ -14,6 +14,6 @@ sudo dpkg --force-all -i *deb
 
 sudo apt update && sudo apt install -f -y
 
-echo"Systemback 2.0 Have Been Sucessfully Installed!"
+echo "Systemback 2.0 Have Been Sucessfully Installed!"
 
 sleep 3 && cd && exit
