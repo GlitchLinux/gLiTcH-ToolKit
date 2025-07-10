@@ -16,7 +16,8 @@ NC='\033[0m'
 # Install minimal dependencies
 install_dependencies() {
     local missing_deps=()
-    for cmd in xorriso wget lzma tar yad; do
+    # Check for all required commands including bc for calculations
+    for cmd in xorriso wget lzma tar yad bc mksquashfs; do
         if ! command -v "$cmd" &>/dev/null; then
             missing_deps+=("$cmd")
         fi
@@ -25,13 +26,41 @@ install_dependencies() {
     if [ ${#missing_deps[@]} -gt 0 ]; then
         echo -e "${BLUE}Installing required packages: ${missing_deps[*]}${NC}"
         if [ -x "$(command -v apt-get)" ]; then
-            sudo apt-get update && sudo apt-get install -y xorriso wget lzma tar yad
+            # Map commands to package names for Debian/Ubuntu
+            local packages=""
+            for dep in "${missing_deps[@]}"; do
+                case "$dep" in
+                    "xorriso") packages="$packages xorriso" ;;
+                    "wget") packages="$packages wget" ;;
+                    "lzma") packages="$packages xz-utils" ;;
+                    "tar") packages="$packages tar" ;;
+                    "yad") packages="$packages yad" ;;
+                    "bc") packages="$packages bc" ;;
+                    "mksquashfs") packages="$packages squashfs-tools" ;;
+                esac
+            done
+            sudo apt-get update && sudo apt-get install -y $packages
         elif [ -x "$(command -v dnf)" ]; then
-            sudo dnf install -y xorriso wget lzma tar yad
+            local packages=""
+            for dep in "${missing_deps[@]}"; do
+                case "$dep" in
+                    "mksquashfs") packages="$packages squashfs-tools" ;;
+                    *) packages="$packages $dep" ;;
+                esac
+            done
+            sudo dnf install -y $packages
         elif [ -x "$(command -v pacman)" ]; then
-            sudo pacman -S --noconfirm xorriso wget lzma tar yad
+            local packages=""
+            for dep in "${missing_deps[@]}"; do
+                case "$dep" in
+                    "mksquashfs") packages="$packages squashfs-tools" ;;
+                    *) packages="$packages $dep" ;;
+                esac
+            done
+            sudo pacman -S --noconfirm $packages
         else
             echo -e "${RED}Error: Cannot install dependencies automatically${NC}"
+            echo -e "${YELLOW}Please install manually: ${missing_deps[*]}${NC}"
             exit 1
         fi
     fi
@@ -269,30 +298,55 @@ create_squashfs() {
 
     # Set up paths based on drive selection
     if [ "$DRV" = "/tmp" ]; then
-        # RAM size checks for /tmp
+        # RAM size checks for /tmp - with better error handling
         ram_size() {
             [ -r /proc/meminfo ] && \
             grep MemTotal /proc/meminfo | \
-            sed -e 's;.*[[:space:]]\([0-9][0-9]*\)[[:space:]]kB.*;\1;' || :
+            sed -e 's;.*[[:space:]]\([0-9][0-9]*\)[[:space:]]kB.*;\1;' || echo "0"
         }
 
-        TOTAL=$(du -cbs --apparent-size / --exclude=/{dev,live,lib/live/mount,cdrom,mnt,proc,sys,media,run,tmp,initrd,var/cache/apt,var/lib/apt} | awk 'END {print $1}' | sed 's/.\{3\}$//')
-        SFSSIZE=`echo $TOTAL/3 | bc`
-        TEMPSIZE=`df -k /tmp | awk 'END {print $3}'`
-        TEMPAVAIL=`df -k /tmp | awk 'END {print $4}'`
-        TOTALTEMP=`echo $TOTAL + $SFSSIZE + $TEMPSIZE | bc`
-        TOTALTEMPPLUS=`echo $TOTALTEMP/50 | bc`
-        TOTSIZE=`echo $TOTALTEMP + $TOTALTEMPPLUS | bc`
+        # Use safer calculations with proper error checking
+        TOTAL=$(du -cbs --apparent-size / --exclude=/{dev,live,lib/live/mount,cdrom,mnt,proc,sys,media,run,tmp,initrd,var/cache/apt,var/lib/apt} 2>/dev/null | awk 'END {print $1}' | sed 's/.\{3\}$//' || echo "1000000")
+        
+        # Ensure bc is available or use bash arithmetic
+        if command -v bc &>/dev/null; then
+            SFSSIZE=$(echo "$TOTAL/3" | bc 2>/dev/null || echo $((TOTAL/3)))
+            TEMPSIZE=$(df -k /tmp 2>/dev/null | awk 'END {print $3}' || echo "0")
+            TEMPAVAIL=$(df -k /tmp 2>/dev/null | awk 'END {print $4}' || echo "0")
+            TOTALTEMP=$(echo "$TOTAL + $SFSSIZE + $TEMPSIZE" | bc 2>/dev/null || echo $((TOTAL + SFSSIZE + TEMPSIZE)))
+            TOTALTEMPPLUS=$(echo "$TOTALTEMP/50" | bc 2>/dev/null || echo $((TOTALTEMP/50)))
+            TOTSIZE=$(echo "$TOTALTEMP + $TOTALTEMPPLUS" | bc 2>/dev/null || echo $((TOTALTEMP + TOTALTEMPPLUS)))
+        else
+            # Fallback to bash arithmetic
+            SFSSIZE=$((TOTAL/3))
+            TEMPSIZE=$(df -k /tmp 2>/dev/null | awk 'END {print $3}' || echo "0")
+            TEMPAVAIL=$(df -k /tmp 2>/dev/null | awk 'END {print $4}' || echo "0")
+            TOTALTEMP=$((TOTAL + SFSSIZE + TEMPSIZE))
+            TOTALTEMPPLUS=$((TOTALTEMP/50))
+            TOTSIZE=$((TOTALTEMP + TOTALTEMPPLUS))
+        fi
+        
         RAM=$(ram_size)
 
-        if [ $TOTSIZE -gt $RAM ]; then
+        # Check if we have valid numbers
+        if [ "$RAM" -eq 0 ] || [ -z "$RAM" ]; then
+            RAM=4000000  # Default to 4GB if detection fails
+        fi
+
+        if [ "$TOTSIZE" -gt "$RAM" ]; then
             yad --title="Error" --center --text="Not enough space available in /tmp.\nPlease choose another option." --button="gtk-close:0"
             exec ${0}
         fi
         
-        if [ $TEMPAVAIL -le $TOTSIZE ]; then
-            result=`echo $((TOTSIZE*1000/$RAM)) | cut -b -2` 
-            mount -t tmpfs -o "remount,nosuid,size=${result}%,mode=1777" tmpfs /tmp
+        if [ "$TEMPAVAIL" -le "$TOTSIZE" ] && [ "$TEMPAVAIL" -gt 0 ]; then
+            if command -v bc &>/dev/null; then
+                result=$(echo "scale=0; ($TOTSIZE*100/$RAM)" | bc 2>/dev/null | cut -c1-2)
+            else
+                result=$(( (TOTSIZE*100/RAM) ))
+                result=$(echo "$result" | cut -c1-2)
+            fi
+            [ -z "$result" ] && result=75  # Default percentage
+            mount -t tmpfs -o "remount,nosuid,size=${result}%,mode=1777" tmpfs /tmp 2>/dev/null
         fi
         
         WORK="/tmp/$WRKDIR"
@@ -407,7 +461,7 @@ create_squashfs() {
     chmod a=rwx,o+t "$WORK"/tmp
 
     echo "Cleaning up system files..."
-    # Cleanup operations
+    # Enhanced cleanup operations for better live system
     rm -f "$WORK"/var/lib/alsa/asound.state
     rm -f "$WORK"/root/.bash_history
     rm -f "$WORK"/root/.xsession-errors
@@ -424,15 +478,59 @@ create_squashfs() {
     rm -fr "$WORK"/var/lib/aptitude/*
     
     # Clean package caches
-    ls "$WORK"/var/lib/apt/lists 2>/dev/null | grep -v "lock" | grep -v "partial" | xargs -I {} rm "$WORK"/var/lib/apt/lists/{} 2>/dev/null
-    ls "$WORK"/var/cache/apt/archives 2>/dev/null | grep -v "lock" | grep -v "partial" | xargs -I {} rm "$WORK"/var/cache/apt/archives/{} 2>/dev/null
-    ls "$WORK"/var/cache/apt 2>/dev/null | grep -v "archives" | xargs -I {} rm "$WORK"/var/cache/apt/{} 2>/dev/null
+    ls "$WORK"/var/lib/apt/lists 2>/dev/null | grep -v "lock" | grep -v "partial" | xargs -I {} rm "$WORK"/var/lib/apt/lists/{} 2>/dev/null || true
+    ls "$WORK"/var/cache/apt/archives 2>/dev/null | grep -v "lock" | grep -v "partial" | xargs -I {} rm "$WORK"/var/cache/apt/archives/{} 2>/dev/null || true
+    ls "$WORK"/var/cache/apt 2>/dev/null | grep -v "archives" | xargs -I {} rm "$WORK"/var/cache/apt/{} 2>/dev/null || true
     rm -f "$WORK"/var/log/* 2> /dev/null
+    
+    # Clean documentation and man pages
+    cd "$WORK" 2>/dev/null || exit 1
+    find usr/share/doc -type f -exec rm -f {} \; 2>/dev/null || true
+    find usr/share/man -type f -exec rm -f {} \; 2>/dev/null || true
+    chown -R man:root usr/share/man 2>/dev/null || true
+    
+    # Fix live system specific issues
+    echo "Preparing live system configuration..."
+    
+    # Create live system init scripts
+    mkdir -p "$WORK"/etc/systemd/system
+    
+    # Disable problematic systemd services for live boot
+    cat > "$WORK"/etc/systemd/system/systemd-remount-fs.service <<'EOF'
+[Unit]
+Description=Remount Root and Kernel File Systems (disabled for live)
+Documentation=man:systemd-remount-fs.service(8)
+Documentation=https://www.freedesktop.org/wiki/Software/systemd/APIFileSystems
+DefaultDependencies=no
+Wants=local-fs-pre.target
+After=local-fs-pre.target
+Before=local-fs.target shutdown.target
+Conflicts=shutdown.target
 
-    cd "$WORK"
-    find usr/share/doc -type f -exec rm -f {} \; 2>/dev/null
-    find usr/share/man -type f -exec rm -f {} \; 2>/dev/null
-    chown -R man:root usr/share/man 2>/dev/null
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+TimeoutSec=10s
+
+[Install]
+WantedBy=local-fs.target
+EOF
+
+    # Create a simple fstab for live system
+    cat > "$WORK"/etc/fstab <<'EOF'
+# Live system fstab
+tmpfs /tmp tmpfs defaults 0 0
+tmpfs /var/log tmpfs defaults 0 0
+tmpfs /var/tmp tmpfs defaults 0 0
+EOF
+
+    # Remove machine-id to ensure it gets regenerated
+    rm -f "$WORK"/etc/machine-id
+    rm -f "$WORK"/var/lib/dbus/machine-id
+    
+    # Create live system hostname
+    echo "live-system" > "$WORK"/etc/hostname
 
     # Choose compression type
     COMPRESSION=`yad --center --title="Choose Compression Type" --width=450 --height=250 \
@@ -444,28 +542,48 @@ create_squashfs() {
 
     echo -e "${BLUE}Creating $SQFS...${NC}"
 
+    # Create squashfs with proper error handling
     case $ret in
         0) # XZ
-            (echo "# Creating SquashFS with XZ compression..."; mksquashfs "$WORK" "$SQFS" -comp xz -b 512k -Xbcj x86) | \
-            yad --title="Creating SquashFS" --center --width=500 --height=200 --progress --pulsate --auto-close \
-                --text="Creating compressed filesystem...\nThis may take several minutes." --button="gtk-cancel"
+            echo "Creating SquashFS with XZ compression..."
+            if mksquashfs "$WORK" "$SQFS" -comp xz -b 512k -Xbcj x86 -progress 2>&1; then
+                echo "XZ compression completed successfully"
+                squashfs_success=true
+            else
+                echo "XZ compression failed"
+                squashfs_success=false
+            fi
             ;;
         1) # GZIP
-            (echo "# Creating SquashFS with GZIP compression..."; mksquashfs "$WORK" "$SQFS") | \
-            yad --title="Creating SquashFS" --center --width=500 --height=200 --progress --pulsate --auto-close \
-                --text="Creating compressed filesystem...\nThis may take several minutes." --button="gtk-cancel"
+            echo "Creating SquashFS with GZIP compression..."
+            if mksquashfs "$WORK" "$SQFS" -progress 2>&1; then
+                echo "GZIP compression completed successfully"
+                squashfs_success=true
+            else
+                echo "GZIP compression failed"
+                squashfs_success=false
+            fi
             ;;
         2) # LZ4
-            (echo "# Creating SquashFS with LZ4 compression..."; mksquashfs "$WORK" "$SQFS" -comp lz4 -Xhc) | \
-            yad --title="Creating SquashFS" --center --width=500 --height=200 --progress --pulsate --auto-close \
-                --text="Creating compressed filesystem...\nThis may take several minutes." --button="gtk-cancel"
+            echo "Creating SquashFS with LZ4 compression..."
+            if mksquashfs "$WORK" "$SQFS" -comp lz4 -Xhc -progress 2>&1; then
+                echo "LZ4 compression completed successfully"
+                squashfs_success=true
+            else
+                echo "LZ4 compression failed"
+                squashfs_success=false
+            fi
             ;;
     esac
 
-    # Clean up working directory
-    if [ -f "$SQFS" ]; then
+    # Clean up working directory and verify squashfs creation
+    if [ "$squashfs_success" = "true" ] && [ -f "$SQFS" ] && [ -s "$SQFS" ]; then
+        echo -e "${GREEN}✅ SquashFS created successfully: $SQFS${NC}"
+        local sqfs_size=$(du -h "$SQFS" | cut -f1)
+        echo -e "${BLUE}Size: $sqfs_size${NC}"
+        
         CLEANUP=`yad --title="Success" --center --width=400 \
-            --text="<b>SquashFS created successfully!</b>\n\nFile: $SQFS\nSize: $(du -h "$SQFS" | cut -f1)\n\nRemove working directory '$WORK'?" \
+            --text="<b>SquashFS created successfully!</b>\n\nFile: $SQFS\nSize: $sqfs_size\n\nRemove working directory '$WORK'?" \
             --button="Keep:1" --button="Remove:0"`
         ret=$?
         if [[ $ret -eq 0 ]]; then
@@ -477,7 +595,11 @@ create_squashfs() {
         echo "$SQFS"
         return 0
     else
-        yad --title="Error" --center --text="Error: SquashFS creation failed!\n\nFile '$SQFS' was not created." --button="gtk-close:0"
+        echo -e "${RED}❌ SquashFS creation failed!${NC}"
+        yad --title="Error" --center --text="Error: SquashFS creation failed!\n\nFile '$SQFS' was not created or is empty.\nCheck terminal output for details." --button="gtk-close:0"
+        
+        # Keep working directory for debugging
+        echo -e "${YELLOW}Working directory preserved for debugging: $WORK${NC}"
         return 1
     fi
 }
