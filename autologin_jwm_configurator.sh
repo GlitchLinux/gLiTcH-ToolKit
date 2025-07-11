@@ -11,14 +11,47 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Check if running as root
+# Check if running as root or with sudo
 if [[ $EUID -eq 0 ]]; then
-    echo -e "${RED}[ERROR]${NC} This script should not be run as root!"
-    echo "Run as a regular user with sudo privileges."
-    exit 1
+    print_warning "Running as root. Will handle user permissions carefully."
+    RUNNING_AS_ROOT=true
+else
+    print_status "Running as regular user with sudo privileges."
+    RUNNING_AS_ROOT=false
 fi
 
-# Function to print colored output
+# Function to run command as specific user
+run_as_user() {
+    local username="$1"
+    local command="$2"
+    
+    if [[ $RUNNING_AS_ROOT == true ]]; then
+        # When running as root, use su to switch to user
+        su - "$username" -c "$command"
+    else
+        # When not root, use sudo -u
+        sudo -u "$username" bash -c "$command"
+    fi
+}
+
+# Function to create file as user
+create_user_file() {
+    local username="$1"
+    local filepath="$2"
+    local content="$3"
+    
+    # Create directory if it doesn't exist
+    local dirname=$(dirname "$filepath")
+    run_as_user "$username" "mkdir -p '$dirname'"
+    
+    # Create file with content
+    if [[ $RUNNING_AS_ROOT == true ]]; then
+        echo "$content" > "$filepath"
+        chown "$username:$username" "$filepath"
+    else
+        echo "$content" | sudo -u "$username" tee "$filepath" > /dev/null
+    fi
+}
 print_status() {
     echo -e "${GREEN}[INFO]${NC} $1"
 }
@@ -145,15 +178,15 @@ setup_user_jwm_config() {
     fi
     
     # Create JWM config directory
-    sudo -u "$username" mkdir -p "$user_home/.config/jwm"
+    run_as_user "$username" "mkdir -p '$user_home/.config/jwm'"
     
     # Copy system JWM config to user directory if it doesn't exist
     if [ ! -f "$user_home/.jwmrc" ]; then
         if [ -f "/etc/jwm/system.jwmrc" ]; then
-            sudo -u "$username" cp "/etc/jwm/system.jwmrc" "$user_home/.jwmrc"
+            run_as_user "$username" "cp '/etc/jwm/system.jwmrc' '$user_home/.jwmrc'"
             print_status "Copied system JWM config to user directory"
         elif [ -f "/usr/share/jwm/jwmrc" ]; then
-            sudo -u "$username" cp "/usr/share/jwm/jwmrc" "$user_home/.jwmrc"
+            run_as_user "$username" "cp '/usr/share/jwm/jwmrc' '$user_home/.jwmrc'"
             print_status "Copied default JWM config to user directory"
         else
             # Create a basic JWM config
@@ -170,7 +203,9 @@ setup_user_jwm_config() {
     create_xinitrc_file "$username"
     
     # Set proper ownership
-    sudo chown -R "$username:$username" "$user_home/.jwmrc" "$user_home/.xsession" "$user_home/.xinitrc" "$user_home/.config" 2>/dev/null
+    if [[ $RUNNING_AS_ROOT == true ]]; then
+        chown -R "$username:$username" "$user_home/.jwmrc" "$user_home/.xsession" "$user_home/.xinitrc" "$user_home/.config" 2>/dev/null
+    fi
     
     print_success "JWM configuration setup complete for user: $username"
 }
@@ -182,7 +217,104 @@ create_basic_jwm_config() {
     
     print_status "Creating basic JWM configuration..."
     
-    sudo -u "$username" tee "$user_home/.jwmrc" > /dev/null << 'EOF'
+    local jwm_config='<?xml version="1.0"?>
+<JWM>
+
+    <!-- The root menu -->
+    <RootMenu onroot="1">
+        <Program label="Terminal" icon="terminal">xfce4-terminal</Program>
+        <Program label="File Manager" icon="folder">thunar</Program>
+        <Program label="Web Browser" icon="web-browser">firefox-esr</Program>
+        <Separator/>
+        <Program label="Text Editor" icon="text-editor">mousepad</Program>
+        <Program label="Calculator" icon="calculator">galculator</Program>
+        <Separator/>
+        <Menu icon="preferences-desktop" label="Preferences">
+            <Program label="Display Settings">xrandr-gui</Program>
+            <Program label="Network">nm-connection-editor</Program>
+        </Menu>
+        <Separator/>
+        <Restart label="Restart JWM" icon="system-restart"/>
+        <Exit label="Exit" confirm="true" icon="system-log-out"/>
+    </RootMenu>
+
+    <!-- Tray at the bottom -->
+    <Tray x="0" y="-1" height="40" autohide="off">
+        <TrayButton label="Menu" icon="applications-accessories">root:1</TrayButton>
+        <TrayButton label="Files" icon="folder">exec:thunar</TrayButton>
+        <TrayButton label="Terminal" icon="terminal">exec:xfce4-terminal</TrayButton>
+        
+        <Spacer width="10"/>
+        <TaskList maxwidth="200"/>
+        <Dock/>
+        
+        <Clock format="%H:%M %d/%m"><Button mask="123">exec:xclock</Button></Clock>
+        <TrayButton label="Logout" icon="system-log-out">exec:jwm -exit</TrayButton>
+    </Tray>
+
+    <!-- Visual Styles -->
+    <WindowStyle>
+        <Font>Sans-12:bold</Font>
+        <Width>2</Width>
+        <Height>20</Height>
+        <Foreground>#FFFFFF</Foreground>
+        <Background>#555555</Background>
+        <Active>
+            <Foreground>#FFFFFF</Foreground>
+            <Background>#0078D4</Background>
+        </Active>
+    </WindowStyle>
+
+    <TrayStyle>
+        <Font>Sans-10</Font>
+        <Background>#2D2D30</Background>
+        <Foreground>#FFFFFF</Foreground>
+    </TrayStyle>
+
+    <TaskListStyle>
+        <Font>Sans-10</Font>
+        <Foreground>#FFFFFF</Foreground>
+        <Background>#2D2D30</Background>
+        <Active>
+            <Foreground>#000000</Foreground>
+            <Background>#0078D4</Background>
+        </Active>
+    </TaskListStyle>
+
+    <MenuStyle>
+        <Font>Sans-10</Font>
+        <Foreground>#FFFFFF</Foreground>
+        <Background>#2D2D30</Background>
+        <Active>
+            <Foreground>#FFFFFF</Foreground>
+            <Background>#0078D4</Background>
+        </Active>
+    </MenuStyle>
+
+    <!-- Virtual Desktops -->
+    <Desktops width="2" height="1">
+        <Background type="solid">#1E1E1E</Background>
+    </Desktops>
+
+    <!-- Window behavior -->
+    <FocusModel>click</FocusModel>
+    <SnapMode distance="5">border</SnapMode>
+    <MoveMode coordinates="off">opaque</MoveMode>
+    <ResizeMode coordinates="off">opaque</ResizeMode>
+
+    <!-- Startup commands -->
+    <StartupCommand>feh --bg-fill /usr/share/pixmaps/debian-logo.png 2>/dev/null || xsetroot -solid "#1E1E1E"</StartupCommand>
+
+    <!-- Key bindings -->
+    <Key mask="A" key="Tab">nextstacked</Key>
+    <Key mask="A" key="F4">close</Key>
+    <Key mask="A" key="F2">exec:dmenu_run</Key>
+    <Key mask="4" key="Return">exec:xfce4-terminal</Key>
+    <Key mask="4" key="e">exec:thunar</Key>
+
+</JWM>'
+
+    create_user_file "$username" "$user_home/.jwmrc" "$jwm_config"
 <?xml version="1.0"?>
 <JWM>
 
@@ -279,8 +411,6 @@ create_basic_jwm_config() {
     <Key mask="4" key="e">exec:thunar</Key>
 
 </JWM>
-EOF
-
     print_success "Basic JWM configuration created"
 }
 
@@ -291,8 +421,7 @@ create_xsession_file() {
     
     print_status "Creating .xsession file for $username..."
     
-    sudo -u "$username" tee "$user_home/.xsession" > /dev/null << 'EOF'
-#!/bin/bash
+    local xsession_content='#!/bin/bash
 
 # .xsession file for JWM
 # This file is executed when logging in via display manager
@@ -324,10 +453,12 @@ pulseaudio --start &
 setxkbmap us &
 
 # Start JWM
-exec jwm
-EOF
+exec jwm'
 
-    sudo chmod +x "$user_home/.xsession"
+    create_user_file "$username" "$user_home/.xsession" "$xsession_content"
+    
+    # Make executable
+    run_as_user "$username" "chmod +x '$user_home/.xsession'"
     print_success ".xsession file created"
 }
 
@@ -338,8 +469,7 @@ create_xinitrc_file() {
     
     print_status "Creating .xinitrc file for $username..."
     
-    sudo -u "$username" tee "$user_home/.xinitrc" > /dev/null << 'EOF'
-#!/bin/bash
+    local xinitrc_content='#!/bin/bash
 
 # .xinitrc file for JWM
 # This file is executed when starting X with startx
@@ -379,10 +509,12 @@ pulseaudio --start &
 setxkbmap us &
 
 # Start JWM
-exec jwm
-EOF
+exec jwm'
 
-    sudo chmod +x "$user_home/.xinitrc"
+    create_user_file "$username" "$user_home/.xinitrc" "$xinitrc_content"
+    
+    # Make executable
+    run_as_user "$username" "chmod +x '$user_home/.xinitrc'"
     print_success ".xinitrc file created"
 }
 
@@ -430,12 +562,12 @@ test_jwm_config() {
     print_status "Testing JWM configuration..."
     
     # Test JWM config syntax
-    if sudo -u "$username" jwm -p -f "$user_home/.jwmrc" >/dev/null 2>&1; then
+    if run_as_user "$username" "jwm -p -f '$user_home/.jwmrc'" >/dev/null 2>&1; then
         print_success "JWM configuration syntax is valid"
     else
         print_error "JWM configuration has syntax errors!"
         print_status "Running syntax check..."
-        sudo -u "$username" jwm -p -f "$user_home/.jwmrc"
+        run_as_user "$username" "jwm -p -f '$user_home/.jwmrc'"
         return 1
     fi
     
@@ -481,14 +613,16 @@ main() {
     print_header
     echo ""
     
-    # Check if we have sudo privileges
-    if ! sudo -n true 2>/dev/null; then
-        echo "This script requires sudo privileges."
-        echo "Please enter your password when prompted."
-        sudo -v
-        if [ $? -ne 0 ]; then
-            print_error "Failed to obtain sudo privileges!"
-            exit 1
+    # Check if we have appropriate privileges
+    if [[ $RUNNING_AS_ROOT == false ]]; then
+        if ! sudo -n true 2>/dev/null; then
+            echo "This script requires sudo privileges."
+            echo "Please enter your password when prompted."
+            sudo -v
+            if [ $? -ne 0 ]; then
+                print_error "Failed to obtain sudo privileges!"
+                exit 1
+            fi
         fi
     fi
     
