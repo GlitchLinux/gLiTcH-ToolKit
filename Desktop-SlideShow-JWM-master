@@ -1,0 +1,4 @@
+cd /tmp
+sudo wget https://raw.githubusercontent.com/GlitchLinux/Sparky-Bonsai-ASCII/refs/heads/main/Desktop-SlideShow-JWM-master.sh
+sudo chmod +x Desktop-SlideShow-JWM-master.sh 
+sudo ./Desktop-SlideShow-JWM-master.sh
