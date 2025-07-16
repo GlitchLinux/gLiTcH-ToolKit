@@ -109,7 +109,7 @@ if [ "$COPY_RESOLV" = "y" ] || [ "$COPY_RESOLV" = "Y" ]; then
 fi
 
 
-xterm chroot /mnt
+sudo chroot /mnt
 
 # Verify we can chroot
 #echo "Testing chroot environment..."
