@@ -1,4 +1,756 @@
-cd /tmp
-sudo wget https://raw.githubusercontent.com/GlitchLinux/Sparky-Bonsai-ASCII/refs/heads/main/Desktop-SlideShow-JWM-master.sh
-sudo chmod +x Desktop-SlideShow-JWM-master.sh 
-sudo ./Desktop-SlideShow-JWM-master.sh
+3cd /tmp
+#sudo wget https://raw.githubusercontent.com/GlitchLinux/Sparky-Bonsai-ASCII/refs/heads/main/Desktop-SlideShow-JWM-master.sh
+#sudo chmod +x Desktop-SlideShow-JWM-master.sh 
+#sudo ./Desktop-SlideShow-JWM-master.sh
+
+#!/bin/bash
+
+# Master JWM Rainbow Palms Wallpaper Slideshow Installer
+# For Sparky Linux Bonsai DebianDog
+# Author: Custom installer for bonsai remaster with GRUB splash integration
+
+set -e  # Exit on any error
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Configuration
+WALLPAPER_DIR="/home/x/Wallpapers/RAINBOW-PALMS"
+SCRIPT_PATH="/usr/local/bin/wallpaper-slideshow"
+GITHUB_ZIP_URL="https://github.com/GlitchLinux/Sparky-Bonsai-ASCII/raw/refs/heads/main/RAINBOW-PALMS.zip"
+TEMP_ZIP="/tmp/rainbow-palms.zip"
+
+# Rainbow Palms wallpaper files (based on your tree output, excluding 4.png)
+WALLPAPERS=(
+    "1.png" "2.png" "3.png" "5.png" "6.png" "7.png" "8.png" "9.png" "10.png"
+    "11.png" "12.png" "13.png" "14.png" "15.png" "16.png" "17.png" "18.png" "19.png" "20.png"
+    "21.png" "22.png" "23.png" "24.png" "25.png" "26.png" "27.png" "28.png" "29.png" "30.png"
+    "31.png" "32.png" "33.png" "34.png" "35.png" "36.png" "37.png" "38.png" "39.png" "40.png"
+    "41.png" "42.png" "43.png" "45.png"
+)
+
+# Function to print colored output
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+print_header() {
+    echo -e "${BLUE}===========================================${NC}"
+    echo -e "${BLUE}  JWM Rainbow Palms Wallpaper Slideshow  ${NC}"
+    echo -e "${BLUE}  Sparky Linux Bonsai DebianDog          ${NC}"
+    echo -e "${BLUE}  With GRUB Splash Integration! 🌈       ${NC}"
+    echo -e "${BLUE}===========================================${NC}"
+    echo
+}
+
+# Function to check if running as root when needed
+check_root() {
+    if [[ $EUID -eq 0 ]]; then
+        print_error "Do not run this script as root!"
+        print_status "Run as normal user. Script will prompt for sudo when needed."
+        exit 1
+    fi
+}
+
+# Function to check dependencies
+check_dependencies() {
+    print_status "Checking system dependencies..."
+    
+    # Check if wget or curl is available
+    if ! command -v wget >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
+        print_error "Neither wget nor curl found. Installing wget..."
+        sudo apt update && sudo apt install -y wget
+    fi
+    
+    # Install required packages
+    print_status "Installing required packages..."
+    sudo apt update
+    sudo apt install -y feh wget unzip
+    
+    print_success "Dependencies installed successfully"
+}
+
+# Function to create wallpaper directory
+create_wallpaper_directory() {
+    print_status "Creating wallpaper directory..."
+    
+    # Create directory structure
+    mkdir -p "$(dirname "$WALLPAPER_DIR")"
+    
+    # Set proper permissions
+    chmod 755 "$(dirname "$WALLPAPER_DIR")"
+    
+    print_success "Wallpaper directory structure ready"
+}
+
+# Function to download and extract wallpapers
+download_wallpapers() {
+    print_status "Downloading Rainbow Palms wallpapers ZIP from GitHub..."
+    
+    # Download the ZIP file
+    if command -v wget >/dev/null 2>&1; then
+        wget -q --show-progress "$GITHUB_ZIP_URL" -O "$TEMP_ZIP"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -L -o "$TEMP_ZIP" "$GITHUB_ZIP_URL"
+    fi
+    
+    if [[ ! -f "$TEMP_ZIP" ]]; then
+        print_error "Failed to download ZIP file"
+        exit 1
+    fi
+    
+    print_success "Downloaded ZIP file"
+    
+    # Extract ZIP file
+    print_status "Extracting wallpapers..."
+    cd "$(dirname "$WALLPAPER_DIR")"
+    unzip -q "$TEMP_ZIP"
+    
+    # Verify extraction
+    if [[ ! -d "$WALLPAPER_DIR" ]]; then
+        print_error "Failed to extract ZIP file or RAINBOW-PALMS folder not found"
+        exit 1
+    fi
+    
+    # Set proper permissions
+    chmod 755 "$WALLPAPER_DIR"
+    chmod 644 "$WALLPAPER_DIR"/*.png
+    
+    # Cleanup
+    rm -f "$TEMP_ZIP"
+    
+    print_success "All wallpapers extracted successfully"
+    echo
+    print_status "Wallpapers location: $WALLPAPER_DIR"
+    print_status "Total wallpapers: $(ls -1 "$WALLPAPER_DIR"/*.png | wc -l)"
+}
+
+# Function to install wallpaper slideshow script
+install_slideshow_script() {
+    print_status "Installing Rainbow Palms wallpaper slideshow script..."
+    
+    # Create the main wallpaper slideshow script
+    sudo tee "$SCRIPT_PATH" > /dev/null << 'SCRIPT_EOF'
+#!/bin/bash
+
+# JWM Rainbow Palms Wallpaper Slideshow Script for Sparky Linux Bonsai DebianDog
+# Author: Custom script for bonsai remaster with GRUB splash integration
+# Description: Cycles through 44 rainbow palm wallpapers every 5 minutes
+# Note: Stops PCManFM desktop mode and uses feh for wallpaper management
+# Special: Updates GRUB splash screen on each wallpaper change! 🌈
+
+# Configuration
+WALLPAPER_DIR="/home/x/Wallpapers/RAINBOW-PALMS"
+INTERVAL=300  # 5 minutes in seconds
+LOCK_FILE="/tmp/wallpaper_slideshow.lock"
+LOG_FILE="/tmp/wallpaper_slideshow.log"
+STATE_FILE="/tmp/wallpaper_current_index"
+PCMANFM_DISABLED_FLAG="/tmp/pcmanfm_disabled_by_wallpaper"
+GRUB_SPLASH_PATH="/boot/grub/splash.png"
+
+# Rainbow Palms wallpaper files array (44 wallpapers, excluding 4.png)
+WALLPAPERS=(
+    "1.png" "2.png" "3.png" "5.png" "6.png" "7.png" "8.png" "9.png" "10.png"
+    "11.png" "12.png" "13.png" "14.png" "15.png" "16.png" "17.png" "18.png" "19.png" "20.png"
+    "21.png" "22.png" "23.png" "24.png" "25.png" "26.png" "27.png" "28.png" "29.png" "30.png"
+    "31.png" "32.png" "33.png" "34.png" "35.png" "36.png" "37.png" "38.png" "39.png" "40.png"
+    "41.png" "42.png" "43.png" "45.png"
+)
+
+# Function to log messages
+log_message() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+# Function to check if feh is available
+check_feh() {
+    if ! command -v feh >/dev/null 2>&1; then
+        echo "ERROR: feh is not installed. Please install it:"
+        echo "  sudo apt update && sudo apt install feh"
+        log_message "ERROR: feh not found"
+        exit 1
+    fi
+}
+
+# Function to disable PCManFM desktop mode
+disable_pcmanfm_desktop() {
+    # Check if PCManFM is running in desktop mode
+    if pgrep -f "pcmanfm.*--desktop" >/dev/null; then
+        log_message "INFO: Stopping PCManFM desktop mode"
+        killall pcmanfm 2>/dev/null
+        # Wait a moment for process to terminate
+        sleep 1
+        # Mark that we disabled it
+        touch "$PCMANFM_DISABLED_FLAG"
+        echo "Stopped PCManFM desktop mode to enable wallpaper slideshow"
+    fi
+}
+
+# Function to re-enable PCManFM desktop mode
+enable_pcmanfm_desktop() {
+    if [[ -f "$PCMANFM_DISABLED_FLAG" ]]; then
+        log_message "INFO: Restarting PCManFM desktop mode"
+        pcmanfm --desktop &
+        rm -f "$PCMANFM_DISABLED_FLAG"
+        echo "Restored PCManFM desktop mode"
+    fi
+}
+
+# Function to update GRUB splash screen
+update_grub_splash() {
+    local wallpaper_path="$1"
+    local wallpaper_name=$(basename "$wallpaper_path")
+    
+    # Check if GRUB splash directory exists
+    if [[ ! -d "/boot/grub" ]]; then
+        log_message "WARNING: /boot/grub directory not found, skipping GRUB splash update"
+        return 1
+    fi
+    
+    # Copy wallpaper to GRUB splash location
+    if sudo cp "$wallpaper_path" "$GRUB_SPLASH_PATH" 2>/dev/null; then
+        log_message "SUCCESS: Updated GRUB splash to $wallpaper_name"
+        echo "🎨 Updated GRUB splash screen: $wallpaper_name"
+        return 0
+    else
+        log_message "WARNING: Failed to update GRUB splash (permission/path issue)"
+        echo "⚠️  Could not update GRUB splash screen"
+        return 1
+    fi
+}
+
+# Function to set wallpaper using feh
+set_wallpaper() {
+    local wallpaper_path="$1"
+    
+    # Set wallpaper with feh
+    if feh --bg-fill "$wallpaper_path" 2>/dev/null; then
+        # Also create .fehbg script for restoration
+        echo "#!/bin/sh" > ~/.fehbg
+        echo "feh --bg-fill '$wallpaper_path'" >> ~/.fehbg
+        chmod +x ~/.fehbg
+        
+        # Force refresh the desktop
+        xrefresh 2>/dev/null || true
+        
+        # Update GRUB splash screen with the same wallpaper! 🌈
+        update_grub_splash "$wallpaper_path"
+        
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to restore wallpaper (useful after JWM restart)
+restore_wallpaper() {
+    if [[ -f ~/.fehbg ]]; then
+        log_message "INFO: Restoring wallpaper from .fehbg"
+        ~/.fehbg 2>/dev/null
+    fi
+}
+
+# Function to get current wallpaper index
+get_current_index() {
+    if [[ -f "$STATE_FILE" ]]; then
+        cat "$STATE_FILE"
+    else
+        echo "0"
+    fi
+}
+
+# Function to save current wallpaper index
+save_current_index() {
+    echo "$1" > "$STATE_FILE"
+}
+
+# Function to get next wallpaper index
+get_next_index() {
+    local current_index=$(get_current_index)
+    local next_index=$(( (current_index + 1) % ${#WALLPAPERS[@]} ))
+    echo "$next_index"
+}
+
+# Function to get random wallpaper index
+get_random_index() {
+    echo $(( RANDOM % ${#WALLPAPERS[@]} ))
+}
+
+# Function to change wallpaper
+change_wallpaper() {
+    check_feh
+    
+    local index=$(get_next_index)
+    local wallpaper_file="${WALLPAPERS[$index]}"
+    local wallpaper_path="$WALLPAPER_DIR/$wallpaper_file"
+    
+    if [[ ! -f "$wallpaper_path" ]]; then
+        log_message "ERROR: Wallpaper file not found: $wallpaper_path"
+        echo "ERROR: Wallpaper file not found: $wallpaper_path"
+        return 1
+    fi
+    
+    if set_wallpaper "$wallpaper_path"; then
+        save_current_index "$index"
+        log_message "SUCCESS: Changed wallpaper to $wallpaper_file (index: $index)"
+        echo "🌈 Changed wallpaper to: $wallpaper_file (${index}/${#WALLPAPERS[@]})"
+        return 0
+    else
+        log_message "ERROR: Failed to set wallpaper: $wallpaper_path"
+        echo "ERROR: Failed to set wallpaper: $wallpaper_path"
+        return 1
+    fi
+}
+
+# Function to change to random wallpaper
+change_random_wallpaper() {
+    check_feh
+    
+    local index=$(get_random_index)
+    local wallpaper_file="${WALLPAPERS[$index]}"
+    local wallpaper_path="$WALLPAPER_DIR/$wallpaper_file"
+    
+    if [[ ! -f "$wallpaper_path" ]]; then
+        log_message "ERROR: Wallpaper file not found: $wallpaper_path"
+        echo "ERROR: Wallpaper file not found: $wallpaper_path"
+        return 1
+    fi
+    
+    if set_wallpaper "$wallpaper_path"; then
+        save_current_index "$index"
+        log_message "SUCCESS: Changed to random wallpaper $wallpaper_file (index: $index)"
+        echo "🎲 Random wallpaper: $wallpaper_file (${index}/${#WALLPAPERS[@]})"
+        return 0
+    else
+        log_message "ERROR: Failed to set wallpaper: $wallpaper_path"
+        echo "ERROR: Failed to set wallpaper: $wallpaper_path"
+        return 1
+    fi
+}
+
+# Function to start slideshow daemon
+start_slideshow() {
+    # Check if already running
+    if [[ -f "$LOCK_FILE" ]]; then
+        local pid=$(cat "$LOCK_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "Slideshow already running with PID $pid"
+            log_message "INFO: Slideshow already running with PID $pid"
+            exit 0
+        else
+            log_message "INFO: Removing stale lock file"
+            rm -f "$LOCK_FILE"
+        fi
+    fi
+    
+    check_feh
+    
+    # Disable PCManFM desktop mode
+    disable_pcmanfm_desktop
+    
+    # Create lock file
+    echo $$ > "$LOCK_FILE"
+    
+    # Set initial wallpaper
+    change_wallpaper
+    
+    log_message "INFO: Starting Rainbow Palms wallpaper slideshow daemon (PID: $$, ${#WALLPAPERS[@]} wallpapers)"
+    echo "🌈 Started Rainbow Palms wallpaper slideshow daemon (${#WALLPAPERS[@]} wallpapers, 5min intervals)"
+    
+    # Trap to cleanup on exit
+    trap 'cleanup_and_exit' EXIT INT TERM
+    
+    # Main slideshow loop
+    while true; do
+        sleep "$INTERVAL"
+        change_wallpaper
+    done
+}
+
+# Function to cleanup and exit
+cleanup_and_exit() {
+    log_message "INFO: Slideshow daemon stopping"
+    rm -f "$LOCK_FILE"
+    exit 0
+}
+
+# Function to stop slideshow daemon
+stop_slideshow() {
+    if [[ -f "$LOCK_FILE" ]]; then
+        local pid=$(cat "$LOCK_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid"
+            # Wait for process to terminate
+            sleep 2
+            rm -f "$LOCK_FILE"
+            
+            # Re-enable PCManFM if we disabled it
+            enable_pcmanfm_desktop
+            
+            log_message "INFO: Stopped wallpaper slideshow daemon (PID: $pid)"
+            echo "Stopped Rainbow Palms wallpaper slideshow daemon"
+        else
+            log_message "INFO: No running slideshow daemon found"
+            echo "No running slideshow daemon found"
+            rm -f "$LOCK_FILE"
+        fi
+    else
+        echo "Slideshow not running"
+    fi
+}
+
+# Function to check slideshow status
+status_slideshow() {
+    if [[ -f "$LOCK_FILE" ]]; then
+        local pid=$(cat "$LOCK_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "🌈 Rainbow Palms wallpaper slideshow is running (PID: $pid)"
+            local current_index=$(get_current_index)
+            echo "Current wallpaper: ${WALLPAPERS[$current_index]} (${current_index}/${#WALLPAPERS[@]})"
+            echo "Total wallpapers: ${#WALLPAPERS[@]}"
+            echo "Change interval: 5 minutes"
+            echo "PCManFM desktop disabled: $([ -f "$PCMANFM_DISABLED_FLAG" ] && echo "Yes" || echo "No")"
+            echo "GRUB splash integration: Enabled 🎨"
+        else
+            echo "Rainbow Palms wallpaper slideshow is not running (stale lock file)"
+        fi
+    else
+        echo "Rainbow Palms wallpaper slideshow is not running"
+    fi
+}
+
+# Function to manually change to next wallpaper
+next_wallpaper() {
+    disable_pcmanfm_desktop
+    change_wallpaper
+}
+
+# Function to change to random wallpaper
+random_wallpaper() {
+    disable_pcmanfm_desktop
+    change_random_wallpaper
+}
+
+# Function to restore current wallpaper (useful after JWM restart)
+restore_current() {
+    disable_pcmanfm_desktop
+    restore_wallpaper
+    echo "Restored current wallpaper"
+}
+
+# Function to list all available wallpapers
+list_wallpapers() {
+    echo "🌈 Available Rainbow Palms wallpapers (${#WALLPAPERS[@]} total):"
+    local current_index=$(get_current_index)
+    for i in "${!WALLPAPERS[@]}"; do
+        local marker=""
+        if [[ $i -eq $current_index ]]; then
+            marker=" ← current"
+        fi
+        echo "  [$i] ${WALLPAPERS[$i]}$marker"
+    done
+}
+
+# Function to set specific wallpaper by index
+set_wallpaper_by_index() {
+    local target_index="$1"
+    
+    if [[ ! "$target_index" =~ ^[0-9]+$ ]] || [[ $target_index -lt 0 ]] || [[ $target_index -ge ${#WALLPAPERS[@]} ]]; then
+        echo "ERROR: Invalid index. Use 0-$((${#WALLPAPERS[@]} - 1))"
+        return 1
+    fi
+    
+    disable_pcmanfm_desktop
+    
+    local wallpaper_file="${WALLPAPERS[$target_index]}"
+    local wallpaper_path="$WALLPAPER_DIR/$wallpaper_file"
+    
+    if [[ ! -f "$wallpaper_path" ]]; then
+        echo "ERROR: Wallpaper file not found: $wallpaper_path"
+        return 1
+    fi
+    
+    if set_wallpaper "$wallpaper_path"; then
+        save_current_index "$target_index"
+        echo "🌈 Set wallpaper: $wallpaper_file (${target_index}/${#WALLPAPERS[@]})"
+        return 0
+    else
+        echo "ERROR: Failed to set wallpaper: $wallpaper_path"
+        return 1
+    fi
+}
+
+# Function to show usage
+usage() {
+    echo "🌈 JWM Rainbow Palms Wallpaper Slideshow for Sparky Linux Bonsai DebianDog"
+    echo "Usage: $0 {start|stop|status|next|random|restore|list|set INDEX|install|uninstall}"
+    echo ""
+    echo "Commands:"
+    echo "  start         - Start the wallpaper slideshow daemon (5min intervals)"
+    echo "  stop          - Stop the wallpaper slideshow daemon"
+    echo "  status        - Show current slideshow status"
+    echo "  next          - Manually change to next wallpaper"
+    echo "  random        - Change to random wallpaper"
+    echo "  restore       - Restore current wallpaper (useful after JWM restart)"
+    echo "  list          - List all available wallpapers with indices"
+    echo "  set INDEX     - Set specific wallpaper by index (0-$((${#WALLPAPERS[@]} - 1)))"
+    echo "  install       - Install script to autostart with JWM"
+    echo "  uninstall     - Remove autostart and restore PCManFM desktop"
+    echo ""
+    echo "Features:"
+    echo "  • 44 Rainbow Palms wallpapers"
+    echo "  • 5-minute change intervals"
+    echo "  • Automatic GRUB splash screen updates! 🎨"
+    echo "  • Disables PCManFM desktop mode for proper operation"
+}
+
+# Main script logic
+case "$1" in
+    start)
+        start_slideshow
+        ;;
+    stop)
+        stop_slideshow
+        ;;
+    status)
+        status_slideshow
+        ;;
+    next)
+        next_wallpaper
+        ;;
+    random)
+        random_wallpaper
+        ;;
+    restore)
+        restore_current
+        ;;
+    list)
+        list_wallpapers
+        ;;
+    set)
+        if [[ -z "$2" ]]; then
+            echo "ERROR: Please provide wallpaper index (0-$((${#WALLPAPERS[@]} - 1)))"
+            echo "Use 'wallpaper-slideshow list' to see available wallpapers"
+            exit 1
+        fi
+        set_wallpaper_by_index "$2"
+        ;;
+    install)
+        echo "Creating JWM startup integration for Rainbow Palms..."
+        
+        # Create the startup script
+        cat > ~/.startup << 'STARTUP_EOF'
+#!/bin/bash
+# JWM Startup Script for Rainbow Palms
+
+# Log startup
+echo "$(date) - JWM startup beginning (Rainbow Palms)" >> /tmp/jwm_startup.log
+
+# Wait for X server to be fully ready
+sleep 3
+
+# Kill PCManFM desktop mode if running
+killall pcmanfm 2>/dev/null
+echo "$(date) - Killed PCManFM" >> /tmp/jwm_startup.log
+
+# Clean up any stale wallpaper slideshow processes and lock files
+pkill -f "wallpaper-slideshow start" 2>/dev/null
+rm -f /tmp/wallpaper_slideshow.lock 2>/dev/null
+echo "$(date) - Cleaned up old slideshow processes" >> /tmp/jwm_startup.log
+
+# Wait for cleanup
+sleep 2
+
+# Set initial random wallpaper directly with feh
+feh --bg-fill /home/x/Wallpapers/RAINBOW-PALMS/1.png
+echo "$(date) - Set initial Rainbow Palms wallpaper" >> /tmp/jwm_startup.log
+
+# Start fresh wallpaper slideshow daemon
+/usr/local/bin/wallpaper-slideshow start &
+echo "$(date) - Started Rainbow Palms slideshow daemon" >> /tmp/jwm_startup.log
+
+STARTUP_EOF
+        
+        chmod +x ~/.startup
+        echo "🌈 Rainbow Palms wallpaper slideshow installed to JWM autostart"
+        echo "Restart your system or run 'jwm -restart' to activate"
+        ;;
+    uninstall)
+        echo "Removing Rainbow Palms wallpaper slideshow from autostart..."
+        stop_slideshow
+        rm -f ~/.startup
+        enable_pcmanfm_desktop
+        echo "Rainbow Palms wallpaper slideshow uninstalled"
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac
+SCRIPT_EOF
+
+    # Make script executable
+    sudo chmod +x "$SCRIPT_PATH"
+    
+    print_success "Rainbow Palms wallpaper slideshow script installed at $SCRIPT_PATH"
+}
+
+# Function to setup JWM restart aliases system-wide
+setup_jwm_aliases() {
+    print_status "Setting up system-wide JWM restart aliases for Rainbow Palms..."
+    
+    # Create backup of system bashrc
+    sudo cp /etc/bash.bashrc /etc/bash.bashrc.backup.$(date +%Y%m%d_%H%M%S)
+    
+    # Check if our function already exists
+    if ! grep -q "JWM restart with wallpaper slideshow support" /etc/bash.bashrc; then
+        print_status "Adding JWM restart function to system bashrc..."
+        
+        sudo tee -a /etc/bash.bashrc > /dev/null << 'BASHRC_EOF'
+
+# ============================================================================
+# JWM Rainbow Palms Wallpaper Slideshow Integration
+# Added by JWM Rainbow Palms Wallpaper Slideshow Installer
+# ============================================================================
+
+# JWM restart with wallpaper slideshow support
+jwm() {
+    if [[ "$1" == "-restart" ]]; then
+        echo "🔄 Restarting JWM with Rainbow Palms wallpaper slideshow support..."
+        
+        # Stop wallpaper slideshow gracefully
+        if command -v wallpaper-slideshow >/dev/null 2>&1; then
+            wallpaper-slideshow stop 2>/dev/null
+            echo "🌈 Stopped Rainbow Palms wallpaper slideshow"
+        fi
+        
+        # Small delay for cleanup
+        sleep 1
+        
+        # Restart JWM
+        echo "🚀 Restarting JWM..."
+        command jwm -restart
+        
+    elif [[ "$1" == "-reload" ]]; then
+        echo "🔄 Reloading JWM configuration..."
+        command jwm -reload
+        
+        # Restart wallpaper slideshow after config reload
+        if command -v wallpaper-slideshow >/dev/null 2>&1; then
+            echo "🌈 Restarting Rainbow Palms wallpaper slideshow..."
+            wallpaper-slideshow stop 2>/dev/null
+            sleep 1
+            wallpaper-slideshow start &
+        fi
+        
+    else
+        # Pass through all other jwm commands normally
+        command jwm "$@"
+    fi
+}
+
+# Rainbow Palms wallpaper management aliases
+alias wp-next='wallpaper-slideshow next'
+alias wp-random='wallpaper-slideshow random'
+alias wp-status='wallpaper-slideshow status'
+alias wp-start='wallpaper-slideshow start'
+alias wp-stop='wallpaper-slideshow stop'
+alias wp-list='wallpaper-slideshow list'
+alias wp-install='wallpaper-slideshow install'
+
+# Quick Rainbow Palms wallpaper shortcuts (first 10 for convenience)
+alias palm1='wallpaper-slideshow set 0'
+alias palm2='wallpaper-slideshow set 1'
+alias palm3='wallpaper-slideshow set 2'
+alias palm4='wallpaper-slideshow set 3'
+alias palm5='wallpaper-slideshow set 4'
+alias palm6='wallpaper-slideshow set 5'
+alias palm7='wallpaper-slideshow set 6'
+alias palm8='wallpaper-slideshow set 7'
+alias palm9='wallpaper-slideshow set 8'
+alias palm10='wallpaper-slideshow set 9'
+
+# Rainbow-themed aliases
+alias rainbow-next='wallpaper-slideshow next'
+alias rainbow-random='wallpaper-slideshow random'
+alias rainbow-status='wallpaper-slideshow status'
+
+BASHRC_EOF
+
+        print_success "JWM restart function and Rainbow Palms aliases added to system bashrc"
+    else
+        print_warning "JWM restart function already exists in system bashrc"
+    fi
+    
+    # Also add to user's bashrc if it exists
+    if [[ -f ~/.bashrc ]]; then
+        print_status "Adding Rainbow Palms aliases to user bashrc..."
+        
+        if ! grep -q "JWM Rainbow Palms Wallpaper Slideshow Integration" ~/.bashrc; then
+            tee -a ~/.bashrc > /dev/null << 'USER_BASHRC_EOF'
+
+# ============================================================================
+# JWM Rainbow Palms Wallpaper Slideshow Integration (User)
+# Added by JWM Rainbow Palms Wallpaper Slideshow Installer
+# ============================================================================
+
+# Quick Rainbow Palms shortcuts
+alias wp='wallpaper-slideshow'
+alias next-wallpaper='wallpaper-slideshow next'
+alias random-wallpaper='wallpaper-slideshow random'
+alias wallpaper-status='wallpaper-slideshow status'
+alias list-wallpapers='wallpaper-slideshow list'
+
+USER_BASHRC_EOF
+            print_success "User Rainbow Palms aliases added to ~/.bashrc"
+        fi
+    fi
+}
+
+# Function to install JWM autostart
+install_jwm_autostart() {
+    print_status "Installing JWM autostart configuration for Rainbow Palms..."
+    
+    # Install using the wallpaper script's install function
+    "$SCRIPT_PATH" install
+    
+    print_success "JWM autostart configuration installed"
+}
+
+# Function to test installation
+test_installation() {
+    print_status "Testing Rainbow Palms wallpaper slideshow installation..."
+    
+    # Test script existence and permissions
+    if [[ -x "$SCRIPT_PATH" ]]; then
+        print_success "Wallpaper script is executable"
+    else
+        print_error "Wallpaper script is not executable"
+        return 1
+    fi
+    
+    # Test wallpaper files
+    local missing_files=0
+    for wallpaper in "${WALLPAPERS[@]}"; do
+        if [[ ! -f "$WALLPAPER_DIR/$wallpaper" ]]; then
+            print_error "Missing wallpaper: $wallpaper"
+            ((missing_files++))
+        fi
+    done
+
