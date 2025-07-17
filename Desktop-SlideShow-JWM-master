@@ -1,8 +1,3 @@
-3cd /tmp
-#sudo wget https://raw.githubusercontent.com/GlitchLinux/Sparky-Bonsai-ASCII/refs/heads/main/Desktop-SlideShow-JWM-master.sh
-#sudo chmod +x Desktop-SlideShow-JWM-master.sh 
-#sudo ./Desktop-SlideShow-JWM-master.sh
-
 #!/bin/bash
 
 # Master JWM Rainbow Palms Wallpaper Slideshow Installer
@@ -146,7 +141,7 @@ install_slideshow_script() {
     print_status "Installing Rainbow Palms wallpaper slideshow script..."
     
     # Create the main wallpaper slideshow script
-    sudo tee "$SCRIPT_PATH" > /dev/null << 'SCRIPT_EOF'
+    sudo tee "$SCRIPT_PATH" > /dev/null << 'EOF'
 #!/bin/bash
 
 # JWM Rainbow Palms Wallpaper Slideshow Script for Sparky Linux Bonsai DebianDog
@@ -584,7 +579,6 @@ echo "$(date) - Set initial Rainbow Palms wallpaper" >> /tmp/jwm_startup.log
 # Start fresh wallpaper slideshow daemon
 /usr/local/bin/wallpaper-slideshow start &
 echo "$(date) - Started Rainbow Palms slideshow daemon" >> /tmp/jwm_startup.log
-
 STARTUP_EOF
         
         chmod +x ~/.startup
@@ -603,7 +597,7 @@ STARTUP_EOF
         exit 1
         ;;
 esac
-SCRIPT_EOF
+EOF
 
     # Make script executable
     sudo chmod +x "$SCRIPT_PATH"
@@ -690,7 +684,6 @@ alias palm10='wallpaper-slideshow set 9'
 alias rainbow-next='wallpaper-slideshow next'
 alias rainbow-random='wallpaper-slideshow random'
 alias rainbow-status='wallpaper-slideshow status'
-
 BASHRC_EOF
 
         print_success "JWM restart function and Rainbow Palms aliases added to system bashrc"
@@ -716,7 +709,6 @@ alias next-wallpaper='wallpaper-slideshow next'
 alias random-wallpaper='wallpaper-slideshow random'
 alias wallpaper-status='wallpaper-slideshow status'
 alias list-wallpapers='wallpaper-slideshow list'
-
 USER_BASHRC_EOF
             print_success "User Rainbow Palms aliases added to ~/.bashrc"
         fi
@@ -753,4 +745,200 @@ test_installation() {
             ((missing_files++))
         fi
     done
+    
+    if [[ $missing_files -eq 0 ]]; then
+        print_success "All ${#WALLPAPERS[@]} Rainbow Palms wallpaper files present"
+    else
+        print_error "$missing_files wallpaper files missing"
+        return 1
+    fi
+    
+    # Test feh
+    if command -v feh >/dev/null 2>&1; then
+        print_success "feh is available"
+    else
+        print_error "feh is not available"
+        return 1
+    fi
+    
+    # Test GRUB directory access
+    if [[ -d "/boot/grub" ]]; then
+        if sudo test -w "/boot/grub" 2>/dev/null; then
+            print_success "GRUB splash integration will work (write access confirmed)"
+        else
+            print_warning "GRUB splash integration may not work (no write access to /boot/grub)"
+        fi
+    else
+        print_warning "GRUB directory not found - splash integration will be skipped"
+    fi
+    
+    # Test manual wallpaper change
+    print_status "Testing manual wallpaper change..."
+    if "$SCRIPT_PATH" next; then
+        print_success "Manual wallpaper change works"
+    else
+        print_warning "Manual wallpaper change had issues (check if X11 is running)"
+    fi
+    
+    print_success "Rainbow Palms installation test completed successfully"
+}
 
+# Function to display final instructions
+show_final_instructions() {
+    echo
+    print_header
+    print_success "🌈 JWM Rainbow Palms Wallpaper Slideshow installation completed!"
+    echo
+    echo -e "${BLUE}📁 Wallpapers location:${NC} $WALLPAPER_DIR"
+    echo -e "${BLUE}🛠️  Script location:${NC} $SCRIPT_PATH"
+    echo -e "${BLUE}📜 Startup script:${NC} ~/.startup"
+    echo -e "${BLUE}🎨 GRUB splash:${NC} /boot/grub/splash.png (auto-updated!)"
+    echo
+    echo -e "${YELLOW}Available Commands:${NC}"
+    echo "  wallpaper-slideshow start    - Start slideshow (5min intervals)"
+    echo "  wallpaper-slideshow stop     - Stop slideshow"
+    echo "  wallpaper-slideshow status   - Check status"
+    echo "  wallpaper-slideshow next     - Next wallpaper"
+    echo "  wallpaper-slideshow random   - Random wallpaper"
+    echo "  wallpaper-slideshow list     - List all 44 wallpapers"
+    echo "  wallpaper-slideshow set N    - Set specific wallpaper (0-43)"
+    echo "  jwm -restart                 - Restart JWM (with slideshow support)"
+    echo
+    echo -e "${YELLOW}Quick Aliases:${NC}"
+    echo "  wp-next       - Next wallpaper"
+    echo "  wp-random     - Random wallpaper"
+    echo "  wp-status     - Check status"
+    echo "  wp-start      - Start slideshow"
+    echo "  wp-stop       - Stop slideshow"
+    echo "  wp-list       - List all wallpapers"
+    echo "  palm1-palm10  - Set specific wallpapers"
+    echo "  rainbow-next  - Next rainbow wallpaper"
+    echo "  rainbow-random- Random rainbow wallpaper"
+    echo
+    echo -e "${GREEN}🎉 To activate everything:${NC}"
+    echo "  1. Restart your terminal: ${BLUE}source /etc/bash.bashrc${NC}"
+    echo "  2. Test: ${BLUE}wallpaper-slideshow random${NC}"
+    echo "  3. Start slideshow: ${BLUE}wallpaper-slideshow start${NC}"
+    echo "  4. Restart JWM: ${BLUE}jwm -restart${NC}"
+    echo
+    echo -e "${YELLOW}🌈 Rainbow Palms Features:${NC}"
+    echo "  • 44 beautiful rainbow palm wallpapers"
+    echo "  • Changes every 5 minutes automatically"
+    echo "  • Updates GRUB splash screen on each change! 🎨"
+    echo "  • Random wallpaper selection available"
+    echo "  • Starts automatically on boot"
+    echo "  • Handles JWM restarts gracefully"
+    echo "  • Disables PCManFM desktop mode automatically"
+    echo
+    echo -e "${BLUE}🎨 GRUB Splash Magic:${NC}"
+    echo "  Every time your wallpaper changes, your boot screen"
+    echo "  changes too! Reboot to see a different colored splash! 🌈"
+    echo
+    print_success "Enjoy your dynamic rainbow palm wallpapers! 🌴🌈"
+}
+
+# Main installation function
+main() {
+    print_header
+    
+    print_status "Starting JWM Rainbow Palms Wallpaper Slideshow installation..."
+    echo
+    
+    # Check if running as root
+    check_root
+    
+    # Installation steps
+    check_dependencies
+    echo
+    
+    create_wallpaper_directory
+    echo
+    
+    download_wallpapers
+    echo
+    
+    install_slideshow_script
+    echo
+    
+    setup_jwm_aliases
+    echo
+    
+    install_jwm_autostart
+    echo
+    
+    test_installation
+    echo
+    
+    show_final_instructions
+}
+
+# Handle command line arguments
+case "${1:-}" in
+    --help|-h)
+        echo "🌈 JWM Rainbow Palms Wallpaper Slideshow Master Installer"
+        echo "Usage: $0 [--help|-h|--uninstall]"
+        echo
+        echo "Features:"
+        echo "  • 44 Rainbow Palms wallpapers"
+        echo "  • 5-minute change intervals"
+        echo "  • Automatic GRUB splash screen updates! 🎨"
+        echo "  • Random wallpaper selection"
+        echo "  • JWM integration with autostart"
+        echo
+        echo "Options:"
+        echo "  --help, -h        Show this help message"
+        echo "  --uninstall       Uninstall Rainbow Palms wallpaper slideshow"
+        exit 0
+        ;;
+    --uninstall)
+        print_status "Uninstalling JWM Rainbow Palms Wallpaper Slideshow..."
+        
+        # Stop slideshow
+        if [[ -x "$SCRIPT_PATH" ]]; then
+            "$SCRIPT_PATH" stop 2>/dev/null || true
+            "$SCRIPT_PATH" uninstall 2>/dev/null || true
+        fi
+        
+        # Remove script
+        sudo rm -f "$SCRIPT_PATH"
+        
+        # Remove wallpapers (ask for confirmation)
+        read -p "Remove Rainbow Palms wallpaper files from $WALLPAPER_DIR? [y/N]: " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            rm -rf "$WALLPAPER_DIR"
+            print_success "Rainbow Palms wallpaper files removed"
+        fi
+        
+        # Restore bashrc (ask for confirmation)
+        if [[ -f /etc/bash.bashrc.backup.* ]]; then
+            read -p "Restore original system bashrc? [y/N]: " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                latest_backup=$(ls -t /etc/bash.bashrc.backup.* | head -1)
+                sudo cp "$latest_backup" /etc/bash.bashrc
+                print_success "System bashrc restored"
+            fi
+        fi
+        
+        # Ask about GRUB splash restoration
+        read -p "Restore original GRUB splash? [y/N]: " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            print_warning "Please manually restore your original GRUB splash to /boot/grub/splash.png"
+            print_status "Or run: sudo update-grub to regenerate default splash"
+        fi
+        
+        print_success "🌈 JWM Rainbow Palms Wallpaper Slideshow uninstalled"
+        exit 0
+        ;;
+    "")
+        # No arguments, run main installation
+        main
+        ;;
+    *)
+        print_error "Unknown option: $1"
+        echo "Use --help for usage information"
+        exit 1
+        ;;
+esac
