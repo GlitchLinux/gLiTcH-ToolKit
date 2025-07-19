@@ -4,8 +4,8 @@
 # Uses dpkg-repack to create .deb files from currently installed packages
 
 # Configuration
-OUTPUT_DIR="/home/x/deb_files"
-FAILED_LOG="failed_packages.log
+OUTPUT_DIR="/home/$USER/deb_files"
+FAILED_LOG="failed_packages.log"
 SUCCESS_LOG="success_packages.log"
 
 # Colors
