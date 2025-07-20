@@ -180,7 +180,7 @@ if command -v update-motd >/dev/null 2>&1; then
     print_status "MOTD updated"
 fi
 
-echo "alias motd='motd-typewriter-test'" >> /etc/bash.bashrc
+echo "alias motd-run='motd-typewriter-test'" >> /etc/bash.bashrc
 
 # Test the fixed formatting
 print_status "Testing fixed MOTD formatting..."
