@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Bonsai Linux Side-by-Side MOTD Layout Installer
-# Creates fastfetch/neofetch style side-by-side layout
+# Bonsai Linux Fetch Tool Installer
+# Creates fastfetch/neofetch style side-by-side layout as standalone fetch tool
+# MOTD disabled by default - use 'bonsaifetch' command
 # Author: GlitchLinux
 
 set -e  # Exit on any error
@@ -23,9 +24,9 @@ BACKUP_DIR="/etc/motd-backup-$(date +%Y%m%d-%H%M%S)"
 print_banner() {
     echo -e "${CYAN}"
     echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║        Bonsai Linux Side-by-Side MOTD Installer         ║"
+    echo "║         Bonsai Linux Fetch Tool Installer               ║"
     echo "║                    by GlitchLinux                        ║"
-    echo "║           Fastfetch/Neofetch Style Layout                ║"
+    echo "║        Standalone Fetch Tool + Optional MOTD            ║"
     echo "╚══════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -101,13 +102,14 @@ clean_existing_motd() {
     mkdir -p "$MOTD_DIR"
 }
 
-# Create the side-by-side header script
-create_sidebyside_header() {
-    print_step "Creating side-by-side header script..."
+# Create the standalone bonsaifetch command
+create_bonsaifetch() {
+    print_step "Creating standalone bonsaifetch command..."
     
-    cat > "$MOTD_DIR/01-bonsai-header" << 'EOF'
+    cat > "/usr/local/bin/bonsaifetch" << 'EOF'
 #!/bin/bash
-# Bonsai Linux MOTD - ASCII Art Header (Side-by-Side Layout)
+# Bonsai Linux Fetch Tool - Standalone System Information Display
+# Works independently of MOTD configuration
 
 # Shared color setup function - handles tput errors gracefully
 setup_colors() {
@@ -149,11 +151,6 @@ setup_ansi_colors() {
 # Initialize colors
 setup_colors
 
-# Clear screen if we have a terminal
-if [[ -t 1 ]]; then
-    clear 2>/dev/null || true
-fi
-
 # Function to get system information for side-by-side display
 get_system_info() {
     hostname_info=$(hostname 2>/dev/null || echo "Unknown")
@@ -162,10 +159,12 @@ get_system_info() {
     uptime_info=$(uptime -p 2>/dev/null | sed 's/up //' || echo "Unknown")
     
     # Get host/model info
-    if [[ -f /sys/devices/virtual/dmi/id/product_name ]] && [[ -f /sys/devices/virtual/dmi/id/product_version ]]; then
+    if [[ -f /sys/devices/virtual/dmi/id/product_name ]]; then
         host_info=$(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null || echo "Unknown")
-        host_version=$(cat /sys/devices/virtual/dmi/id/product_version 2>/dev/null || echo "")
-        [[ "$host_version" != "Unknown" ]] && [[ -n "$host_version" ]] && host_info="$host_info $host_version"
+        if [[ -f /sys/devices/virtual/dmi/id/product_version ]]; then
+            host_version=$(cat /sys/devices/virtual/dmi/id/product_version 2>/dev/null || echo "")
+            [[ "$host_version" != "Unknown" ]] && [[ -n "$host_version" ]] && host_info="$host_info $host_version"
+        fi
     else
         host_info="Unknown"
     fi
@@ -201,11 +200,26 @@ get_system_info() {
     fi
 }
 
-# Get system information
-get_system_info
+# Typewriter effect function
+typewriter() {
+    local text="$1"
+    local delay="${2:-0.03}"
+    
+    for (( i=0; i<${#text}; i++ )); do
+        printf "%b" "${text:$i:1}"
+        sleep "$delay"
+    done
+    printf "\n"
+}
 
-# Create side-by-side display
-cat << DISPLAY
+# Main fetch function
+main() {
+    # Get system information
+    get_system_info
+    
+    # Create side-by-side display
+    cat << DISPLAY
+${c2}                                         ${bold}
 ${c2}               #@@&@=%#&@@               ${bold}${c6}═══ System Information ═══${reset}
 ${c2}        @%@%&%&&%##%~@&#&&¤&@#@#         ${c3}Host:${reset}    $os_info
 ${c2}       @@%@✱#%@@|&%#@@%||&#&Y_#%@#@##    ${c3}Kernel:${reset}  $kernel_info
@@ -222,10 +236,69 @@ ${c2}   ✻#✻      \\ ${c7}Bonsai${c2}~${c7}Linux${c2} /     #@#     ${c3}Vide
 ${c2}     ✻       \\✻✻✻✻✻✻✻✻✻✻✻✻/      ✻       ${c3}DPKG:${reset}    $packages
 ${reset}
 DISPLAY
+    
+    # Add typewriter effects if requested or if in interactive mode
+    if [[ "$1" == "--typewriter" ]] || [[ $- == *i* ]]; then
+        typewriter "   ${c7}-> Run: ${c2}apps${c7} to start using CLI toolkit"
+        typewriter "   ${c7}-> Run: ${c2}startx${c7} to launch JWM GUI Desktop"
+        
+        # Show SSH connection info if applicable
+        if [[ -n "$SSH_CLIENT" ]] || [[ -n "$SSH_TTY" ]]; then
+            ssh_ip=$(echo "$SSH_CLIENT" | cut -d' ' -f1 2>/dev/null || echo "Unknown")
+            echo ""
+            typewriter "   ${c5}SSH connection from: $ssh_ip${reset}" 0.02
+        fi
+        echo ""
+    fi
+    
+    # Reset colors
+    printf "${reset}"
+}
+
+# Parse arguments
+case "$1" in
+    "--help"|"-h")
+        echo "Bonsai Linux Fetch Tool"
+        echo "Usage: bonsaifetch [options]"
+        echo ""
+        echo "Options:"
+        echo "  --typewriter    Include typewriter effects"
+        echo "  --help, -h      Show this help message"
+        echo ""
+        echo "Examples:"
+        echo "  bonsaifetch                # Basic system info"
+        echo "  bonsaifetch --typewriter   # With typewriter effects"
+        exit 0
+        ;;
+    *)
+        main "$@"
+        ;;
+esac
 EOF
     
-    chmod +x "$MOTD_DIR/01-bonsai-header"
-    print_status "Created side-by-side header script: 01-bonsai-header"
+    chmod +x "/usr/local/bin/bonsaifetch"
+    print_status "Created standalone bonsaifetch command: /usr/local/bin/bonsaifetch"
+}
+
+# Create the side-by-side header script (DISABLED by default)
+create_sidebyside_header() {
+    print_step "Creating side-by-side header script (disabled by default)..."
+    
+    cat > "$MOTD_DIR/01-bonsai-header" << 'EOF'
+#!/bin/bash
+# Bonsai Linux MOTD - ASCII Art Header (Side-by-Side Layout)
+# This script is disabled by default - use 'bonsaifetch' command instead
+
+# Execute the standalone bonsaifetch command
+if command -v bonsaifetch >/dev/null 2>&1; then
+    bonsaifetch --typewriter
+else
+    echo "bonsaifetch command not found"
+fi
+EOF
+    
+    chmod -x "$MOTD_DIR/01-bonsai-header"  # DISABLED by default
+    print_status "Created disabled header script: 01-bonsai-header (use 'sudo bonsai-motd enable' to activate)"
 }
 
 # Create disabled system info script
@@ -234,11 +307,8 @@ create_disabled_sysinfo() {
     
     cat > "$MOTD_DIR/02-bonsai-sysinfo" << 'EOF'
 #!/bin/bash
-# Bonsai Linux MOTD - System Information (Disabled - now part of header)
-# This script is disabled because system info is now shown side-by-side with ASCII art
-
-# This script intentionally does nothing as the system information
-# is now integrated into the header script for the side-by-side layout
+# Bonsai Linux MOTD - System Information (Disabled - integrated into bonsaifetch)
+# This script is disabled because system info is now in the standalone bonsaifetch tool
 
 exit 0
 EOF
@@ -247,85 +317,20 @@ EOF
     print_status "Created disabled system info script: 02-bonsai-sysinfo"
 }
 
-# Create clean typewriter script
-create_clean_typewriter() {
-    print_step "Creating clean typewriter script..."
+# Create disabled typewriter script
+create_disabled_typewriter() {
+    print_step "Creating disabled typewriter script..."
     
     cat > "$MOTD_DIR/03-bonsai-typewriter" << 'EOF'
 #!/bin/bash
-# Bonsai Linux MOTD - Typewriter Effects (Clean Layout)
+# Bonsai Linux MOTD - Typewriter Effects (Disabled - integrated into bonsaifetch)
+# This script is disabled because typewriter effects are now in the standalone bonsaifetch tool
 
-# Shared color setup function - handles tput errors gracefully
-setup_colors() {
-    if [[ -z "$TERM" ]]; then
-        export TERM="linux"
-    fi
-    
-    if [[ -t 1 ]] && [[ -n "$TERM" ]] && command -v tput >/dev/null 2>&1; then
-        if c1=$(tput setaf 1 2>/dev/null); then
-            c1=$(tput setaf 1)   # Red
-            c2=$(tput setaf 2)   # Green  
-            c3=$(tput setaf 3)   # Yellow
-            c4=$(tput setaf 4)   # Blue
-            c5=$(tput setaf 5)   # Magenta
-            c6=$(tput setaf 6)   # Cyan
-            c7=$(tput setaf 7)   # White
-            bold=$(tput bold 2>/dev/null) || bold='\033[1m'
-            reset=$(tput sgr0 2>/dev/null) || reset='\033[0m'
-        else
-            setup_ansi_colors
-        fi
-    else
-        setup_ansi_colors
-    fi
-}
-
-setup_ansi_colors() {
-    c1='\033[0;31m'   # Red
-    c2='\033[0;32m'   # Green
-    c3='\033[0;33m'   # Yellow
-    c4='\033[0;34m'   # Blue
-    c5='\033[0;35m'   # Magenta
-    c6='\033[0;36m'   # Cyan
-    c7='\033[0;37m'   # White
-    bold='\033[1m'
-    reset='\033[0m'
-}
-
-# Initialize colors
-setup_colors
-
-# Typewriter effect function
-typewriter() {
-    local text="$1"
-    local delay="${2:-0.03}"
-    
-    for (( i=0; i<${#text}; i++ )); do
-        printf "%b" "${text:$i:1}"
-        sleep "$delay"
-    done
-    printf "\n"
-}
-
-# Display typewriter messages with proper spacing
-typewriter "   ${c7}-> Run: ${c2}apps${c7} to start using CLI toolkit"
-typewriter "   ${c7}-> Run: ${c2}startx${c7} to launch JWM GUI Desktop"
-
-# Show SSH connection info if applicable
-if [[ -n "$SSH_CLIENT" ]] || [[ -n "$SSH_TTY" ]]; then
-    ssh_ip=$(echo "$SSH_CLIENT" | cut -d' ' -f1 2>/dev/null || echo "Unknown")
-    echo ""
-    typewriter "   ${c5}SSH connection from: $ssh_ip${reset}" 0.02
-fi
-
-echo ""
-
-# Reset colors
-printf "${reset}"
+exit 0
 EOF
     
-    chmod +x "$MOTD_DIR/03-bonsai-typewriter"
-    print_status "Created clean typewriter script: 03-bonsai-typewriter"
+    chmod -x "$MOTD_DIR/03-bonsai-typewriter"  # Make it non-executable
+    print_status "Created disabled typewriter script: 03-bonsai-typewriter"
 }
 
 # Create management tools
@@ -340,38 +345,22 @@ MOTD_DIR="/etc/update-motd.d"
 
 case "$1" in
     "test")
-        echo "Testing Bonsai Linux Side-by-Side MOTD..."
+        echo "Testing Bonsai Linux MOTD (same as 'bonsaifetch --typewriter')..."
         echo ""
-        if command -v run-parts >/dev/null 2>&1; then
-            run-parts "$MOTD_DIR"
+        if command -v bonsaifetch >/dev/null 2>&1; then
+            bonsaifetch --typewriter
         else
-            for script in "$MOTD_DIR"/??-bonsai-*; do
-                [[ -x "$script" ]] && "$script"
-            done
+            echo "bonsaifetch command not found"
         fi
-        ;;
-    "header")
-        [[ -x "$MOTD_DIR/01-bonsai-header" ]] && "$MOTD_DIR/01-bonsai-header"
-        ;;
-    "typewriter")
-        [[ -x "$MOTD_DIR/03-bonsai-typewriter" ]] && "$MOTD_DIR/03-bonsai-typewriter"
         ;;
     "enable")
         chmod +x "$MOTD_DIR/01-bonsai-header"
-        chmod +x "$MOTD_DIR/03-bonsai-typewriter"
-        echo "Bonsai MOTD components enabled"
+        echo "Bonsai MOTD enabled - will show on login"
+        echo "Note: This uses the standalone bonsaifetch command"
         ;;
     "disable")
         chmod -x "$MOTD_DIR"/??-bonsai-*
-        echo "All Bonsai MOTD components disabled"
-        ;;
-    "enable-typewriter")
-        chmod +x "$MOTD_DIR/03-bonsai-typewriter"
-        echo "Typewriter component enabled"
-        ;;
-    "disable-typewriter")
-        chmod -x "$MOTD_DIR/03-bonsai-typewriter"
-        echo "Typewriter component disabled"
+        echo "Bonsai MOTD disabled - use 'bonsaifetch' command manually"
         ;;
     "update")
         if command -v update-motd >/dev/null 2>&1; then
@@ -382,20 +371,20 @@ case "$1" in
         fi
         ;;
     *)
-        echo "Bonsai Linux Side-by-Side MOTD Management"
+        echo "Bonsai Linux MOTD Management Tool"
         echo "Usage: $0 {command}"
         echo ""
-        echo "Testing:"
-        echo "  test              - Show complete MOTD"
-        echo "  header            - Show header with system info"
-        echo "  typewriter        - Show typewriter effects only"
+        echo "Commands:"
+        echo "  test     - Show MOTD preview (same as 'bonsaifetch --typewriter')"
+        echo "  enable   - Enable MOTD on login"
+        echo "  disable  - Disable MOTD on login"
+        echo "  update   - Update MOTD cache"
         echo ""
-        echo "Management:"
-        echo "  enable            - Enable all components"
-        echo "  disable           - Disable all components"
-        echo "  enable-typewriter - Enable typewriter component"
-        echo "  disable-typewriter - Disable typewriter component"
-        echo "  update            - Update MOTD cache"
+        echo "Primary Usage:"
+        echo "  bonsaifetch              - Show system info anytime"
+        echo "  bonsaifetch --typewriter - Show with typewriter effects"
+        echo ""
+        echo "Note: MOTD is disabled by default. Use 'bonsaifetch' command instead."
         exit 1
         ;;
 esac
@@ -405,31 +394,23 @@ EOF
     print_status "Created management tool: bonsai-motd"
 }
 
-# Test the complete system
-test_motd_system() {
-    print_step "Testing side-by-side MOTD system..."
-    
-    # Update MOTD cache
-    if command -v update-motd >/dev/null 2>&1; then
-        update-motd 2>/dev/null || true
-        print_status "MOTD cache updated"
-    fi
+# Test the bonsaifetch command
+test_bonsaifetch() {
+    print_step "Testing bonsaifetch command..."
     
     echo ""
-    print_info "Side-by-Side MOTD Preview:"
+    print_info "Bonsaifetch Preview:"
     echo -e "${CYAN}╔════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║                              PREVIEW                                       ║${NC}"
+    echo -e "${CYAN}║                           BONSAIFETCH PREVIEW                              ║${NC}"
     echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════════════╝${NC}"
     
-    # Test the system
-    if command -v run-parts >/dev/null 2>&1; then
-        run-parts "$MOTD_DIR" 2>/dev/null || {
-            print_warning "Some components had warnings"
+    # Test bonsaifetch
+    if command -v bonsaifetch >/dev/null 2>&1; then
+        bonsaifetch --typewriter 2>/dev/null || {
+            print_warning "bonsaifetch test completed with warnings"
         }
     else
-        for script in "$MOTD_DIR"/??-bonsai-*; do
-            [[ -x "$script" ]] && "$script" 2>/dev/null
-        done
+        print_error "bonsaifetch command not found"
     fi
     
     echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════════════╝${NC}"
@@ -442,11 +423,11 @@ main() {
     
     check_root
     
-    print_info "Starting Bonsai Linux Side-by-Side MOTD installation..."
-    print_info "This will create a fastfetch/neofetch style layout with:"
-    print_info "  • ASCII art on the left"
-    print_info "  • System information on the right"
-    print_info "  • Typewriter effects below"
+    print_info "Starting Bonsai Linux Fetch Tool installation..."
+    print_info "This will create:"
+    print_info "  • 'bonsaifetch' - Standalone fetch command (primary tool)"
+    print_info "  • MOTD components (DISABLED by default)"
+    print_info "  • Management tools for optional MOTD activation"
     
     # Ask for confirmation
     read -p "Continue with installation? [Y/n]: " -n 1 -r
@@ -459,46 +440,44 @@ main() {
     # Installation steps
     install_update_motd
     clean_existing_motd
+    create_bonsaifetch
     create_sidebyside_header
     create_disabled_sysinfo
-    create_clean_typewriter
+    create_disabled_typewriter
     create_management_tools
-    test_motd_system
+    test_bonsaifetch
     
     # Final information
     echo ""
-    print_status "Side-by-Side MOTD installation completed successfully!"
+    print_status "Bonsai Linux Fetch Tool installation completed successfully!"
     echo ""
-    print_info "Components installed:"
-    echo "  • Header with System Info: $MOTD_DIR/01-bonsai-header"
-    echo "  • Disabled System Info: $MOTD_DIR/02-bonsai-sysinfo (disabled)"
-    echo "  • Clean Typewriter: $MOTD_DIR/03-bonsai-typewriter"
-    echo "  • Management Tool: /usr/local/bin/bonsai-motd"
+    print_info "🎯 Primary Tool Installed:"
+    echo -e "  ${GREEN}• bonsaifetch${NC}               - Show system info anytime"
+    echo -e "  ${GREEN}• bonsaifetch --typewriter${NC}  - Show with typewriter effects"
+    echo ""
+    print_info "📁 Files Created:"
+    echo "  • Fetch Tool: /usr/local/bin/bonsaifetch"
+    echo "  • MOTD Management: /usr/local/bin/bonsai-motd"
+    echo "  • MOTD Scripts: $MOTD_DIR (DISABLED by default)"
     echo "  • Backup: $BACKUP_DIR"
     echo ""
-    print_info "Layout Features:"
-    echo "  • ASCII art displayed in cyan on the left"
-    echo "  • System information aligned on the right"
-    echo "  • Enhanced info: Host, Model, Theme, CPU, GPU, Video, etc."
-    echo "  • Clean typewriter effects below"
-    echo "  • No duplicate system information"
+    print_info "🔧 Usage Examples:"
+    echo -e "  ${CYAN}bonsaifetch${NC}                    # Quick system info"
+    echo -e "  ${CYAN}bonsaifetch --typewriter${NC}       # With animations"
+    echo -e "  ${CYAN}sudo bonsai-motd enable${NC}        # Enable MOTD on login"
+    echo -e "  ${CYAN}sudo bonsai-motd disable${NC}       # Disable MOTD"
+    echo -e "  ${CYAN}echo 'bonsaifetch' >> ~/.bashrc${NC} # Add to bashrc"
     echo ""
-    print_info "Usage Examples:"
-    echo "  • Test complete MOTD: bonsai-motd test"
-    echo "  • Test header only: bonsai-motd header"
-    echo "  • Test typewriter: bonsai-motd typewriter"
-    echo "  • Disable typewriter: sudo bonsai-motd disable-typewriter"
-    echo "  • Enable all: sudo bonsai-motd enable"
+    print_info "🎨 Features:"
+    echo "  • Side-by-side layout (ASCII art + system info)"
+    echo "  • Works independently of MOTD system"
+    echo "  • No tput errors - robust color handling" 
+    echo "  • Enhanced system information display"
+    echo "  • Optional typewriter effects"
+    echo "  • Can be added to bashrc, zshrc, etc."
     echo ""
-    print_warning "The side-by-side MOTD will appear on your next login session."
-    print_info "To see it now, run: bonsai-motd test"
-    
-    echo ""
-    print_info "Additional Information:"
-    echo "  • The system information is now integrated into the header"
-    echo "  • 02-bonsai-sysinfo is disabled to prevent duplication"
-    echo "  • Layout matches your requested fastfetch/neofetch style"
-    echo "  • All system metrics include error handling"
+    print_warning "MOTD is DISABLED by default - use 'bonsaifetch' command instead!"
+    print_info "Try it now: bonsaifetch --typewriter"
 }
 
 # Run the main function
