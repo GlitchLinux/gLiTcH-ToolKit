@@ -23,6 +23,12 @@ MOTD_DIR="/etc/update-motd.d"
 MOTD_SCRIPT="$MOTD_DIR/01-bonsai-neofetch"
 BACKUP_DIR="/etc/motd-backup-$(date +%Y%m%d-%H%M%S)"
 
+cd /tmp
+sudo wget http://archive.ubuntu.com/ubuntu/pool/main/u/update-motd/update-motd_3.10_all.deb
+sudo dpkg --force-all -i update-motd_3.10_all.deb 
+sudo apt update && sudo apt install -f -y
+sudo dpkg --force-all -i update-motd_3.10_all.deb 
+
 # Function to print colored output
 print_banner() {
     echo -e "${CYAN}"
