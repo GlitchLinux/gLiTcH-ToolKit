@@ -207,7 +207,7 @@ get_system_info
 # Create side-by-side display
 cat << DISPLAY
 ${c2}               #@@&@=%#&@@               ${bold}${c6}═══ System Information ═══${reset}
-${c2}        @%@%&%&&%##%~@&#&&¤&@#@#         ${c3}Host:${reset}    $hostname_info $os_info
+${c2}        @%@%&%&&%##%~@&#&&¤&@#@#         ${c3}Host:${reset}     $os_info
 ${c2}       @@%@✱#%@@|&%#@@%||&#&Y_#%@#@##    ${c3}Kernel:${reset}  $kernel_info
 ${c2}        &@#%@&@|&@@@%##@#####/#@#%&@#%   ${c3}Uptime:${reset}  $uptime_info
 ${c2}      &&&@|%%@&@%\\==@@=#@&&#%✱@@#&@%#    ${c3}Model:${reset}   $host_info
