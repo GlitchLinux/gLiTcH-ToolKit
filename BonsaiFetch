@@ -68,6 +68,7 @@ ${c2}${bold}${c2}NETWORK ⊏═══════╝${reset}${c2}⊏════
 ${c2}${c5}WAN-IPv4: ${reset}$public_ipv4_adress_wan${c2}  ║${reset}
 ${c2}${c5}LAN-IPv4: ${reset}$private_ipv4_adress_lan ${c2} ║${reset}
 ${reset}${c2}⊏════════════════════════╝${reset}
+${reset}${reset}
 EOF
     
     print_status "Created exact static layout template: $LAYOUT_FILE"
