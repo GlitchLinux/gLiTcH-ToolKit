@@ -540,7 +540,6 @@ calculate_source_stats() {
     echo "$total_mb $estimated_files"
 }
 
-# Enhanced progress display function
 show_rsync_progress() {
     local source="$1"
     local target="$2"
@@ -558,10 +557,10 @@ show_rsync_progress() {
     fi
     
     # Create named pipe for rsync progress
-    local progress_pipe="/tmp/rsync_progress.$"
+    local progress_pipe="/tmp/rsync_progress.$RANDOM"
     mkfifo "$progress_pipe"
     
-    # Start rsync in background
+    # Start rsync in background with progress reporting
     rsync -av --info=progress2 "${exclude_args[@]}" "$source/" "$target/" > "$progress_pipe" 2>&1 &
     local rsync_pid=$!
     
@@ -569,44 +568,39 @@ show_rsync_progress() {
     local files_copied=0
     local data_copied_mb=0
     local last_percent=0
+    local speed=""
+    local time_left=""
     
     while kill -0 $rsync_pid 2>/dev/null; do
-        if read -t 1 line < "$progress_pipe"; then
+        # Read progress information with timeout
+        if read -t 0.5 line < "$progress_pipe"; then
             # Parse rsync progress2 output
             if [[ "$line" =~ ^[[:space:]]*([0-9,]+)[[:space:]]+([0-9]+)%[[:space:]]+([0-9.]+[A-Za-z]+/s)[[:space:]]+([0-9:]+) ]]; then
+                # Format: "123,456,789 12% 1.2MB/s 00:12:34"
                 local bytes="${BASH_REMATCH[1]//,/}"
                 local percent="${BASH_REMATCH[2]}"
-                local speed="${BASH_REMATCH[3]}"
-                local time_left="${BASH_REMATCH[4]}"
+                speed="${BASH_REMATCH[3]}"
+                time_left="${BASH_REMATCH[4]}"
                 
                 data_copied_mb=$((bytes / 1024 / 1024))
                 files_copied=$((percent * estimated_files / 100))
-                
-                show_progress_window "Installing System Files" "$percent" \
-                    "Files: $files_copied | Data: ${data_copied_mb}MB/${total_mb}MB" \
-                    "Speed: $speed | ETA: $time_left"
-                
                 last_percent=$percent
-            elif [[ "$line" =~ ^[[:space:]]*([0-9,]+)[[:space:]]+[0-9]+%[[:space:]]+([0-9.]+[A-Za-z]+/s) ]]; then
-                # Alternative progress format
+            elif [[ "$line" =~ ^[[:space:]]*([0-9,]+)[[:space:]]+([0-9]+)%[[:space:]]+([0-9.]+[A-Za-z]+/s) ]]; then
+                # Format: "123,456,789 12% 1.2MB/s"
                 local bytes="${BASH_REMATCH[1]//,/}"
-                data_copied_mb=$((bytes / 1024 / 1024))
-                local current_percent=$((data_copied_mb * 100 / total_mb))
+                local percent="${BASH_REMATCH[2]}"
+                speed="${BASH_REMATCH[3]}"
                 
-                if [[ $current_percent -gt $last_percent ]]; then
-                    show_progress_window "Installing System Files" "$current_percent" \
-                        "Files: $((current_percent * estimated_files / 100)) | Data: ${data_copied_mb}MB/${total_mb}MB" \
-                        "Speed: ${BASH_REMATCH[2]}"
-                    last_percent=$current_percent
-                fi
+                data_copied_mb=$((bytes / 1024 / 1024))
+                files_copied=$((percent * estimated_files / 100))
+                last_percent=$percent
             fi
-        else
-            # Update display even without new data
-            show_progress_window "Installing System Files" "$last_percent" \
-                "Files: $((last_percent * estimated_files / 100)) | Data: ${data_copied_mb}MB/${total_mb}MB" \
-                "Processing files..."
-            sleep 1
         fi
+        
+        # Always update display, even if no new data was read
+        show_progress_window "Installing System Files" "$last_percent" \
+            "Files: $files_copied | Data: ${data_copied_mb}MB/${total_mb}MB" \
+            "Speed: $speed | ETA: $time_left"
     done
     
     # Wait for rsync to complete
