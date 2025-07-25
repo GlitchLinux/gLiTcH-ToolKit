@@ -4,89 +4,122 @@
 WHITE='\033[1;37m'
 PINK='\033[38;5;213m'
 BRIGHT_GREEN='\e[1;92m'
+YELLOW='\033[1;33m'
+RED='\033[1;31m'
 RESET='\033[0m'
 
 # Warning Banner
 echo ""
-echo -e "${BRIGHT_GREEN}+--------------------------------------------------------------+${RESET}"
-echo -e "${BRIGHT_GREEN}|  WARNING: The selected partition will be COMPLETELY ERASED!  |${RESET}"
-echo -e "${BRIGHT_GREEN}|  BACKUP your data before proceeding! ALL data still present  |${RESET}"
-echo -e "${BRIGHT_GREEN}|  on partitions that gets formatted will be PERMANENTLY LOST  |${RESET}"
-echo -e "${BRIGHT_GREEN}+--------------------------------------------------------------+${RESET}"
+echo -e "${RED}+--------------------------------------------------------------+${RESET}"
+echo -e "${RED}|  WARNING: The selected partition will be COMPLETELY ERASED!  |${RESET}"
+echo -e "${RED}|  BACKUP your data before proceeding! ALL data will be        |${RESET}"
+echo -e "${RED}|  PERMANENTLY LOST on the partition you select!              |${RESET}"
+echo -e "${RED}+--------------------------------------------------------------+${RESET}"
+
+# Show available partitions
+echo ""
+echo -e "${YELLOW}Available partitions:${RESET}"
+echo ""
+sudo fdisk -l | grep -E "^/dev/"
 
 # Prompt for the partition
 echo ""
-echo -e "${WHITE}Please enter partition to be setup for persistence (e.g. /dev/sdxx):${RESET}"
+echo -e "${WHITE}Please enter partition to be used for persistence (e.g. /dev/sdb1):${RESET}"
 echo ""
 read PARTITION
 
 # Check if the partition is empty
 if [ -z "$PARTITION" ]; then
-    echo -e "${WHITE}No partition entered. Exiting.${RESET}"
+    echo -e "${RED}No partition entered. Exiting.${RESET}"
     exit 1
 fi
 
 # Check if the partition exists
 if ! sudo fdisk -l | grep -q "$PARTITION"; then
-    echo -e "${WHITE}Partition $PARTITION does not exist. Exiting.${RESET}"
+    echo -e "${RED}Partition $PARTITION does not exist. Exiting.${RESET}"
+    exit 1
+fi
+
+# Final confirmation
+echo ""
+echo -e "${YELLOW}You are about to format $PARTITION for persistence.${RESET}"
+echo -e "${YELLOW}This will DESTROY all data on this partition!${RESET}"
+echo ""
+echo -e "${WHITE}Type 'YES' to continue or anything else to abort:${RESET}"
+read CONFIRMATION
+
+if [ "$CONFIRMATION" != "YES" ]; then
+    echo -e "${WHITE}Operation aborted by user.${RESET}"
     exit 1
 fi
 
 # Perform disk operations
 echo ""
-echo -e "${WHITE}Starting disk operations on $PARTITION...${RESET}"
+echo -e "${BRIGHT_GREEN}Starting persistence setup on $PARTITION...${RESET}"
 echo ""
-sudo fdisk -l
+
+# Unmount partition if mounted
+echo -e "${WHITE}Unmounting $PARTITION if currently mounted...${RESET}"
+sudo umount "$PARTITION" 2>/dev/null || true
 
 echo ""
-echo -e "${WHITE}Creating ext4 filesystem on partition${RESET}"
+echo -e "${BRIGHT_GREEN}Creating ext4 filesystem on $PARTITION${RESET}"
 echo ""
-sudo mkfs.ext4 "$PARTITION"
+sudo mkfs.ext4 -F "$PARTITION"
 
 echo ""
-echo -e "${WHITE}Labeling filesystem as persistence${RESET}"
+echo -e "${WHITE}Labeling filesystem as 'persistence'${RESET}"
 sudo e2label "$PARTITION" persistence
 
 echo ""
-echo -e "${BRIGHT_GREEN}Creating mount point at /mnt/persistence${RESET}"
+echo -e "${BRIGHT_GREEN}Creating temporary mount point at /mnt/persistence${RESET}"
 sudo mkdir -p /mnt/persistence
 
 echo ""
-echo -e "${WHITE}Mounting partition.${RESET}"
+echo -e "${WHITE}Mounting partition to configure persistence...${RESET}"
 sudo mount "$PARTITION" /mnt/persistence
 
 echo ""
-echo -e "${BRIGHT_GREEN}Creating persistence.conf file.${RESET}"
-sudo touch /mnt/persistence/persistence.conf
-
-echo ""
-echo -e "${WHITE}Editing persistence.conf${RESET}"
+echo -e "${BRIGHT_GREEN}Creating persistence.conf file...${RESET}"
 echo "/ union" | sudo tee /mnt/persistence/persistence.conf > /dev/null
 
 echo ""
-echo -e "${BRIGHT_GREEN}Returning to home directory...${RESET}"
-cd ~
+echo -e "${WHITE}Setting proper permissions on persistence.conf${RESET}"
+sudo chmod 644 /mnt/persistence/persistence.conf
+
+echo ""
+echo -e "${WHITE}Verifying persistence.conf contents:${RESET}"
+cat /mnt/persistence/persistence.conf
+
+echo ""
+echo -e "${WHITE}Getting partition UUID for GRUB configuration...${RESET}"
+PARTITION_UUID=$(sudo blkid -s UUID -o value "$PARTITION")
+echo -e "${BRIGHT_GREEN}Partition UUID: $PARTITION_UUID${RESET}"
 
 echo ""
 echo -e "${WHITE}Unmounting partition...${RESET}"
-echo ""
 sudo umount /mnt/persistence
 
+echo ""
+echo -e "${WHITE}Cleaning up temporary mount point...${RESET}"
+sudo rmdir /mnt/persistence
+
 # Completion message
+echo ""
 echo -e "${BRIGHT_GREEN}+-----------------------------------------------------+${RESET}"
-echo -e "${BRIGHT_GREEN}| THE PERSISTENT PARTITION HAS BEEN CREATED           |${RESET}"
+echo -e "${BRIGHT_GREEN}|   UNENCRYPTED PERSISTENT PARTITION CREATED!        |${RESET}"
 echo -e "${BRIGHT_GREEN}+-----------------------------------------------------+${RESET}"
-
-echo  "menuentry "Bonsai - Live Persistence" {" > /tmp/live-persistence.cfg
-echo  "linux /boot/vmlinuz-6.1.0-37-amd64 boot=live components quiet splash noeject" >> /tmp/live-persistence.cfg
-echo  "findiso=${iso_path} persistent" >> /tmp/live-persistence.cfg
-echo  "initrd /boot/initrd.img-6.1.0-37-amd64" >> /tmp/live-persistence.cfg
-echo  "}" >> /tmp/live-persistence.cfg
-
-echo "example of grub menuentry to boot live persistence > "
-cat /tmp/live-persistence.cfg
+echo ""
+echo -e "${WHITE}Partition: $PARTITION${RESET}"
+echo -e "${WHITE}UUID: $PARTITION_UUID${RESET}"
+echo -e "${WHITE}Label: persistence${RESET}"
+echo ""
+echo -e "${YELLOW}Next steps:${RESET}"
+echo -e "${WHITE}1. Add this partition to your GRUB menu entry${RESET}"
+echo -e "${WHITE}2. Boot with persistence parameter${RESET}"
+echo -e "${WHITE}3. Your changes will be saved to $PARTITION${RESET}"
 
 # Final prompt to exit the script
-echo -e "\n${PINK}Press Enter to exit the script.${RESET}"
 echo ""
+echo -e "${PINK}Press Enter to exit the script.${RESET}"
 read -r
