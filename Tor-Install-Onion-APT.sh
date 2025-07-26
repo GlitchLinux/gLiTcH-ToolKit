@@ -5,12 +5,12 @@
 # Set the GTK theme to dark
 export GTK_THEME=Orchis:dark
 
-sudo apt update && sudo apt install apt-transport-tor apt-transport-https -y
+sudo apt update && sudo apt install tor apt-transport-tor apt-transport-https -y
 
 sudo mv /etc/apt/sources.list /tmp/sources.list
 sudo mv /etc/apt/sources.list.d/ /tmp/sources.list.d/
 
-sudo xterm -e 'echo "deb [trusted=yes] tor+https://deb.debian.org/debian bookworm main" > /etc/apt/sources.list'
+sudo xterm -e 'echo "deb [trusted=yes] https://deb.debian.org/debian bookworm main non-free-firmware" > /etc/apt/sources.list'
 
 echo ""
 cat /etc/apt/sources.list && sleep 3
