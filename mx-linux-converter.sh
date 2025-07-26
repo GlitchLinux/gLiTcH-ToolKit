@@ -5,7 +5,7 @@ sudo mv /etc/apt/sources.list /home/sources.list-bonsai-backup
 wget https://glitchlinux.wtf/FILES/MX-convert.zip
 unzip MX-convert.zip
 cd /tmp/mx-apt/
-sudo cp -f apt /etc/apt 
+sudo cp -r apt /etc/apt 
 cd /tmp/mx-os-docs/
 sudo cp -f * /etc/
 cd /tmp
