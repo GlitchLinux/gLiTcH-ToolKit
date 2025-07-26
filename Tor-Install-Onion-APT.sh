@@ -29,19 +29,18 @@ echo ""
 which torbrowser-launcher
 echo ""
 
-sleep 10 && sudo rm -f /tmp/torbrowser-launcher_0.3.7-3_amd64.deb
-
-sudo rm -f /etc/apt/sources.list
-sudo mv /tmp/sources.list /etc/apt/sources.list
-sudo mv /tmp/sources.list.d/ /etc/apt/sources.list.d/
-
-ls /etc/apt/sources.list.d/ && ls /etc/apt/sources.list
-
 echo ""
 echo "Tor Browser Installed!"
 echo ""
 echo "Launching Now!"
 echo ""
+
+sleep 5 && sudo rm -f /tmp/torbrowser-launcher_0.3.7-3_amd64.deb
+
+sudo rm -f /etc/apt/sources.list
+sudo mv /tmp/sources.list /etc/apt/sources.list
+sudo mv /tmp/sources.list.d/ /etc/apt/sources.list.d/
+
 sleep 2
 sudo mv /usr/share/applications/Tor-Browser-Installer.desktop /usr/share/applications/UNUSED-DESKTOP-LAUNCHERS/Tor-Browser-Installer.desktop
 sudo cp -f /usr/share/applications/UNUSED-DESKTOP-LAUNCHERS/TOR.desktop /usr/share/applications/
