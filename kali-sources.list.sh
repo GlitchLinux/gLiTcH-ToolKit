@@ -25,4 +25,4 @@ sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ED65462EC8D5E4C5
 cd /etc/apt
 sudo cp trusted.gpg trusted.gpg.d
 
-sudo apt update && sudo apt install tor torbrowser-launcher
+sudo mv /tmp/sources.list /etc/apt/sources.list 
