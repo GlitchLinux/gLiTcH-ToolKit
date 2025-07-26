@@ -10,8 +10,9 @@ echo "║     install & start.      ║"
 echo "╚═══════════════════════════╝"
 cd /tmp
 wget http://archive.ubuntu.com/ubuntu/pool/universe/t/torbrowser-launcher/torbrowser-launcher_0.3.7-2_amd64.deb
-sudo dpkg -i torbrowser-launcher_0.3.7-2_amd64.deb
-sudo apt install -f
+sudo dpkg --force-all -i torbrowser-launcher_0.3.7-2_amd64.deb
+sudo apt install -f -y
+sudo dpkg --force-all -i torbrowser-launcher_0.3.7-2_amd64.deb
 sudo rm torbrowser-launcher_0.3.7-2_amd64.deb
 
 echo "kill -TERM "$PPID" && nohup torbrowser-launcher > /dev/null" > /tmp/tor-start.sh
