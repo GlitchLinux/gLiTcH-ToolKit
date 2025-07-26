@@ -38,15 +38,15 @@ sudo mv /tmp/sources.list.d/ /etc/apt/sources.list.d/
 ls /etc/apt/sources.list.d/ && ls /etc/apt/sources.list
 
 echo ""
-echo "Tor & Tor Browser installed, onion repo used for install have been deactivated and original sources.list is restored "
+echo "Tor Browser Installed!"
 echo ""
-sleep 5
-
-which tor && which torbrowser-launcher
-
-echo "kill -TERM "$PPID" && nohup torbrowser-launcher > /dev/null" > /tmp/tor-start.sh
+echo "Launching Now!"
+echo ""
+sleep 2
+sudo mv /usr/share/applications/Tor-Browser-Installer.desktop /usr/share/applications/UNUSED-DESKTOP-LAUNCHERS/Tor-Browser-Installer.desktop
+sudo cp -f /usr/share/applications/UNUSED-DESKTOP-LAUNCHERS/TOR.desktop /usr/share/applications/
+sudo rm -f /usr/share/applications/torbrowser.desktop && sudo rm -f /usr/share/applications/torbrowser-settings.desktop
+echo "kill -TERM "$PPID" && nohup torbrowser-launcher > /dev/null" > /tmp/tor-start.sh && echo "jwm -restart" > /tmp/jwm-restart.sh
+sudo bash /usr/local/bin/jwm-restart.sh
 nohup bash /tmp/tor-start.sh >/dev/null 2>&1
-xterm -e "kill -TERM "$PPID" 2>/dev/null"
-
-exit
-
+kill -TERM "$PPID" 2>/dev/null
