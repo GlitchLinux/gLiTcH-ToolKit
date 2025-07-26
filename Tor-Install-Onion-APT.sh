@@ -44,9 +44,9 @@ sleep 5
 
 which tor && which torbrowser-launcher
 
-echo "kill -TERM "$PPID" && nohup torbrowser-launcher > /dev/null"
+echo "kill -TERM "$PPID" && nohup torbrowser-launcher > /dev/null" > /tmp/tor-start.sh
 nohup bash /tmp/tor-start.sh >/dev/null 2>&1
-kill -TERM "$PPID" 2>/dev/null
+xterm -e "kill -TERM "$PPID" 2>/dev/null"
 
 exit
 
