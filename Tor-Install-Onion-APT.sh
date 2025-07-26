@@ -18,8 +18,9 @@ sudo wget -qO- https://deb.torproject.org/torproject.org/A3C4F0F979CAA22CDBA8F51
 sudo apt update && sudo apt install tor deb.torproject.org-keyring -y
 
 cd /tmp && sudo wget http://ftp.us.debian.org/debian/pool/contrib/t/torbrowser-launcher/torbrowser-launcher_0.3.7-3_amd64.deb
-sudo dpkg -i torbrowser-launcher_0.3.7-3_amd64.deb && sudo apt install -f -y
-sudo dpkg -i torbrowser-launcher_0.3.7-3_amd64.deb
+sudo dpkg --force-all -i torbrowser-launcher_0.3.7-3_amd64.deb && sudo apt install -f -y
+sudo dpkg --force-all -i torbrowser-launcher_0.3.7-3_amd64.deb && which torbrowser-launcher
+sleep 5 && sudo rm -f /tmp/torbrowser-launcher_0.3.7-3_amd64.deb
 
 sudo xterm -e 'echo "#deb [signed-by=/usr/share/keyrings/deb.torproject.org-keyring.gpg] https://deb.torproject.org/torproject.org bookworm main" > /etc/apt/sources.list.d/tor.list'
 sudo xterm -e 'echo "#deb-src [signed-by=/usr/share/keyrings/deb.torproject.org-keyring.gpg] https://deb.torproject.org/torproject.org bookworm main" >> /etc/apt/sources.list.d/tor.list'
