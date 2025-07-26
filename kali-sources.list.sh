@@ -1,12 +1,11 @@
 # APPLIES A WORKING KALI-LINUX REPO, WITH GPG-KEYRING
 # RUN AS ROOT
 
-sudo mv /etc/apt/sources.list.d/sparky.list /home/sparky.list
-sudo mv /etc/apt/sources.list /home/sources.list
+sudo mv /etc/apt/sources.list /tmp/sources.list
+sudo cp /tmp/sources.list /home/$USER/sources.list-backup
 sudo mv /usr/lib/os-release /home/os-release
-sudo touch /etc/apt/sources.list 
-echo "deb [trusted=yes] http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware" >> /etc/apt/sources.list
-echo "deb-src [trusted=yes] http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware" >> /etc/apt/sources.list
+echo "deb [trusted=yes] http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list.d/kali.list
+echo "deb-src [trusted=yes] http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware" >> /etc/apt/sources.list.d/kali.list
 
 sudo touch /usr/lib/os-release
 echo 'PRETTY_NAME="Kali GNU/Linux Rolling"' > /usr/lib/os-release
@@ -26,4 +25,4 @@ sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ED65462EC8D5E4C5
 cd /etc/apt
 sudo cp trusted.gpg trusted.gpg.d
 
-sudo apt update
+sudo apt update && sudo apt install tor torbrowser-launcher
