@@ -17,7 +17,7 @@ sudo wget -qO- https://deb.torproject.org/torproject.org/A3C4F0F979CAA22CDBA8F51
 
 sudo apt update && sudo apt install tor deb.torproject.org-keyring -y
 
-cd /tmp && sudo wget http://http.us.debian.org/debian/pool/contrib/t/torbrowser-launcher/
+cd /tmp && sudo wget http://ftp.us.debian.org/debian/pool/contrib/t/torbrowser-launcher/torbrowser-launcher_0.3.7-3_amd64.deb
 sudo dpkg -i torbrowser-launcher_0.3.7-3_amd64.deb && sudo apt install -f -y
 sudo dpkg -i torbrowser-launcher_0.3.7-3_amd64.deb
 
