@@ -221,7 +221,7 @@ get_distro_name() {
     fi
 }
 
-# Create enhanced 69_Custom_grub with squashfs detection (NO recursive update-grub)
+# Create enhanced 69_Custom_grub with squashfs detection (SIMPLE VERSION)
 create_enhanced_69_grub() {
     print_status "$GEAR" "Creating enhanced squashfs detection script..."
     
@@ -233,43 +233,23 @@ create_enhanced_69_grub() {
 
 SUPREME_DIR="/usr/local/supreme_grub"
 
-# Prevent recursive execution
-if [ "$GLITCH_SUPREME_RUNNING" = "1" ]; then
-    exit 0
-fi
-export GLITCH_SUPREME_RUNNING=1
-
 # Function to safely copy files
 safe_copy() {
     if [ -f "$1" ]; then
-        sudo cp -f "$1" "$2" 2>/dev/null || true
+        cp -f "$1" "$2" 2>/dev/null || true
     fi
 }
 
 # Function to safely copy directories
 safe_copy_dir() {
     if [ -d "$1" ]; then
-        sudo mkdir -p "$2"
-        sudo cp -rf "$1"/* "$2/" 2>/dev/null || true
+        mkdir -p "$2"
+        cp -rf "$1"/* "$2/" 2>/dev/null || true
     fi
 }
 
-# Check for squashfs existence
-check_squashfs() {
-    if [ -e /boot/live/filesystem.squashfs ]; then
-        return 1  # Found in /boot/live
-    elif [ -e /live/filesystem.squashfs ]; then
-        return 2  # Found in /live
-    else
-        return 0  # Not found
-    fi
-}
-
-# Main squashfs detection and setup
-check_squashfs
-SQUASH_STATUS=$?
-
-if [ $SQUASH_STATUS -eq 1 ]; then
+# Check for squashfs existence and setup menus
+if [ -e /boot/live/filesystem.squashfs ]; then
     echo "Found /boot/live/filesystem.squashfs - Setting up boot live environment"
     safe_copy /boot/vmlinuz* /boot/live/vmlinuz
     safe_copy /boot/initrd* /boot/live/initrd.img
@@ -278,10 +258,9 @@ if [ $SQUASH_STATUS -eq 1 ]; then
     # Use squashs_exists menu
     if [ -f "$SUPREME_DIR/.squashs_exists.sh" ]; then
         cp "$SUPREME_DIR/.squashs_exists.sh" "/etc/grub.d/40_custom_bootmanagers"
-        echo "Applied .squashs_exists.sh menu (boot/live detected)"
     fi
     
-elif [ $SQUASH_STATUS -eq 2 ]; then
+elif [ -e /live/filesystem.squashfs ]; then
     echo "Found /live/filesystem.squashfs - Setting up live environment"
     safe_copy /vmlinuz* /live/vmlinuz
     safe_copy /initrd* /live/initrd.img
@@ -290,29 +269,24 @@ elif [ $SQUASH_STATUS -eq 2 ]; then
     # Use squashs_exists menu
     if [ -f "$SUPREME_DIR/.squashs_exists.sh" ]; then
         cp "$SUPREME_DIR/.squashs_exists.sh" "/etc/grub.d/40_custom_bootmanagers"
-        echo "Applied .squashs_exists.sh menu (live detected)"
     fi
     
 else
     echo "No filesystem.squashfs found - removing live boot config"
     
     # Remove live-boot.cfg if it exists
-    if [ -f "/boot/grub/live-boot.cfg" ]; then
-        rm -f "/boot/grub/live-boot.cfg"
-        echo "Removed /boot/grub/live-boot.cfg"
-    fi
+    rm -f "/boot/grub/live-boot.cfg" 2>/dev/null || true
     
     # Use no_squashs menu
     if [ -f "$SUPREME_DIR/.no_squashs.sh" ]; then
         cp "$SUPREME_DIR/.no_squashs.sh" "/etc/grub.d/40_custom_bootmanagers"
-        echo "Applied .no_squashs.sh menu (no squashfs detected)"
     fi
 fi
 
 # Create /boot/boot/ structure for separate boot partition compatibility
 echo "Creating /boot/boot/ structure for partition compatibility"
-sudo rm -rf /boot/boot/
-sudo mkdir -p /boot/boot/{grub,images}
+rm -rf /boot/boot/ 2>/dev/null || true
+mkdir -p /boot/boot/{grub,images}
 
 # Copy essential grub files
 safe_copy /boot/grub/custom.cfg /boot/boot/grub/
@@ -326,72 +300,11 @@ safe_copy_dir /boot/EFI /boot/boot/EFI
 safe_copy_dir /boot/grubfm /boot/boot/grubfm
 
 echo "GLITCH Supreme GRUB structure setup complete"
-
-# Clear the flag
-unset GLITCH_SUPREME_RUNNING
 exit 0
 EOF
 
     chmod +x "/etc/grub.d/69_Custom_grub"
-    print_success "Enhanced 69_Custom_grub created with loop prevention"
-}
-
-# Create a pre-update hook to execute 69_Custom_grub BEFORE update-grub
-create_pre_update_hook() {
-    print_status "$GEAR" "Creating pre-update hook for proper execution order..."
-    
-    # Create a wrapper script for update-grub
-    cat > "/usr/local/bin/update-grub-supreme" << 'EOF'
-#!/bin/bash
-
-# GLITCH Supreme GRUB - Pre-update hook wrapper
-# Ensures 69_Custom_grub runs BEFORE update-grub processes files
-
-# Set flag to prevent recursive execution
-export GLITCH_SUPREME_RUNNING=1
-
-# Execute 69_Custom_grub FIRST
-if [ -x "/etc/grub.d/69_Custom_grub" ]; then
-    echo "Running GLITCH Supreme pre-update hook..."
-    /etc/grub.d/69_Custom_grub
-fi
-
-# Clear the flag
-unset GLITCH_SUPREME_RUNNING
-
-# Then run the original update-grub
-exec /usr/sbin/update-grub.original "$@"
-EOF
-
-    chmod +x "/usr/local/bin/update-grub-supreme"
-    
-    # Create a minimal hook in 05_supreme_hook (runs early in GRUB generation)
-    cat > "/etc/grub.d/05_supreme_hook" << 'EOF'
-#!/bin/sh
-# GLITCH Supreme GRUB - Early execution hook
-# This ensures our custom setup runs at the right time
-
-# Only run if not already executed by wrapper
-if [ "$GLITCH_SUPREME_RUNNING" != "1" ]; then
-    # Execute our custom script if it exists
-    if [ -x "/etc/grub.d/69_Custom_grub" ]; then
-        export GLITCH_SUPREME_RUNNING=1
-        /etc/grub.d/69_Custom_grub >/dev/null 2>&1
-        unset GLITCH_SUPREME_RUNNING
-    fi
-fi
-EOF
-
-    chmod +x "/etc/grub.d/05_supreme_hook"
-    
-    # Backup original update-grub and replace with our wrapper
-    if [ -f "/usr/sbin/update-grub" ] && [ ! -f "/usr/sbin/update-grub.original" ]; then
-        cp "/usr/sbin/update-grub" "/usr/sbin/update-grub.original"
-        cp "/usr/local/bin/update-grub-supreme" "/usr/sbin/update-grub"
-        print_success "Created pre-update hook with loop prevention"
-    else
-        print_success "Pre-update hook already configured"
-    fi
+    print_success "Enhanced 69_Custom_grub created - GRUB will execute it naturally"
 }
 
 # Run the installation
@@ -595,14 +508,9 @@ finalize_installation() {
         /etc/grub.d/69_Custom_grub || print_warning "Custom script execution had warnings"
     fi
     
-    # Final GRUB update (without calling our hook)
+    # Final GRUB update
     print_status "$BOOT" "Updating GRUB configuration..."
-    # Use original update-grub to avoid triggering our hook during installation
-    if [ -f "/usr/sbin/update-grub.original" ]; then
-        /usr/sbin/update-grub.original
-    else
-        /usr/sbin/update-grub
-    fi
+    update-grub
     
     # Cleanup
     rm -rf "/tmp/glitch-grub-install"
@@ -670,7 +578,6 @@ main() {
     extract_package
     get_distro_name
     create_enhanced_69_grub
-    create_pre_update_hook
     run_installation
     create_config_backups
     create_uninstall_script
