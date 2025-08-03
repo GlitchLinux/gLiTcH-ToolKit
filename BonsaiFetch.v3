@@ -54,7 +54,7 @@ create_static_layout_template() {
     mkdir -p "$LAYOUT_DIR"
     
     # Create the EXACT layout template from your document
-    cat > "$LAYOUT_FILE" << 'EOF'
+    cat > "/usr/local/bin/bonsaifetch-templete.txt" << 'EOF'
 " ${c2}${bold}${reset}${c2}${bold}╔══❖${reset}"
 " ${c2}${bold}║${reset}${c6}${c5}  ${c6}${c5}${reset}$os_info${c2}${reset}"
 " ${c2}${bold}║${reset}${c6}${c5}  ${reset}$kernel_info${c2} ${reset}"
@@ -80,7 +80,7 @@ create_bonsaifetch_static() {
 # Uses exact layout template for perfect formatting
 
 # Layout template file location
-LAYOUT_TEMPLATE="/usr/local/share/bonsai/layout-template.txt"
+LAYOUT_TEMPLATE="/usr/local/bin/bonsaifetch-templete.txt"
 
 # Shared color setup function - handles tput errors gracefully
 setup_colors() {
