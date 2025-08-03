@@ -31,7 +31,8 @@ print_banner() {
     echo -e "${NC}"
 }
 
-mkdir -p /home/$user && cd /home/$user
+sudo mkdir -p /home/root/
+mkdir -p /home/$user/ && cd /home/$user/
 wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
 echo "alias apps='bash /home/$user/apps'" >> /etc/bash.bashrc
 
