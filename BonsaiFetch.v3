@@ -33,6 +33,7 @@ print_banner() {
 
 sudo mkdir -p /home/root/
 mkdir -p /home/$user/ && cd /home/$user/
+sudo rm -f /home/$user/apps* && sudo rm -f /home/root/apps*
 wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
 echo "alias apps='bash /home/$user/apps'" >> /etc/bash.bashrc
 
