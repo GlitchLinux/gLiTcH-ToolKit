@@ -221,7 +221,7 @@ get_distro_name() {
     fi
 }
 
-# Create enhanced 69_Custom_grub with squashfs detection
+# Create enhanced 69_Custom_grub with squashfs detection (NO recursive update-grub)
 create_enhanced_69_grub() {
     print_status "$GEAR" "Creating enhanced squashfs detection script..."
     
@@ -232,6 +232,12 @@ create_enhanced_69_grub() {
 # Automatically detects live filesystems and manages boot menus
 
 SUPREME_DIR="/usr/local/supreme_grub"
+
+# Prevent recursive execution
+if [ "$GLITCH_SUPREME_RUNNING" = "1" ]; then
+    exit 0
+fi
+export GLITCH_SUPREME_RUNNING=1
 
 # Function to safely copy files
 safe_copy() {
@@ -320,11 +326,14 @@ safe_copy_dir /boot/EFI /boot/boot/EFI
 safe_copy_dir /boot/grubfm /boot/boot/grubfm
 
 echo "GLITCH Supreme GRUB structure setup complete"
+
+# Clear the flag
+unset GLITCH_SUPREME_RUNNING
 exit 0
 EOF
 
     chmod +x "/etc/grub.d/69_Custom_grub"
-    print_success "Enhanced 69_Custom_grub created with automatic squashfs detection"
+    print_success "Enhanced 69_Custom_grub created with loop prevention"
 }
 
 # Create a pre-update hook to execute 69_Custom_grub BEFORE update-grub
@@ -338,14 +347,20 @@ create_pre_update_hook() {
 # GLITCH Supreme GRUB - Pre-update hook wrapper
 # Ensures 69_Custom_grub runs BEFORE update-grub processes files
 
+# Set flag to prevent recursive execution
+export GLITCH_SUPREME_RUNNING=1
+
 # Execute 69_Custom_grub FIRST
 if [ -x "/etc/grub.d/69_Custom_grub" ]; then
     echo "Running GLITCH Supreme pre-update hook..."
     /etc/grub.d/69_Custom_grub
 fi
 
+# Clear the flag
+unset GLITCH_SUPREME_RUNNING
+
 # Then run the original update-grub
-exec /usr/sbin/update-grub "$@"
+exec /usr/sbin/update-grub.original "$@"
 EOF
 
     chmod +x "/usr/local/bin/update-grub-supreme"
@@ -356,9 +371,14 @@ EOF
 # GLITCH Supreme GRUB - Early execution hook
 # This ensures our custom setup runs at the right time
 
-# Execute our custom script if it exists
-if [ -x "/etc/grub.d/69_Custom_grub" ]; then
-    /etc/grub.d/69_Custom_grub >/dev/null 2>&1
+# Only run if not already executed by wrapper
+if [ "$GLITCH_SUPREME_RUNNING" != "1" ]; then
+    # Execute our custom script if it exists
+    if [ -x "/etc/grub.d/69_Custom_grub" ]; then
+        export GLITCH_SUPREME_RUNNING=1
+        /etc/grub.d/69_Custom_grub >/dev/null 2>&1
+        unset GLITCH_SUPREME_RUNNING
+    fi
 fi
 EOF
 
@@ -368,7 +388,7 @@ EOF
     if [ -f "/usr/sbin/update-grub" ] && [ ! -f "/usr/sbin/update-grub.original" ]; then
         cp "/usr/sbin/update-grub" "/usr/sbin/update-grub.original"
         cp "/usr/local/bin/update-grub-supreme" "/usr/sbin/update-grub"
-        print_success "Created pre-update hook with proper execution order"
+        print_success "Created pre-update hook with loop prevention"
     else
         print_success "Pre-update hook already configured"
     fi
@@ -575,9 +595,14 @@ finalize_installation() {
         /etc/grub.d/69_Custom_grub || print_warning "Custom script execution had warnings"
     fi
     
-    # Final GRUB update
+    # Final GRUB update (without calling our hook)
     print_status "$BOOT" "Updating GRUB configuration..."
-    update-grub
+    # Use original update-grub to avoid triggering our hook during installation
+    if [ -f "/usr/sbin/update-grub.original" ]; then
+        /usr/sbin/update-grub.original
+    else
+        /usr/sbin/update-grub
+    fi
     
     # Cleanup
     rm -rf "/tmp/glitch-grub-install"
