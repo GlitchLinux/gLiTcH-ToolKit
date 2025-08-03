@@ -56,27 +56,14 @@ print_warning() {
 
 # ASCII Art Banner
 print_banner() {
-    echo -e "${FIRE}${WHITE}"
-    cat << 'EOF'
-
-	 +-+-+-+-+-+-+
-	 |G|L|I|T|C|H|
-	 ++-+-+-+-+-++
-	  |L|I|N|U|X| 
-	  +-+-+-+-+-+                           
-  ___ _   _ ___ ___ ___ __  __ ___ 
- / __| | | | _ \ _ \ __|  \/  | __|
- \__ \ |_| |  _/   / _|| |\/| | _| 
- |___/\___/|_|_|_|_\___|_|  |_|___|
-        / __| _ \ | | | _ )        
-       | (_ |   / |_| | _ \        
-     ___\___|_|_\\___/|___/___     
-    |_   _| || | __|  \/  | __|    
-      | | | __ | _|| |\/| | _|     
-      |_| |_||_|___|_|  |_|___|    
-                                   
-SUPREME GRUB THEME & BOOTMANAGER INSTALLER
-
+    echo -e "${WHITE}"
+    cat << 'EOF'                    
+ +-+-+-+-+-+-+-+-+-+-+-+-+
+ |G|L|I|T|C|H|-|L|I|N|U|X|
+ +-+-+-+-+-+-+-+-+-+-+-+-+  
+   +-+-+-+-+-+-+-+-+-+-+  
+   |G|R|U|B|-|T|H|E|M|E|  
+   +-+-+-+-+-+-+-+-+-+-+                               
 EOF
     echo -e "${NC}"
 }
@@ -171,66 +158,9 @@ get_distro_name() {
     fi
 }
 
-# Patch GRUB to ensure 69_Custom_grub execution
-patch_grub_update() {
-    print_status "$GEAR" "Patching GRUB update process..."
-    
-    local grub_linux="/etc/grub.d/10_linux"
-    
-    # Check if 10_linux exists
-    if [ ! -f "$grub_linux" ]; then
-        print_warning "10_linux not found, creating grub update hook..."
-        # Create a simple hook script instead
-        cat > "/etc/grub.d/01_glitch_hook" << 'EOF'
-#!/bin/sh
-# GLITCH GRUB Hook - Ensures 69_Custom_grub execution
-echo "# GLITCH GRUB Hook - DO NOT REMOVE" >&2
-EOF
-        chmod +x "/etc/grub.d/01_glitch_hook"
-        print_success "Alternative GRUB hook created"
-        return
-    fi
-    
-    # Backup original 10_linux
-    if [ ! -f "$grub_linux.glitch-backup" ]; then
-        cp "$grub_linux" "$grub_linux.glitch-backup"
-        print_success "Backup created: $grub_linux.glitch-backup"
-    fi
-    
-    # Check if already patched
-    if grep -q "69_Custom_grub" "$grub_linux"; then
-        print_success "GRUB already patched for 69_Custom_grub execution"
-        return
-    fi
-    
-    # Add the hook near the end of the file
-    print_status "$GEAR" "Adding 69_Custom_grub execution hook..."
-    
-    # Find a good insertion point (before the final closing)
-    local temp_file="/tmp/grub_patch_$$.tmp"
-    
-    # Add our hook before the last few lines
-    head -n -3 "$grub_linux" > "$temp_file"
-    
-    cat >> "$temp_file" << 'EOF'
-
-# GLITCH Supreme GRUB - Execute 69_Custom_grub hook
-if [ -x "/etc/grub.d/69_Custom_grub" ]; then
-    echo "# Executing GLITCH GRUB custom hook..." >&2
-    nohup bash -c 'sleep 2 && /etc/grub.d/69_Custom_grub > /dev/null 2>&1' &
-fi
-
-EOF
-    
-    # Add back the last few lines
-    tail -n 3 "$grub_linux" >> "$temp_file"
-    
-    # Replace the original
-    mv "$temp_file" "$grub_linux"
-    chmod +x "$grub_linux"
-    
-    print_success "GRUB patched successfully - 69_Custom_grub will execute on update-grub"
-}
+echo "sudo rm -f /tmp/69_grub" >> /etc/grub.d/10_linux
+echo 'echo "sleep 4 && sudo bash /etc/grub.d/69_Custom_grub" > /tmp/69_grub' >> /etc/grub.d/10_linux
+echo "nohup bash /tmp/69_grub > /dev/null" >> /etc/grub.d/10_linux
 
 # Run the installation
 run_installation() {
@@ -316,11 +246,15 @@ main() {
     clear
     print_banner
     
-    print_header "${ROCKET} GLITCH SUPREME GRUB INSTALLER ${ROCKET}"
-    echo -e "${CYAN}This installer will download and install the complete GLITCH Supreme GRUB environment${NC}"
-    echo -e "${CYAN}including enhanced theme, bootmanagers, and live boot support.${NC}\n"
-    
-    echo -e "${YELLOW}Press Enter to continue, or Ctrl+C to cancel...${NC}"
+    #print_header "${ROCKET} GLITCH SUPREME GRUB INSTALLER ${ROCKET}"
+    #echo -e "${CYAN}This installer will download and install the complete GLITCH Supreme GRUB environment${NC}"
+    #echo -e "${CYAN}including enhanced theme, bootmanagers, and live boot support.${NC}\n"
+    echo -e "${PURPLE}  ━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${WHITE}${WHITE}  https://glitchlinux.wtf${WHITE}${NC}"
+    echo -e "${PURPLE}  ━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+    echo -e "${WHITE} ${CHECK} ENTER will start Install ${NC}"
+    echo -e "${WHITE} ${CROSS} CTRL+C to cancel Install ${NC}"
+    echo ""
     read -r
     
     # Installation steps
@@ -329,7 +263,6 @@ main() {
     download_package
     extract_package
     get_distro_name
-    patch_grub_update
     run_installation
     finalize_installation
     
