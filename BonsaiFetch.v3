@@ -338,10 +338,9 @@ main() {
     
     # Add typewriter effects if requested
     if [[ "$1" == "--typewriter" ]] || [[ $- == *i* ]]; then
-        typewriter "${c7}-> ${c7}WELCOME${bold}${c7} to Bonsai V5.0"
+        typewriter "${c7}-> ${c7}WELCOME${bold}${c7} to $os_info!"
         typewriter "${c7}-> ${c6}apps${bold}${c7} start CLI Toolkit"
-        typewriter "${c7}-> ${c6}startx${bold}${c7} JWM GUI Desktop"
-        
+
         # Show SSH connection info if applicable
         if [[ -n "$SSH_CLIENT" ]] || [[ -n "$SSH_TTY" ]]; then
             ssh_ip=$(echo "$SSH_CLIENT" | cut -d' ' -f1 2>/dev/null || echo "Unknown")
