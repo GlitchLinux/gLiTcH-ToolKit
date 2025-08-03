@@ -18,14 +18,14 @@ NC='\033[0m' # No Color
 # Configuration variables
 MOTD_DIR="/etc/update-motd.d"
 BACKUP_DIR="/etc/motd-backup-$(date +%Y%m%d-%H%M%S)"
-LAYOUT_FILE="/usr/local/share/bonsai/layout-template.txt"
-LAYOUT_DIR="/usr/local/share/bonsai"
+LAYOUT_FILE="/usr/local/bin/bonsaifetch-templete.txt"
+LAYOUT_DIR="/usr/local/bin/"
 
 # Function to print colored output
 print_banner() {
     echo -e "${CYAN}"
     echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║    Bonsai Linux Fetch Tool Installer v3.0 - STATIC     ║"
+    echo "║    Bonsai Linux Fetch Tool Installer v3.0 - STATIC       ║"
     echo "║                    by GlitchLinux                        ║"
     echo "╚══════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -55,15 +55,15 @@ create_static_layout_template() {
     
     # Create the EXACT layout template from your document
     cat > "$LAYOUT_FILE" << 'EOF'
-" ${c2}${bold}${reset}${c2}${bold}╔═⊐${reset}"
+" ${c2}${bold}${reset}${c2}${bold}╔══❖${reset}"
 " ${c2}${bold}║${reset}${c6}${c5}  ${c6}${c5}${reset}$os_info${c2}${reset}"
 " ${c2}${bold}║${reset}${c6}${c5}  ${reset}$kernel_info${c2} ${reset}"
 " ${c2}${bold}║${reset}${c6}${c5} 󰉉 ${reset}$disks_space_f ${c2}${reset}"
 " ${c2}${bold}║${reset}${c6}${c5} 󰩟 ${reset}$public_ipv4_adress_wan ${c2}${reset}"
 " ${c2}${bold}║${reset}${c6}${c5} 󰩟 ${reset}$private_ipv4_adress_lan ${c2}${reset}"
 " ${c2}${bold}║${reset}${c6}${c5} 󰍛 ${reset}$memory_info ${c2}${reset}"
-" ${c2}${bold}║${reset}${c6}${c5}${boot_status}"
-" ${c2}${bold}╚═⊐${reset}"
+" ${c2}${bold}║${reset}${c6}${c5} ${boot_status}"
+" ${c2}${bold}╚══❖${reset}"
 "${reset}${reset}"
 EOF
     
@@ -259,11 +259,11 @@ detect_boot_type() {
 
 # Function to get system information
 get_system_info() {
-    hostname_info=$(hostname 2>/dev/null || echo "Unknown")
-    os_info="Bonsai GNU/Linux"
+    hostname_info=$(cat /proc/sys/kernel/hostname 2>/dev/null || echo "Unknown")
+    os_info=$(cat /etc/os-release | grep -w "PRETTY_NAME" | cut -d '=' -f2 | sed 's/"//g' || echo "Unknown")
     kernel_info=$(uname -r 2>/dev/null || echo "Unknown")
     uptime_info=$(uptime -p 2>/dev/null | sed 's/up //' || echo "Unknown")
-    
+
     # Get host/model info
     if [[ -f /sys/devices/virtual/dmi/id/product_name ]]; then
         host_info=$(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null || echo "Unknown")
