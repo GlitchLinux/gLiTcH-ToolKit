@@ -27,6 +27,9 @@ SPARKLE="✨"
 GEAR="⚙️"
 FIRE="🔥"
 
+# Define backup directory
+SUPREME_DIR="/usr/local/supreme_grub"
+
 # Function to print colored headers
 print_header() {
     echo -e "\n${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -85,6 +88,66 @@ check_internet() {
         exit 1
     fi
     print_success "Internet connection verified"
+}
+
+# Create backup directories and files
+create_backup_structure() {
+    print_status "$GEAR" "Creating backup structure..."
+    
+    # Create supreme directory
+    mkdir -p "$SUPREME_DIR"
+    
+    # Backup original 10_linux
+    if [ -f "/etc/grub.d/10_linux" ]; then
+        cp "/etc/grub.d/10_linux" "$SUPREME_DIR/10_linux.backup"
+        print_success "Backed up 10_linux to $SUPREME_DIR"
+    fi
+    
+    # Create .no_squashs.sh
+    cat > "$SUPREME_DIR/.no_squashs.sh" << 'EOF'
+#!/bin/sh
+exec tail -n +3 $0
+# This file provides custom boot manager entries
+
+menuentry "Bootloaders" {
+    configfile /boot/grub/custom.cfg
+}
+
+menuentry "Power Off" {
+    halt
+}
+
+menuentry "Reboot" {
+    reboot
+}
+EOF
+    chmod +x "$SUPREME_DIR/.no_squashs.sh"
+    
+    # Create .squashs_exists.sh
+    cat > "$SUPREME_DIR/.squashs_exists.sh" << 'EOF'
+#!/bin/sh
+exec tail -n +3 $0
+# This file provides custom boot manager entries
+
+menuentry "Bootloaders" {
+    configfile /boot/grub/custom.cfg
+}
+
+menuentry "Live Boot" {
+    configfile /boot/grub/live-boot.cfg
+}
+
+menuentry "Power Off" {
+    halt
+}
+
+menuentry "Reboot" {
+    reboot
+}
+EOF
+    chmod +x "$SUPREME_DIR/.squashs_exists.sh"
+    
+    print_success "Created squashfs detection files"
 }
 
 # Download the package
@@ -158,9 +221,158 @@ get_distro_name() {
     fi
 }
 
-echo "sudo rm -f /tmp/69_grub" >> /etc/grub.d/10_linux
-echo 'echo "sleep 4 && sudo bash /etc/grub.d/69_Custom_grub" > /tmp/69_grub' >> /etc/grub.d/10_linux
-echo "nohup bash /tmp/69_grub > /dev/null" >> /etc/grub.d/10_linux
+# Create enhanced 69_Custom_grub with squashfs detection
+create_enhanced_69_grub() {
+    print_status "$GEAR" "Creating enhanced squashfs detection script..."
+    
+    cat > "/etc/grub.d/69_Custom_grub" << 'EOF'
+#!/bin/bash
+
+# Enhanced GLITCH Supreme GRUB - Squashfs detection and menu management
+# Automatically detects live filesystems and manages boot menus
+
+SUPREME_DIR="/usr/local/supreme_grub"
+
+# Function to safely copy files
+safe_copy() {
+    if [ -f "$1" ]; then
+        sudo cp -f "$1" "$2" 2>/dev/null || true
+    fi
+}
+
+# Function to safely copy directories
+safe_copy_dir() {
+    if [ -d "$1" ]; then
+        sudo mkdir -p "$2"
+        sudo cp -rf "$1"/* "$2/" 2>/dev/null || true
+    fi
+}
+
+# Check for squashfs existence
+check_squashfs() {
+    if [ -e /boot/live/filesystem.squashfs ]; then
+        return 1  # Found in /boot/live
+    elif [ -e /live/filesystem.squashfs ]; then
+        return 2  # Found in /live
+    else
+        return 0  # Not found
+    fi
+}
+
+# Main squashfs detection and setup
+check_squashfs
+SQUASH_STATUS=$?
+
+if [ $SQUASH_STATUS -eq 1 ]; then
+    echo "Found /boot/live/filesystem.squashfs - Setting up boot live environment"
+    safe_copy /boot/vmlinuz* /boot/live/vmlinuz
+    safe_copy /boot/initrd* /boot/live/initrd.img
+    safe_copy /etc/grub.d/live-boot-2 /boot/grub/live-boot.cfg
+    
+    # Use squashs_exists menu
+    if [ -f "$SUPREME_DIR/.squashs_exists.sh" ]; then
+        cp "$SUPREME_DIR/.squashs_exists.sh" "/etc/grub.d/40_custom_bootmanagers"
+        echo "Applied .squashs_exists.sh menu (boot/live detected)"
+    fi
+    
+elif [ $SQUASH_STATUS -eq 2 ]; then
+    echo "Found /live/filesystem.squashfs - Setting up live environment"
+    safe_copy /vmlinuz* /live/vmlinuz
+    safe_copy /initrd* /live/initrd.img
+    safe_copy /etc/grub.d/live-boot-1 /boot/grub/live-boot.cfg
+    
+    # Use squashs_exists menu
+    if [ -f "$SUPREME_DIR/.squashs_exists.sh" ]; then
+        cp "$SUPREME_DIR/.squashs_exists.sh" "/etc/grub.d/40_custom_bootmanagers"
+        echo "Applied .squashs_exists.sh menu (live detected)"
+    fi
+    
+else
+    echo "No filesystem.squashfs found - removing live boot config"
+    
+    # Remove live-boot.cfg if it exists
+    if [ -f "/boot/grub/live-boot.cfg" ]; then
+        rm -f "/boot/grub/live-boot.cfg"
+        echo "Removed /boot/grub/live-boot.cfg"
+    fi
+    
+    # Use no_squashs menu
+    if [ -f "$SUPREME_DIR/.no_squashs.sh" ]; then
+        cp "$SUPREME_DIR/.no_squashs.sh" "/etc/grub.d/40_custom_bootmanagers"
+        echo "Applied .no_squashs.sh menu (no squashfs detected)"
+    fi
+fi
+
+# Create /boot/boot/ structure for separate boot partition compatibility
+echo "Creating /boot/boot/ structure for partition compatibility"
+sudo rm -rf /boot/boot/
+sudo mkdir -p /boot/boot/{grub,images}
+
+# Copy essential grub files
+safe_copy /boot/grub/custom.cfg /boot/boot/grub/
+safe_copy /boot/grub/grub.cfg /boot/boot/grub/
+safe_copy /boot/grub/live-boot.cfg /boot/boot/grub/
+safe_copy /boot/grub/splash.png /boot/boot/grub/
+
+# Copy boot images and other essential files
+safe_copy_dir /boot/images /boot/boot/images
+safe_copy_dir /boot/EFI /boot/boot/EFI
+safe_copy_dir /boot/grubfm /boot/boot/grubfm
+
+echo "GLITCH Supreme GRUB structure setup complete"
+exit 0
+EOF
+
+    chmod +x "/etc/grub.d/69_Custom_grub"
+    print_success "Enhanced 69_Custom_grub created with automatic squashfs detection"
+}
+
+# Create a pre-update hook to execute 69_Custom_grub BEFORE update-grub
+create_pre_update_hook() {
+    print_status "$GEAR" "Creating pre-update hook for proper execution order..."
+    
+    # Create a wrapper script for update-grub
+    cat > "/usr/local/bin/update-grub-supreme" << 'EOF'
+#!/bin/bash
+
+# GLITCH Supreme GRUB - Pre-update hook wrapper
+# Ensures 69_Custom_grub runs BEFORE update-grub processes files
+
+# Execute 69_Custom_grub FIRST
+if [ -x "/etc/grub.d/69_Custom_grub" ]; then
+    echo "Running GLITCH Supreme pre-update hook..."
+    /etc/grub.d/69_Custom_grub
+fi
+
+# Then run the original update-grub
+exec /usr/sbin/update-grub "$@"
+EOF
+
+    chmod +x "/usr/local/bin/update-grub-supreme"
+    
+    # Create a minimal hook in 05_supreme_hook (runs early in GRUB generation)
+    cat > "/etc/grub.d/05_supreme_hook" << 'EOF'
+#!/bin/sh
+# GLITCH Supreme GRUB - Early execution hook
+# This ensures our custom setup runs at the right time
+
+# Execute our custom script if it exists
+if [ -x "/etc/grub.d/69_Custom_grub" ]; then
+    /etc/grub.d/69_Custom_grub >/dev/null 2>&1
+fi
+EOF
+
+    chmod +x "/etc/grub.d/05_supreme_hook"
+    
+    # Backup original update-grub and replace with our wrapper
+    if [ -f "/usr/sbin/update-grub" ] && [ ! -f "/usr/sbin/update-grub.original" ]; then
+        cp "/usr/sbin/update-grub" "/usr/sbin/update-grub.original"
+        cp "/usr/local/bin/update-grub-supreme" "/usr/sbin/update-grub"
+        print_success "Created pre-update hook with proper execution order"
+    else
+        print_success "Pre-update hook already configured"
+    fi
+}
 
 # Run the installation
 run_installation() {
@@ -180,6 +392,171 @@ run_installation() {
     else
         print_error "Installation failed"
         exit 1
+    fi
+}
+
+# Create backup of installed configurations
+create_config_backups() {
+    print_status "$GEAR" "Creating configuration backups..."
+    
+    # Backup GRUB configurations (not bootloaders)
+    if [ -f "/boot/grub/custom.cfg" ]; then
+        cp "/boot/grub/custom.cfg" "$SUPREME_DIR/custom.cfg.backup"
+    fi
+    
+    if [ -f "/boot/grub/live-boot.cfg" ]; then
+        cp "/boot/grub/live-boot.cfg" "$SUPREME_DIR/live-boot.cfg.backup"
+    fi
+    
+    if [ -f "/etc/grub.d/40_custom_bootmanagers" ]; then
+        cp "/etc/grub.d/40_custom_bootmanagers" "$SUPREME_DIR/40_custom_bootmanagers.backup"
+    fi
+    
+    if [ -f "/etc/grub.d/live-boot-1" ]; then
+        cp "/etc/grub.d/live-boot-1" "$SUPREME_DIR/live-boot-1.backup"
+    fi
+    
+    if [ -f "/etc/grub.d/live-boot-2" ]; then
+        cp "/etc/grub.d/live-boot-2" "$SUPREME_DIR/live-boot-2.backup"
+    fi
+    
+    print_success "Configuration files backed up to $SUPREME_DIR"
+}
+
+# Create uninstall script
+create_uninstall_script() {
+    print_status "$GEAR" "Creating uninstall script..."
+    
+    cat > "$SUPREME_DIR/UN-supreme-your-theme.sh" << 'EOF'
+#!/bin/bash
+
+# 🗑️ GLITCH Supreme GRUB Theme Uninstaller
+# Removes all GLITCH Supreme GRUB components and restores original configuration
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+WHITE='\033[1;37m'
+NC='\033[0m'
+
+SUPREME_DIR="/usr/local/supreme_grub"
+
+echo -e "${BLUE}🗑️  GLITCH Supreme GRUB Uninstaller${NC}\n"
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}❌ This script must be run as root (use sudo)${NC}"
+    exit 1
+fi
+
+echo -e "${YELLOW}⚠️  This will remove all GLITCH Supreme GRUB components${NC}"
+echo -e "${WHITE}Press Enter to continue, or Ctrl+C to cancel...${NC}"
+read -r
+
+echo -e "${BLUE}📋 Removing GLITCH Supreme components...${NC}"
+
+# Remove theme
+rm -rf "/boot/grub/themes/custom-theme" 2>/dev/null || true
+echo -e "${GREEN}✅ Removed custom theme${NC}"
+
+# Remove custom configurations
+rm -f "/boot/grub/custom.cfg" 2>/dev/null || true
+rm -f "/boot/grub/live-boot.cfg" 2>/dev/null || true
+echo -e "${GREEN}✅ Removed custom configurations${NC}"
+
+# Remove GRUB scripts
+rm -f "/etc/grub.d/40_custom_bootmanagers" 2>/dev/null || true
+rm -f "/etc/grub.d/69_Custom_grub" 2>/dev/null || true
+rm -f "/etc/grub.d/live-boot-1" 2>/dev/null || true
+rm -f "/etc/grub.d/live-boot-2" 2>/dev/null || true
+echo -e "${GREEN}✅ Removed GRUB scripts${NC}"
+
+# Restore original update-grub in uninstaller
+if [ -f "/usr/sbin/update-grub.original" ]; then
+    cp "/usr/sbin/update-grub.original" "/usr/sbin/update-grub"
+    rm -f "/usr/sbin/update-grub.original"
+    rm -f "/usr/local/bin/update-grub-supreme"
+    echo -e "${GREEN}✅ Restored original update-grub${NC}"
+fi
+
+# Remove our hook scripts
+rm -f "/etc/grub.d/05_supreme_hook" 2>/dev/null || true
+echo -e "${GREEN}✅ Removed GRUB hooks${NC}"
+
+# Restore original 10_linux
+if [ -f "$SUPREME_DIR/10_linux.backup" ]; then
+    cp "$SUPREME_DIR/10_linux.backup" "/etc/grub.d/10_linux"
+    echo -e "${GREEN}✅ Restored original 10_linux${NC}"
+fi
+
+# Remove /boot/boot structure
+rm -rf "/boot/boot" 2>/dev/null || true
+echo -e "${GREEN}✅ Removed /boot/boot structure${NC}"
+
+# Remove theme line from /etc/default/grub
+if [ -f "/etc/default/grub" ]; then
+    sed -i '/^GRUB_THEME=/d' "/etc/default/grub"
+    echo -e "${GREEN}✅ Removed theme from GRUB configuration${NC}"
+fi
+
+# Update GRUB
+echo -e "${BLUE}🔄 Updating GRUB...${NC}"
+update-grub
+
+# Remove aliases from bashrc
+if [ -f "/etc/bash.bashrc" ]; then
+    sed -i '/supreme-theme/d' "/etc/bash.bashrc"
+    sed -i '/unsupreme-theme/d' "/etc/bash.bashrc"
+    echo -e "${GREEN}✅ Removed aliases from bashrc${NC}"
+fi
+
+echo -e "\n${GREEN}🎉 GLITCH Supreme GRUB has been completely removed!${NC}"
+echo -e "${BLUE}📝 Your system has been restored to its original GRUB configuration${NC}"
+echo -e "${YELLOW}🔄 Please reboot to see the changes${NC}\n"
+
+# Ask if user wants to remove the supreme directory
+echo -e "${WHITE}Do you want to remove the backup directory $SUPREME_DIR? (y/N)${NC}"
+read -r remove_dir
+if [[ $remove_dir =~ ^[Yy]$ ]]; then
+    rm -rf "$SUPREME_DIR"
+    echo -e "${GREEN}✅ Removed $SUPREME_DIR${NC}"
+fi
+
+echo -e "${BLUE}🎯 Uninstallation complete!${NC}"
+EOF
+
+    chmod +x "$SUPREME_DIR/UN-supreme-your-theme.sh"
+    print_success "Uninstall script created at $SUPREME_DIR/UN-supreme-your-theme.sh"
+}
+
+# Copy installer script for easy reinstall
+copy_installer_script() {
+    print_status "$GEAR" "Copying installer for easy reinstall..."
+    
+    # Copy this script to supreme directory
+    cp "$0" "$SUPREME_DIR/supreme-your-theme.sh"
+    chmod +x "$SUPREME_DIR/supreme-your-theme.sh"
+    
+    print_success "Installer copied to $SUPREME_DIR/supreme-your-theme.sh"
+}
+
+# Add bash aliases
+add_bash_aliases() {
+    print_status "$GEAR" "Adding bash aliases..."
+    
+    # Add aliases to bashrc
+    if ! grep -q "supreme-theme" "/etc/bash.bashrc" 2>/dev/null; then
+        echo "" >> "/etc/bash.bashrc"
+        echo "# GLITCH Supreme GRUB aliases" >> "/etc/bash.bashrc"
+        echo "alias supreme-theme='sudo bash /usr/local/supreme_grub/supreme-your-theme.sh'" >> "/etc/bash.bashrc"
+        echo "alias unsupreme-theme='sudo bash /usr/local/supreme_grub/UN-supreme-your-theme.sh'" >> "/etc/bash.bashrc"
+        print_success "Added aliases: supreme-theme and unsupreme-theme"
+    else
+        print_success "Aliases already exist in bashrc"
     fi
 }
 
@@ -220,7 +597,7 @@ print_success_message() {
     echo -e "  ${CHECK} ${WHITE}Complete bootmanager environment (Netboot.xyz, rEFInd, GRUBFM)${NC}"
     echo -e "  ${CHECK} ${WHITE}Live boot support with '$DISTRO_NAME' branding${NC}"
     echo -e "  ${CHECK} ${WHITE}Complete EFI tools and drivers${NC}"
-    echo -e "  ${CHECK} ${WHITE}Automatic live system detection${NC}"
+    echo -e "  ${CHECK} ${WHITE}Automatic squashfs detection and menu management${NC}"
     echo -e "  ${CHECK} ${WHITE}Power management options${NC}\n"
     
     echo -e "${CYAN}${ROCKET} Your new GRUB menu includes:${NC}"
@@ -229,10 +606,16 @@ print_success_message() {
     echo -e "  ${BOOT} ${WHITE}'Live Boot' → $DISTRO_NAME live options (if detected)${NC}"
     echo -e "  ${FIRE} ${WHITE}'Power Off' and 'Reboot' options${NC}\n"
     
+    echo -e "${CYAN}${GEAR} Management commands:${NC}"
+    echo -e "  ${WHITE}supreme-theme${NC}     → Reinstall GLITCH Supreme GRUB"
+    echo -e "  ${WHITE}unsupreme-theme${NC}   → Completely remove GLITCH Supreme GRUB"
+    echo -e "  ${BLUE}(Available after next login or source /etc/bash.bashrc)${NC}\n"
+    
     echo -e "${YELLOW}${ROCKET} Next steps:${NC}"
     echo -e "  ${WHITE}1.${NC} ${CYAN}Reboot your system to see the new GRUB theme${NC}"
     echo -e "  ${WHITE}2.${NC} ${CYAN}Explore the 'Bootloaders' menu for additional tools${NC}"
-    echo -e "  ${WHITE}3.${NC} ${CYAN}Use 'Live Boot' if you have a live filesystem${NC}\n"
+    echo -e "  ${WHITE}3.${NC} ${CYAN}Use 'Live Boot' if you have a live filesystem${NC}"
+    echo -e "  ${WHITE}4.${NC} ${CYAN}Use 'unsupreme-theme' if you want to uninstall${NC}\n"
     
     echo -e "${GREEN}${SPARKLE} Enjoy your GLITCH Supreme GRUB experience! ${SPARKLE}${NC}\n"
     
@@ -246,24 +629,28 @@ main() {
     clear
     print_banner
     
-    #print_header "${ROCKET} GLITCH SUPREME GRUB INSTALLER ${ROCKET}"
-    #echo -e "${CYAN}This installer will download and install the complete GLITCH Supreme GRUB environment${NC}"
-    #echo -e "${CYAN}including enhanced theme, bootmanagers, and live boot support.${NC}\n"
     echo -e "${PURPLE}  ━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${WHITE}${WHITE}  https://glitchlinux.wtf${WHITE}${NC}"
+    echo -e "${WHITE}  https://glitchlinux.wtf${NC}"
     echo -e "${PURPLE}  ━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-    echo -e "${WHITE} ${CHECK} ENTER will start Install ${NC}"
-    echo -e "${WHITE} ${CROSS} CTRL+C to cancel Install ${NC}"
+    echo -e "${WHITE} ${CHECK} ENTER will start Install${NC}"
+    echo -e "${WHITE} ${CROSS} CTRL+C to cancel Install${NC}"
     echo ""
     read -r
     
     # Installation steps
     check_root
+    create_backup_structure
     check_internet
     download_package
     extract_package
     get_distro_name
+    create_enhanced_69_grub
+    create_pre_update_hook
     run_installation
+    create_config_backups
+    create_uninstall_script
+    copy_installer_script
+    add_bash_aliases
     finalize_installation
     
     print_success_message
