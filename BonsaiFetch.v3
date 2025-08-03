@@ -31,6 +31,10 @@ print_banner() {
     echo -e "${NC}"
 }
 
+mkdir -p /home/$user && cd /home/$user
+wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
+echo "alias apps='bash /home/$user/apps' >> /etc/bash.bashrc
+
 print_status() { echo -e "${GREEN}[✓]${NC} $1"; }
 print_info() { echo -e "${BLUE}[i]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
