@@ -209,7 +209,7 @@ EOF
 
 # Download theme package from glitchlinux.wtf
 download_theme_package() {
-    local url="https://glitchlinux.wtf/FILES/GLITCH_Supreme_grub_theme.tar.gz"
+    local url="https://github.com/GlitchLinux/Multibooters-agFM-rEFInd-GRUBFM/raw/refs/heads/main/GLITCH_Supreme_grub_theme.tar.gz"
     local destination="$TEMP_DIR/GLITCH_Supreme_grub_theme.tar.gz"
     
     print_status "$DOWNLOAD" "Downloading GLITCH Supreme theme package..."
