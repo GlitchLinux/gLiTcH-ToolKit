@@ -245,22 +245,22 @@ detect_boot_type() {
     if [[ $live_score -ge 6 ]]; then
         # High confidence live system - check for RAM boot
         if ! findmnt /run/live/medium >/dev/null 2>&1 && [[ $live_score -ge 8 ]]; then
-            echo "${c6} ¤ RAM BOOT    ${bold}${c2}"
+            echo "${c5} ${reset}Ram Boot    ${bold}${c2}"
         else
-            echo "${c6} ¤ LIVE SYSTEM ${bold}${c2}"
+            echo "${c5} ${reset}Live System ${bold}${c2}"
         fi
     elif [[ $live_score -ge 3 ]]; then
         # Medium confidence live system
-        echo "${c6} ¤ LIVE BOOT   ${bold}${c2}"
+        echo "${c5} ${reset}Live Boot   ${bold}${c2}"
     elif [[ $install_score -ge 4 ]]; then
         # High confidence installed system
-        echo "${c6} ¤ FULL SYSTEM ${bold}${c2}"
+        echo "${c5} ${reset}Persistent ${bold}${c2}"
     else
         # Fallback detection
         if [[ -f /etc/fstab ]] && grep -q "UUID=" /etc/fstab 2>/dev/null; then
-            echo "${c6} ¤ FULL SYSTEM ${bold}${c2}"
+            echo "${c5} ${reset}Persistent ${bold}${c2}"
         else
-            echo "${c6} ¤ LIVE SYSTEM ${bold}${c2}"
+            echo "${c5} ${reset}Live System ${bold}${c2}"
         fi
     fi
 }
