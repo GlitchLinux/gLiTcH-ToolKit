@@ -1,2 +1,3 @@
+sudo rm -r /tmp/* 
 sudo wget https://raw.githubusercontent.com/GlitchLinux/autoFS/refs/heads/main/SCRIPTS/stage1-dependencies.sh
 sudo bash stage1-dependencies.sh
