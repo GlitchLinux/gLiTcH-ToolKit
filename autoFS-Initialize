@@ -1,0 +1,4 @@
+#!/bin/bash
+cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/autoFS/refs/heads/main/SCRIPTS/stage1-dependencies.sh
+sudo bash /tmp/stage1-dependencies.sh > /dev/null
+sudo rm -f /tmp/stage1-dependencies.sh
