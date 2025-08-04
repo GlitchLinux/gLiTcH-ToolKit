@@ -63,45 +63,20 @@ yes | sudo dpkg --force-confnew --force-confdef -i *.deb || true
 echo
 echo "Step 7: Update and upgrade system - AUTO-ACCEPTING"
 echo "--------------------------------------------------"
-sudo apt update && sudo apt upgrade -y
+sudo apt --fix-broken-install -y && sudo apt update && sudo apt upgrade -y
+#
+#echo
+#echo "Step 8: Verify critical packages"
+#echo "--------------------------------"
+#echo "Checking critical packages:"
 
-echo
-echo "Step 8: Check kernel and boot files"
-echo "-----------------------------------"
-echo "Boot directory contents:"
-sudo ls -l /boot/ | grep -E "(vmlinuz|initrd)" || echo "No vmlinuz/initrd files found"
-
-# Check for kernel files
-VMLINUZ_COUNT=$(ls /boot/vmlinuz* 2>/dev/null | wc -l)
-INITRD_COUNT=$(ls /boot/initrd* 2>/dev/null | wc -l)
-
-echo "Found $VMLINUZ_COUNT vmlinuz files"
-echo "Found $INITRD_COUNT initrd files"
-
-if [[ $VMLINUZ_COUNT -eq 0 ]] || [[ $INITRD_COUNT -eq 0 ]]; then
-    echo "WARNING: Missing kernel files - attempting reinstall"
-    echo "Installing kernel packages..."
-    sudo apt install -y linux-image-amd64 linux-headers-amd64
-    echo "Updating GRUB..."
-    sudo update-grub
-else
-    echo "Kernel files OK - configuring packages and updating GRUB"
-    sudo dpkg --configure -a
-    sudo update-grub
-fi
-
-echo
-echo "Step 9: Verify critical packages"
-echo "--------------------------------"
-echo "Checking critical packages:"
-
-for pkg in nginx python3 iptables dnsmasq bridge-utils ntfs-3g; do
-    if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" || command -v "$pkg" >/dev/null 2>&1; then
-        echo "✓ $pkg - OK"
-    else
-        echo "✗ $pkg - Missing"
-    fi
-done
+#for pkg in nginx python3 iptables dnsmasq bridge-utils ntfs-3g; do
+#    if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" || command -v "$pkg" >/dev/null 2>&1; then
+#       echo "✓ $pkg - OK"
+#    else
+#        echo "✗ $pkg - Missing"
+#    fi
+#done
 
 echo
 echo "Step 10: Create system directories"
