@@ -36,6 +36,8 @@ mkdir -p /home/$user/ && cd /home/$user/
 sudo rm -f /home/$user/apps* && sudo rm -f /home/root/apps*
 wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
 echo "alias apps='bash /home/$user/apps'" >> /etc/bash.bashrc
+echo "alias fetch='bash /home/$user/apps'" >> /etc/bash.bashrc
+
 
 print_status() { echo -e "${GREEN}[✓]${NC} $1"; }
 print_info() { echo -e "${BLUE}[i]${NC} $1"; }
@@ -68,7 +70,7 @@ create_static_layout_template() {
 " ${c2}${bold}║${reset}${c6}${c5} 󰩟 ${reset}$public_ipv4_adress_wan ${c2}${reset}"
 " ${c2}${bold}║${reset}${c6}${c5} 󰩟 ${reset}$private_ipv4_adress_lan ${c2}${reset}"
 " ${c2}${bold}║${reset}${c6}${c5} 󰍛 ${reset}$memory_info ${c2}${reset}"
-" ${c2}${bold}║${reset}${c6}${c5} ${boot_status}"
+" ${c2}${bold}║${reset}${c6}${c5}  ${boot_status}"
 " ${c2}${bold}╚══❖${reset}"
 "${reset}${reset}"
 EOF
