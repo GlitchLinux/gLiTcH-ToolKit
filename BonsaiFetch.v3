@@ -36,7 +36,7 @@ mkdir -p /home/$user/ && cd /home/$user/
 sudo rm -f /home/$user/apps* && sudo rm -f /home/root/apps*
 wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
 echo "alias apps='bash /home/$user/apps'" >> /etc/bash.bashrc
-echo "alias fetch='bash /home/$user/apps'" >> /etc/bash.bashrc
+echo "alias fetch='bonsaifetch'" >> /etc/bash.bashrc
 
 # Prompt user about installing the icon pack
 read -rp "Bonsaifetch by default uses CaskaydiaCove icon pack, Install to system? [Y/N]: " install_icons
