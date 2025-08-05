@@ -1,3 +1,3 @@
 sudo rm -r /tmp/* && sudo rm -r /home/SCRIPTS/
 sudo wget https://raw.githubusercontent.com/GlitchLinux/autoFS/refs/heads/main/SCRIPTS/stage1-dependencies.sh
-sudo bash stage1-dependencies.sh
+sudo bash stage1-dependencies.sh && sudo bash /home/SCRIPTS/stage2-network-config.sh && sudo bash /home/SCRIPTS/stage3_storage.sh && sudo bash /home/SCRIPTS/stage4_webserver.sh && sleep 120
