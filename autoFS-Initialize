@@ -1,3 +1,87 @@
-sudo rm -r /tmp/* && sudo rm -r /home/SCRIPTS/
-sudo wget https://raw.githubusercontent.com/GlitchLinux/autoFS/refs/heads/main/SCRIPTS/stage1-dependencies.sh
-sudo bash stage1-dependencies.sh && sudo bash /home/SCRIPTS/stage2-network-config.sh && sudo bash /home/SCRIPTS/stage3_storage.sh && sudo bash /home/SCRIPTS/stage4_webserver.sh && sleep 120
+
+#!/bin/bash
+
+# AutoFS Simple Launcher - Downloads stages and executes in order
+# Purges UFW if present to prevent conflicts
+
+sudo rm -r /tmp/* && sudo rm -r -f /home/SCRIPTS/
+sudo apt update 
+sudo apt autoremove ufw -y 
+sudo apt install iptables -y
+
+echo "🚀 AutoFS Universal File Server Launcher"
+echo "========================================"
+
+# Check root
+if [[ $EUID -ne 0 ]]; then
+    echo "❌ Must run as root. Use: sudo bash script.sh"
+    exit 1
+fi
+
+# Create temp directory
+TEMP_DIR="/tmp/autofs-$(date +%s)"
+mkdir -p "$TEMP_DIR"
+cd "$TEMP_DIR"
+
+echo "📥 Downloading AutoFS stages..."
+
+# Download all stages
+GITHUB_BASE="https://raw.githubusercontent.com/GlitchLinux/autoFS/refs/heads/main/SCRIPTS"
+
+STAGES=(
+    "stage1-dependencies.sh"
+    "stage2-network-config.sh" 
+    "stage3_storage.sh"
+    "stage4_webserver.sh"
+)
+
+for stage in "${STAGES[@]}"; do
+    echo "Downloading $stage..."
+    curl -fsSL "$GITHUB_BASE/$stage" -o "$stage"
+    chmod +x "$stage"
+done
+
+echo "✅ All stages downloaded"
+echo
+
+# Execute stages in order
+echo "⚡ Executing AutoFS deployment stages..."
+echo
+
+for i in "${!STAGES[@]}"; do
+    stage="${STAGES[$i]}"
+    stage_num=$((i + 1))
+    
+    echo "🔹 Stage $stage_num: $stage"
+    echo "=================================="
+    
+    if bash "$stage"; then
+        echo "✅ Stage $stage_num completed"
+        echo
+    else
+        echo "❌ Stage $stage_num failed"
+        exit 1
+    fi
+done
+
+# Get network info for final display
+PRIMARY_IP=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'src \K\S+' || echo "unknown")
+
+echo "🎉 AutoFS Deployment Complete!"
+echo "=============================="
+echo
+echo "🌐 Access your file server:"
+echo "  Internal: http://192.168.100.1:8080"
+if [[ "$PRIMARY_IP" != "unknown" && "$PRIMARY_IP" != "192.168.100.1" ]]; then
+    echo "  External: http://$PRIMARY_IP:8080"
+fi
+echo
+echo "📁 Available sections:"
+echo "  💾 /drives/  - Storage devices"
+echo "  🖥️ /system/  - System files"
+echo
+echo "✅ AutoFS is ready for use!"
+
+# Cleanup
+cd /
+rm -rf "$TEMP_DIR"
