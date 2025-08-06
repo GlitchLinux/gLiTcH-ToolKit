@@ -27,6 +27,10 @@ SPARKLE="✨"
 GEAR="⚙️"
 FIRE="🔥"
 
+# Get the actual script path - THIS IS THE FIX!
+SCRIPT_PATH="$(realpath "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+
 # Define directories
 SUPREME_DIR="/usr/local/supreme_grub"
 TEMP_DIR="/tmp/glitch-supreme-install"
@@ -43,9 +47,9 @@ MEMDISK_URL="https://boot.netboot.xyz/memdisk"
 
 # Function to print colored headers
 print_header() {
-    echo -e "\n${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "\n${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${WHITE}$1${NC}"
-    echo -e "${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+    echo -e "${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 }
 
 # Function to print status messages
@@ -730,20 +734,37 @@ EOF
     print_success "Uninstall script created"
 }
 
-# Install system scripts and aliases
+# Install system scripts and aliases - THIS IS THE FIXED FUNCTION! 🔧
 install_system_integration() {
     print_status "$GEAR" "Installing system integration..."
     
-    # Copy installer to supreme directory
-    cp "$0" "$SUPREME_DIR/supreme-your-theme.sh"
-    chmod +x "$SUPREME_DIR/supreme-your-theme.sh"
+    # Debug information
+    print_status "🐛" "Script path: $SCRIPT_PATH"
+    print_status "🐛" "Script directory: $SCRIPT_DIR"
     
-    # Copy installer to system PATH
-    cp "$0" "/usr/local/bin/supreme-theme"
-    chmod +x "/usr/local/bin/supreme-theme"
+    # Copy installer to supreme directory using absolute path
+    if [ -f "$SCRIPT_PATH" ]; then
+        cp "$SCRIPT_PATH" "$SUPREME_DIR/supreme-your-theme.sh"
+        chmod +x "$SUPREME_DIR/supreme-your-theme.sh"
+        print_success "Copied script to supreme directory"
+    else
+        print_error "Could not find script at $SCRIPT_PATH"
+        exit 1
+    fi
+    
+    # Copy installer to system PATH using absolute path
+    if [ -f "$SCRIPT_PATH" ]; then
+        cp "$SCRIPT_PATH" "/usr/local/bin/supreme-theme"
+        chmod +x "/usr/local/bin/supreme-theme"
+        print_success "Installed system command: supreme-theme"
+    else
+        print_error "Could not copy script to system PATH"
+        exit 1
+    fi
     
     # Create uninstall symlink
     ln -sf "$SUPREME_DIR/UN-supreme-your-theme.sh" "/usr/local/bin/unsupreme-theme"
+    print_success "Installed system command: unsupreme-theme"
     
     # Add bash aliases
     if ! grep -q "supreme-theme" "/etc/bash.bashrc" 2>/dev/null; then
