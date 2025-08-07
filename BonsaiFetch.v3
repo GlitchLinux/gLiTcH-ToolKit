@@ -152,10 +152,10 @@ detect_boot_type() {
         
         # Specific live system type detection
         if grep -q "toram" /proc/cmdline 2>/dev/null; then
-            echo "${c6} ¤ RAM BOOT    ${bold}${c2}"
+            echo "${c5}${reset} Ram Boot    ${bold}${c2}"
             return
         elif grep -q "persistent" /proc/cmdline 2>/dev/null; then
-            echo "${c6} ¤ PERSISTENT  ${bold}${c2}"
+            echo "${c6}Persistent  ${bold}${c2}"
             return
         fi
     fi
@@ -194,7 +194,7 @@ detect_boot_type() {
         
         # Check if media is read-only ISO
         if mount | grep -q "/run/live/medium.*ro.*iso9660" 2>/dev/null; then
-            echo "${c6} ¤ ISO BOOT    ${bold}${c2}"
+            echo "${c6}Iso Boot    ${bold}${c2}"
             return
         fi
     fi
@@ -202,7 +202,7 @@ detect_boot_type() {
     # Method 6: LUKS encryption detection
     if [[ -d /dev/mapper ]] && ls /dev/mapper/luks-* >/dev/null 2>&1; then
         if findmnt /union >/dev/null 2>&1 || [[ $live_score -gt 0 ]]; then
-            echo "${c6} ¤ LIVE LUKS   ${bold}${c2}"
+            echo "${c6}Live Luks   ${bold}${c2}"
             return
         fi
     fi
@@ -266,13 +266,13 @@ detect_boot_type() {
         echo "${c5} ${reset}Live Boot   ${bold}${c2}"
     elif [[ $install_score -ge 4 ]]; then
         # High confidence installed system
-        echo "${c5} ${reset}Persistent ${bold}${c2}"
+        echo "${c5}${reset}Persistent ${bold}${c2}"
     else
         # Fallback detection
         if [[ -f /etc/fstab ]] && grep -q "UUID=" /etc/fstab 2>/dev/null; then
-            echo "${c5} ${reset}Persistent ${bold}${c2}"
+            echo "${c5}${reset}Persistent ${bold}${c2}"
         else
-            echo "${c5} ${reset}Live System ${bold}${c2}"
+            echo "${c5} ${reset}Live Boot ${bold}${c2}"
         fi
     fi
 }
