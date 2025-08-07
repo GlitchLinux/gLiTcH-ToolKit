@@ -24,10 +24,9 @@ LAYOUT_DIR="/usr/local/bin/"
 # Function to print colored output
 print_banner() {
     echo -e "${CYAN}"
-    echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║    Bonsai Linux Fetch Tool Installer v3.0 - STATIC       ║"
-    echo "║                    by GlitchLinux                        ║"
-    echo "╚══════════════════════════════════════════════════════════╝"
+    echo "╔════════════════════════════════════════════════╗"
+    echo "║    Bonsai Linux Fetch Tool Installer v3.0      ║"
+    echo "╚════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
 
