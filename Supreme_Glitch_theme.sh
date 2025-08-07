@@ -884,7 +884,7 @@ main() {
     
     # Installation steps
     check_root
-    check_internet
+   # check_internet
     install_required_tools
     create_backup_structure
     download_theme_package
