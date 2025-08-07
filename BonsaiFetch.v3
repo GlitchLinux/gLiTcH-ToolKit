@@ -140,7 +140,7 @@ detect_boot_type() {
         
         # Specific live system type detection
         if grep -q "toram" /proc/cmdline 2>/dev/null; then
-            echo "${c5}${reset} Ram Boot    ${bold}${c2}"
+            echo "${c5}${reset}Ram Boot  ${bold}${c2}"
             return
         elif grep -q "persistent" /proc/cmdline 2>/dev/null; then
             echo "${c6}Persistent  ${bold}${c2}"
