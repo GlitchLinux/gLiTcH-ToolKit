@@ -31,12 +31,14 @@ print_banner() {
     echo -e "${NC}"
 }
 
-sudo mkdir -p /home/root/
-mkdir -p /home/$user/ && cd /home/$user/
-sudo rm -f /home/$user/apps* && sudo rm -f /home/root/apps*
-wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
-echo "alias apps='bash /home/$user/apps'" >> /etc/bash.bashrc
+#sudo mkdir -p /home/root/
+#mkdir -p /home/$user/ && cd /home/$user/
+#sudo rm -f /home/$user/apps* && sudo rm -f /home/root/apps*
+#wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
+#echo "alias apps='bash /home/$user/apps'" >> /etc/bash.bashrc
+
 echo "alias fetch='bonsaifetch'" >> /etc/bash.bashrc
+echo "alias fetch-edit='sudo nano /usr/local/bin/bonsaifetch-templete.txt'" >> /etc/bash.bashrc
 
 print_status() { echo -e "${GREEN}[✓]${NC} $1"; }
 print_info() { echo -e "${BLUE}[i]${NC} $1"; }
