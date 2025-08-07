@@ -38,19 +38,6 @@ wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/mai
 echo "alias apps='bash /home/$user/apps'" >> /etc/bash.bashrc
 echo "alias fetch='bonsaifetch'" >> /etc/bash.bashrc
 
-# Prompt user about installing the icon pack
-read -rp "Bonsaifetch by default uses CaskaydiaCove icon pack, Install to system? [Y/N]: " install_icons
-
-# Convert to lowercase for safer comparison
-install_icons="${install_icons,,}"
-
-if [[ "$install_icons" == "y" ]]; then
-    echo "Installing CaskaydiaCove package"
-    bash <(curl -fsSL https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/CaskaydiaCove-Icons-Install.sh)
-else
-    echo "Not installing icons"
-fi
-
 print_status() { echo -e "${GREEN}[✓]${NC} $1"; }
 print_info() { echo -e "${BLUE}[i]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
@@ -622,3 +609,6 @@ main() {
 
 # Run the main function
 main "$@"
+
+cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/CaskaydiaCove-Icons-Install.sh && sudo bash CaskaydiaCove-Icons-Install.sh && exit
+
