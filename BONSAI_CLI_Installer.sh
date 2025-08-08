@@ -478,7 +478,7 @@ show_rsync_progress() {
     local control_file="/tmp/progress_control_$$"
     echo "running" > "$control_file"
     
-    # Simple progress monitor
+    # Simple progress monitor with PROPER width calculation
     {
         local start_time=$(date +%s)
         local last_size=0
@@ -530,17 +530,30 @@ show_rsync_progress() {
                 fi
             fi
             
-            # Create progress bar
+            # FIXED: Calculate exact border width and create matching progress bar
+            local border_line="┌─ Installation Progress ─────────────────────────────────────────────────────────────────────────┐"
+            local border_width=${#border_line}
+            
+            # Calculate available space for progress bar
+            # Format: "│ [PROGRESS_BAR] XXX% │"
+            local prefix="│ ["
+            local suffix="] $(printf "%3d" $progress_percent)% │"
+            local reserved_chars=$((${#prefix} + ${#suffix}))
+            local available_width=$((border_width - reserved_chars))
+            
+            # Ensure reasonable width
+            if [[ $available_width -lt 20 ]]; then
+                available_width=20
+            fi
+            
+            # Create progress bar with exact calculated width
             local bar=""
-            local bar_length=50
+            local bar_length=$available_width
             local filled=$((progress_percent * bar_length / 100))
             for ((i=0; i<filled; i++)); do bar+="█"; done
             for ((i=filled; i<bar_length; i++)); do bar+="░"; done
             
-                   # This progress-bar is statically set to be 100 characters long.
-                   # ███████████████████████████████████████████████████████████████████████████████████████████████
-
-            # Display
+            # Display with perfect alignment
             echo "┌─ Installation Progress ─────────────────────────────────────────────────────────────────────────┐"
             printf "│ [%s] %3d%% │\n" "$bar" "$progress_percent"
             echo "└─────────────────────────────────────────────────────────────────────────────────────────────────┘"
