@@ -318,138 +318,6 @@ get_data_partition_size() {
     done
 }
 
-create_new_partitions() {
-    print_progress "Creating new partition table on $TARGET_DEVICE..."
-    
-    umount "${TARGET_DEVICE}"* 2>/dev/null || true
-    
-    if [[ "$INSTALL_TYPE" == "legacy_mbr" ]]; then
-        parted -s "$TARGET_DEVICE" mklabel msdos
-        get_data_partition_size
-        if [[ "$DATA_PARTITION_SIZE" == "100%" ]]; then
-            parted -s "$TARGET_DEVICE" mkpart primary ext4 1MiB 100%
-        else
-            parted -s "$TARGET_DEVICE" mkpart primary ext4 1MiB "${DATA_PARTITION_SIZE}GB"
-        fi
-        parted -s "$TARGET_DEVICE" set 1 boot on
-        DATA_PARTITION="${TARGET_DEVICE}1"
-        
-    elif [[ "$INSTALL_TYPE" == "bios_gpt" ]]; then
-        parted -s "$TARGET_DEVICE" mklabel gpt
-        parted -s "$TARGET_DEVICE" mkpart BIOS_GRUB 1MiB 2MiB
-        parted -s "$TARGET_DEVICE" set 1 bios_grub on
-        get_data_partition_size
-        if [[ "$DATA_PARTITION_SIZE" == "100%" ]]; then
-            parted -s "$TARGET_DEVICE" mkpart primary ext4 2MiB 100%
-        else
-            parted -s "$TARGET_DEVICE" mkpart primary ext4 2MiB "${DATA_PARTITION_SIZE}GB"
-        fi
-        DATA_PARTITION="${TARGET_DEVICE}2"
-        
-    elif [[ "$INSTALL_TYPE" == "uefi" ]]; then
-        parted -s "$TARGET_DEVICE" mklabel gpt
-        parted -s "$TARGET_DEVICE" mkpart Bonsai-EFI fat32 1MiB 81MiB
-        parted -s "$TARGET_DEVICE" set 1 esp on
-        get_data_partition_size
-        if [[ "$DATA_PARTITION_SIZE" == "100%" ]]; then
-            parted -s "$TARGET_DEVICE" mkpart Bonsai-ROOT ext4 81MiB 100%
-        else
-            parted -s "$TARGET_DEVICE" mkpart Bonsai-ROOT ext4 81MiB "${DATA_PARTITION_SIZE}GB"
-        fi
-        EFI_PARTITION="${TARGET_DEVICE}1"
-        DATA_PARTITION="${TARGET_DEVICE}2"
-    fi
-    
-    sleep 2
-    partprobe "$TARGET_DEVICE"
-    sleep 2
-    
-    format_partitions
-    print_success "Partitions created successfully"
-}
-
-format_partitions() {
-    print_progress "Formatting partitions..."
-    
-    if [[ "$INSTALL_TYPE" == "uefi" && -n "$EFI_PARTITION" ]]; then
-        print_progress "Formatting EFI partition as FAT32..."
-        mkfs.fat -F32 -n "Bonsai-EFI" "$EFI_PARTITION" >/dev/null 2>&1
-    fi
-    
-    print_progress "Formatting data partition as ext4..."
-    mkfs.ext4 -F -L "Bonsai-ROOT" "$DATA_PARTITION" >/dev/null 2>&1
-    
-    print_success "Partitions formatted successfully"
-}
-
-display_install_summary() {
-    clear_and_header
-    show_step "6" "Installation Summary"
-    
-    echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}                    ${WHITE}INSTALLATION SUMMARY${NC}                   ${CYAN}║${NC}"
-    echo -e "${CYAN}╠══════════════════════════════════════════════════════════╣${NC}"
-    echo -e "${CYAN}║${NC} Source:           ${WHITE}$INSTALL_SOURCE${NC}"
-    echo -e "${CYAN}║${NC} Target Device:    ${WHITE}$TARGET_DEVICE${NC}"
-    echo -e "${CYAN}║${NC} Install Type:     ${WHITE}$INSTALL_TYPE${NC}"
-    echo -e "${CYAN}║${NC} Data Partition:   ${WHITE}$DATA_PARTITION${NC}"
-    [[ -n "$EFI_PARTITION" ]] && echo -e "${CYAN}║${NC} EFI Partition:    ${WHITE}$EFI_PARTITION${NC}"
-    echo -e "${CYAN}║${NC} Use Existing:     ${WHITE}$USE_EXISTING_PARTITIONS${NC}"
-    echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
-    echo
-    
-    print_warning "Please verify the above settings before proceeding!"
-    print_prompt "Continue with installation? (y/N): "
-    read -r confirm
-    
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        print_info "Installation cancelled by user"
-        exit 0
-    fi
-}
-
-mount_source() {
-    if [[ "$INSTALL_SOURCE" == "/" ]]; then
-        print_info "Using current root filesystem as source"
-        return 0
-    fi
-    
-    print_progress "Mounting source filesystem..."
-    mkdir -p "$MOUNT_LIVE"
-    
-    if mount -t squashfs -o loop "$INSTALL_SOURCE" "$MOUNT_LIVE" 2>/dev/null; then
-        print_success "Source mounted at $MOUNT_LIVE"
-        INSTALL_SOURCE="$MOUNT_LIVE"
-    else
-        print_error "Failed to mount source filesystem"
-        exit 1
-    fi
-}
-
-mount_target() {
-    print_progress "Mounting target partitions..."
-    
-    mkdir -p "$MOUNT_TARGET"
-    
-    if mount "$DATA_PARTITION" "$MOUNT_TARGET"; then
-        print_success "Data partition mounted"
-    else
-        print_error "Failed to mount data partition"
-        exit 1
-    fi
-    
-    if [[ "$INSTALL_TYPE" == "uefi" && -n "$EFI_PARTITION" ]]; then
-        mkdir -p "$MOUNT_TARGET/boot/efi"
-        if mount "$EFI_PARTITION" "$MOUNT_TARGET/boot/efi"; then
-            print_success "EFI partition mounted"
-        else
-            print_error "Failed to mount EFI partition"
-            exit 1
-        fi
-    fi
-}
-
-# SIMPLE: Clean progress bar that stays at top and doesn't jump
 show_rsync_progress() {
     local source="$1"
     local target="$2"
@@ -478,7 +346,7 @@ show_rsync_progress() {
     local control_file="/tmp/progress_control_$$"
     echo "running" > "$control_file"
     
-    # Simple progress monitor with PROPER width calculation
+    # Simple progress monitor - CLEAN VERSION
     {
         local start_time=$(date +%s)
         local last_size=0
@@ -502,70 +370,47 @@ show_rsync_progress() {
                 progress_percent=$((current_size * 100 / total_size))
             fi
             
-            # Calculate speed
+            # Calculate speed and ETA
             local current_time=$(date +%s)
             local elapsed=$((current_time - start_time))
-            local speed_mb=0
+            local eta="calculating"
             
-            if [[ $elapsed -gt 0 && $current_time != $last_time ]]; then
-                local size_diff=$((current_size - last_size))
-                local time_diff=$((current_time - last_time))
-                if [[ $time_diff -gt 0 ]]; then
-                    speed_mb=$((size_diff / 1024 / 1024 / time_diff))
+            if [[ $elapsed -gt 10 && $progress_percent -gt 3 ]]; then
+                local speed_mb=0
+                if [[ $elapsed -gt 0 ]]; then
+                    speed_mb=$((current_mb / elapsed))
                 fi
-                last_size=$current_size
-                last_time=$current_time
-            fi
-            
-            # Calculate ETA
-            local eta="calculating..."
-            if [[ $speed_mb -gt 0 && $progress_percent -gt 3 ]]; then
-                local remaining_mb=$((total_mb - current_mb))
-                local eta_seconds=$((remaining_mb / speed_mb))
-                local eta_minutes=$((eta_seconds / 60))
-                if [[ $eta_minutes -gt 0 ]]; then
-                    eta="${eta_minutes} min"
-                else
-                    eta="${eta_seconds}s"
+                
+                if [[ $speed_mb -gt 0 ]]; then
+                    local remaining_mb=$((total_mb - current_mb))
+                    local eta_seconds=$((remaining_mb / speed_mb))
+                    local eta_minutes=$((eta_seconds / 60))
+                    if [[ $eta_minutes -gt 0 ]]; then
+                        eta="${eta_minutes} min"
+                    else
+                        eta="${eta_seconds}s"
+                    fi
                 fi
             fi
             
-            # FIXED: Calculate exact border width and create matching progress bar
+            # CLEAN: Perfect progress bar width calculation
             local border_line="┌─ Installation Progress ─────────────────────────────────────────────────────────────────────────┐"
             local border_width=${#border_line}
             
             # Calculate available space for progress bar
-            # Format: "│ [PROGRESS_BAR] XXX% │"
             local prefix="│ ["
             local suffix="] $(printf "%3d" $progress_percent)% │"
             local reserved_chars=$((${#prefix} + ${#suffix}))
             local available_width=$((border_width - reserved_chars))
             
-            # Ensure reasonable width
-            if [[ $available_width -lt 20 ]]; then
-                available_width=20
-            fi
-            
-            # In show_rsync_progress function, replace the progress bar section with:
-
-            # GOLD STANDARD: Exact progress bar width calculation
-            local border_line="┌─ Installation Progress ─────────────────────────────────────────────────────────────────────────┐"
-            local border_width=${#border_line}
-            
-            # Perfect width calculation for progress bar
-            local prefix="│ ["
-            local suffix="] $(printf "%3d" $progress_percent)% │"
-            local reserved_chars=$((${#prefix} + ${#suffix}))
-            local available_width=$((border_width - reserved_chars))  # NO +1 needed
-            
-            # Create progress bar with exact width
+            # Create progress bar
             local bar=""
             local bar_length=$available_width
             local filled=$((progress_percent * bar_length / 100))
             for ((i=0; i<filled; i++)); do bar+="█"; done
             for ((i=filled; i<bar_length; i++)); do bar+="░"; done
             
-            #: Properly spaced bottom info bar (NO speed variable)
+            # CLEAN: Display with NO TEXT BLEED
             echo "┌─ Installation Progress ─────────────────────────────────────────────────────────────────────────┐"
             printf "│ [%s] %3d%% │\n" "$bar" "$progress_percent"
             echo "└─────────────────────────────────────────────────────────────────────────────────────────────────┘"
@@ -573,7 +418,7 @@ show_rsync_progress() {
                 "$current_files" "$total_files" "$current_mb" "$total_mb" "$elapsed" "$eta"
             echo "└─────────────────────────────────────────────────────────────────────────────────────────────────┘"
             
-            # Clear rest of screen
+            # CRITICAL: Clear rest of screen to prevent text bleed
             printf "\033[J"
             
             sleep 2
