@@ -548,37 +548,29 @@ show_rsync_progress() {
             
             # In show_rsync_progress function, replace the progress bar section with:
 
-            # FIXED: Calculate exact border width + 1 extra character
+            # GOLD STANDARD: Exact progress bar width calculation
             local border_line="┌─ Installation Progress ─────────────────────────────────────────────────────────────────────────┐"
             local border_width=${#border_line}
             
-            # Calculate available space for progress bar
+            # Perfect width calculation for progress bar
             local prefix="│ ["
             local suffix="] $(printf "%3d" $progress_percent)% │"
             local reserved_chars=$((${#prefix} + ${#suffix}))
-            local available_width=$((border_width - reserved_chars + 1))  # +1 EXTRA!
+            local available_width=$((border_width - reserved_chars))  # NO +1 needed
             
-            # Create progress bar
+            # Create progress bar with exact width
             local bar=""
             local bar_length=$available_width
             local filled=$((progress_percent * bar_length / 100))
             for ((i=0; i<filled; i++)); do bar+="█"; done
             for ((i=filled; i<bar_length; i++)); do bar+="░"; done
-
-            # Add extra data variable
-            local extra_data=""
-            if [[ $speed_mb -gt 0 ]]; then
-                extra_data="Speed: ${speed_mb}MB/s"
-            else
-                extra_data="Speed: calculating..."
-            fi
-
-            # Display with extra data
+            
+            #: Properly spaced bottom info bar (NO speed variable)
             echo "┌─ Installation Progress ─────────────────────────────────────────────────────────────────────────┐"
             printf "│ [%s] %3d%% │\n" "$bar" "$progress_percent"
             echo "└─────────────────────────────────────────────────────────────────────────────────────────────────┘"
-            printf "│ Files: %'d / %'d ¦ Data: %'dMB / %'dMB ¦ Time: %ds elapsed | ETA: %s | %s │\n" \
-            "$current_files" "$total_files" "$current_mb" "$total_mb" "$elapsed" "$eta" "$extra_data"
+            printf "│   Files:   %6d / %-6d    ¦ Data: %4dMB / %-4dMB   ¦  Time: %2ds elapsed   |   ETA: %-7s │\n" \
+                "$current_files" "$total_files" "$current_mb" "$total_mb" "$elapsed" "$eta"
             echo "└─────────────────────────────────────────────────────────────────────────────────────────────────┘"
             
             # Clear rest of screen
