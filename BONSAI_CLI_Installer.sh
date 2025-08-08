@@ -537,13 +537,16 @@ show_rsync_progress() {
             for ((i=0; i<filled; i++)); do bar+="█"; done
             for ((i=filled; i<bar_length; i++)); do bar+="░"; done
             
+                  
+                   # ███████████████████████████████████████████████████████████████████████████████████████████████
+
             # Display
-            echo "┌─ Installation Progress ───────────────────────────────────────────────────┐"
+            echo "┌─ Installation Progress ─────────────────────────────────────────────────────────────────────────┐"
             printf "│ [%s] %3d%% │\n" "$bar" "$progress_percent"
-            echo "└──────────────────────────────────────────────────────────────────────────┘"
+            echo "└─────────────────────────────────────────────────────────────────────────────────────────────────┘"
             printf "│ Files: %'d / %'d ¦ Data: %'dMB / %'dMB ¦ Time: %ds elapsed | ETA: %s │\n" \
                 "$current_files" "$total_files" "$current_mb" "$total_mb" "$elapsed" "$eta"
-            echo "└──────────────────────────────────────────────────────────────────────────┘"
+            echo "└─────────────────────────────────────────────────────────────────────────────────────────────────┘"
             
             # Clear rest of screen
             printf "\033[J"
@@ -683,16 +686,16 @@ setup_live_boot() {
     if [[ "$setup_live" =~ ^[Yy]$ ]]; then
         print_progress "Setting up live boot environment..."
         
-        mkdir -p "$MOUNT_TARGET/live"
+        mkdir -p "$MOUNT_TARGET/boot/live"
         
         if [[ -n "$ORIGINAL_SQUASHFS" && -f "$ORIGINAL_SQUASHFS" ]]; then
             print_progress "Copying squashfs to target system..."
-            cp "$ORIGINAL_SQUASHFS" "$MOUNT_TARGET/live/filesystem.squashfs"
-            print_success "Squashfs copied to /live/filesystem.squashfs"
+            cp "$ORIGINAL_SQUASHFS" "$MOUNT_TARGET/boot/live/filesystem.squashfs"
+            print_success "Squashfs copied to /boot/live/filesystem.squashfs"
         elif [[ -f "/run/live/medium/live/filesystem.squashfs" ]]; then
             print_progress "Copying default squashfs to target system..."
-            cp "/run/live/medium/live/filesystem.squashfs" "$MOUNT_TARGET/live/filesystem.squashfs"
-            print_success "Squashfs copied to /live/filesystem.squashfs"
+            cp "/run/live/medium/live/filesystem.squashfs" "$MOUNT_TARGET/boot/live/filesystem.squashfs"
+            print_success "Squashfs copied to /boot/live/filesystem.squashfs"
         else
             print_warning "No squashfs file found to copy"
             return
