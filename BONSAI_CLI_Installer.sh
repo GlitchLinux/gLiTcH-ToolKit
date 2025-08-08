@@ -537,7 +537,7 @@ show_rsync_progress() {
             for ((i=0; i<filled; i++)); do bar+="█"; done
             for ((i=filled; i<bar_length; i++)); do bar+="░"; done
             
-                  
+                   # This progress-bar is statically set to be 100 characters long.
                    # ███████████████████████████████████████████████████████████████████████████████████████████████
 
             # Display
