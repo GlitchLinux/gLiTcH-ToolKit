@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Enhanced Debian Live Installer - Simple Clean Progress Version
-# ONLY the progress function is changed - everything else identical
+# Enhanced Debian Live Installer - Complete Version with Fixed Progress Bar
+# All functions included - ready to run
 
 set -e
 
@@ -318,6 +318,143 @@ get_data_partition_size() {
     done
 }
 
+# MISSING FUNCTION 1: create_new_partitions
+create_new_partitions() {
+    print_progress "Creating new partition table on $TARGET_DEVICE..."
+    
+    umount "${TARGET_DEVICE}"* 2>/dev/null || true
+    
+    if [[ "$INSTALL_TYPE" == "legacy_mbr" ]]; then
+        parted -s "$TARGET_DEVICE" mklabel msdos
+        get_data_partition_size
+        if [[ "$DATA_PARTITION_SIZE" == "100%" ]]; then
+            parted -s "$TARGET_DEVICE" mkpart primary ext4 1MiB 100%
+        else
+            parted -s "$TARGET_DEVICE" mkpart primary ext4 1MiB "${DATA_PARTITION_SIZE}GB"
+        fi
+        parted -s "$TARGET_DEVICE" set 1 boot on
+        DATA_PARTITION="${TARGET_DEVICE}1"
+        
+    elif [[ "$INSTALL_TYPE" == "bios_gpt" ]]; then
+        parted -s "$TARGET_DEVICE" mklabel gpt
+        parted -s "$TARGET_DEVICE" mkpart BIOS_GRUB 1MiB 2MiB
+        parted -s "$TARGET_DEVICE" set 1 bios_grub on
+        get_data_partition_size
+        if [[ "$DATA_PARTITION_SIZE" == "100%" ]]; then
+            parted -s "$TARGET_DEVICE" mkpart primary ext4 2MiB 100%
+        else
+            parted -s "$TARGET_DEVICE" mkpart primary ext4 2MiB "${DATA_PARTITION_SIZE}GB"
+        fi
+        DATA_PARTITION="${TARGET_DEVICE}2"
+        
+    elif [[ "$INSTALL_TYPE" == "uefi" ]]; then
+        parted -s "$TARGET_DEVICE" mklabel gpt
+        parted -s "$TARGET_DEVICE" mkpart Bonsai-EFI fat32 1MiB 81MiB
+        parted -s "$TARGET_DEVICE" set 1 esp on
+        get_data_partition_size
+        if [[ "$DATA_PARTITION_SIZE" == "100%" ]]; then
+            parted -s "$TARGET_DEVICE" mkpart Bonsai-ROOT ext4 81MiB 100%
+        else
+            parted -s "$TARGET_DEVICE" mkpart Bonsai-ROOT ext4 81MiB "${DATA_PARTITION_SIZE}GB"
+        fi
+        EFI_PARTITION="${TARGET_DEVICE}1"
+        DATA_PARTITION="${TARGET_DEVICE}2"
+    fi
+    
+    sleep 2
+    partprobe "$TARGET_DEVICE"
+    sleep 2
+    
+    format_partitions
+    print_success "Partitions created successfully"
+}
+
+# MISSING FUNCTION 2: format_partitions
+format_partitions() {
+    print_progress "Formatting partitions..."
+    
+    if [[ "$INSTALL_TYPE" == "uefi" && -n "$EFI_PARTITION" ]]; then
+        print_progress "Formatting EFI partition as FAT32..."
+        mkfs.fat -F32 -n "Bonsai-EFI" "$EFI_PARTITION" >/dev/null 2>&1
+    fi
+    
+    print_progress "Formatting data partition as ext4..."
+    mkfs.ext4 -F -L "Bonsai-ROOT" "$DATA_PARTITION" >/dev/null 2>&1
+    
+    print_success "Partitions formatted successfully"
+}
+
+# MISSING FUNCTION 3: display_install_summary
+display_install_summary() {
+    clear_and_header
+    show_step "6" "Installation Summary"
+    
+    echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}                    ${WHITE}INSTALLATION SUMMARY${NC}                   ${CYAN}║${NC}"
+    echo -e "${CYAN}╠══════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${CYAN}║${NC} Source:           ${WHITE}$INSTALL_SOURCE${NC}"
+    echo -e "${CYAN}║${NC} Target Device:    ${WHITE}$TARGET_DEVICE${NC}"
+    echo -e "${CYAN}║${NC} Install Type:     ${WHITE}$INSTALL_TYPE${NC}"
+    echo -e "${CYAN}║${NC} Data Partition:   ${WHITE}$DATA_PARTITION${NC}"
+    [[ -n "$EFI_PARTITION" ]] && echo -e "${CYAN}║${NC} EFI Partition:    ${WHITE}$EFI_PARTITION${NC}"
+    echo -e "${CYAN}║${NC} Use Existing:     ${WHITE}$USE_EXISTING_PARTITIONS${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
+    echo
+    
+    print_warning "Please verify the above settings before proceeding!"
+    print_prompt "Continue with installation? (y/N): "
+    read -r confirm
+    
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        print_info "Installation cancelled by user"
+        exit 0
+    fi
+}
+
+# MISSING FUNCTION 4: mount_source
+mount_source() {
+    if [[ "$INSTALL_SOURCE" == "/" ]]; then
+        print_info "Using current root filesystem as source"
+        return 0
+    fi
+    
+    print_progress "Mounting source filesystem..."
+    mkdir -p "$MOUNT_LIVE"
+    
+    if mount -t squashfs -o loop "$INSTALL_SOURCE" "$MOUNT_LIVE" 2>/dev/null; then
+        print_success "Source mounted at $MOUNT_LIVE"
+        INSTALL_SOURCE="$MOUNT_LIVE"
+    else
+        print_error "Failed to mount source filesystem"
+        exit 1
+    fi
+}
+
+# MISSING FUNCTION 5: mount_target
+mount_target() {
+    print_progress "Mounting target partitions..."
+    
+    mkdir -p "$MOUNT_TARGET"
+    
+    if mount "$DATA_PARTITION" "$MOUNT_TARGET"; then
+        print_success "Data partition mounted"
+    else
+        print_error "Failed to mount data partition"
+        exit 1
+    fi
+    
+    if [[ "$INSTALL_TYPE" == "uefi" && -n "$EFI_PARTITION" ]]; then
+        mkdir -p "$MOUNT_TARGET/boot/efi"
+        if mount "$EFI_PARTITION" "$MOUNT_TARGET/boot/efi"; then
+            print_success "EFI partition mounted"
+        else
+            print_error "Failed to mount EFI partition"
+            exit 1
+        fi
+    fi
+}
+
+# FIXED PROGRESS BAR FUNCTION
 show_rsync_progress() {
     local source="$1"
     local target="$2"
