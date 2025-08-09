@@ -2,7 +2,7 @@
 cd /tmp
 sudo apt update && sudo apt --reinstall install gcc-12 cpp-12
 wget https://download.virtualbox.org/virtualbox/7.1.12/virtualbox-7.1_7.1.12-169651~Ubuntu~oracular_amd64.deb
-sudo dpkg -i virtualbox-7.1_7.1.12-169651~Ubuntu~oracular_amd64.deb
+sudo dpkg --force-all -i virtualbox-7.1_7.1.12-169651~Ubuntu~oracular_amd64.deb
 sudo apt install -f
 sudo apt install linux-headers-amd64
 sudo '/sbin/vboxconfig'
