@@ -245,9 +245,9 @@ detect_boot_type() {
     if [[ $live_score -ge 6 ]]; then
         # High confidence live system - check for RAM boot
         if ! findmnt /run/live/medium >/dev/null 2>&1 && [[ $live_score -ge 8 ]]; then
-            echo "${c5} ${reset}Ram Boot    ${bold}${c2}"
+            echo "${c5}${reset}Ram Boot    ${bold}${c2}"
         else
-            echo "${c5} ${reset}Live System ${bold}${c2}"
+            echo "${c5}${reset}Live System ${bold}${c2}"
         fi
     elif [[ $live_score -ge 3 ]]; then
         # Medium confidence live system
