@@ -1,0 +1,22 @@
+sudo rm -f /etc/lightdm/lightdm.conf
+
+echo "[SeatDefaults]" > /etc/lightdm/lightdm.conf
+echo "autologin-guest=false" >> /etc/lightdm/lightdm.conf
+echo "autologin-user=x" >> /etc/lightdm/lightdm.conf
+echo "autologin-user-timeout=0" >> /etc/lightdm/lightdm.conf
+echo "autologin-session=lightdm-autologin" >> /etc/lightdm/lightdm.conf
+echo "autologin-session=xfce" >> /etc/lightdm/lightdm.conf
+
+sudo chmod 777 /etc/lightdm/lightdm.conf
+
+echo ""
+cat  /etc/lightdm/lightdm.conf
+echo ""
+
+sleep 5
+
+echo""
+echo "xfce autologin for user: x configured"
+echo""
+
+sudo systemctl restart lightdm && exit
