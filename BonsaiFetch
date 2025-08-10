@@ -346,7 +346,7 @@ main() {
     
     # Add typewriter effects if requested
     if [[ "$1" == "--typewriter" ]] || [[ $- == *i* ]]; then
-        typewriter "${c7} ${c7} Welcome${bold}${c7} to Bonsai v4.0"
+        typewriter "${c7} ${c7} Welcome${bold}${c7} to Bonsai v3!"
 	    typewriter "${c7} ${c6} startx${bold}${c7} > Xfce Desktop"
         typewriter "${c7} ${c6} apps${bold}${c7} > Glitch Toolkit"
 
