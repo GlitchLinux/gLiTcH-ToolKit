@@ -33,6 +33,7 @@ BOOT_PARTITION_FS=""
 DATA_PARTITION_SIZE=""
 ORIGINAL_SQUASHFS=""
 OS_NAME=""
+OS_NAME_CLEAN=""
 USE_LUKS=""
 LUKS_DEVICE=""
 LUKS_MAPPER="luks-root"
@@ -104,7 +105,7 @@ get_os_name_from_source() {
         OS_NAME=$(cat /etc/os-release 2>/dev/null | grep -w "PRETTY_NAME" | cut -d '=' -f2 | sed 's/"//g' || echo "Unknown")
     elif [[ -f "$source_path" && "$source_path" =~ \.squashfs$ ]]; then
         # Installing from squashfs file
-        temp_mount="/tmp/squashfs_mount_$$"
+        temp_mount="/tmp/squashfs_mount_$"
         mkdir -p "$temp_mount"
         if mount -t squashfs -o loop "$source_path" "$temp_mount" 2>/dev/null; then
             OS_NAME=$(cat "$temp_mount/etc/os-release" 2>/dev/null | grep -w "PRETTY_NAME" | cut -d '=' -f2 | sed 's/"//g' || echo "Unknown")
@@ -117,7 +118,13 @@ get_os_name_from_source() {
         OS_NAME="Unknown"
     fi
     
+    # Clean OS name for safe use in partition labels and parted commands
+    # Remove problematic characters and limit length
+    OS_NAME_CLEAN=$(echo "$OS_NAME" | sed 's/[^a-zA-Z0-9._-]//g' | cut -c1-15)
+    [[ -z "$OS_NAME_CLEAN" ]] && OS_NAME_CLEAN="Linux"
+    
     print_info "Detected OS: $OS_NAME"
+    print_info "Clean partition name: $OS_NAME_CLEAN"
 }
 
 select_install_source() {
@@ -492,7 +499,7 @@ get_data_partition_size() {
 setup_luks_encryption() {
     local target_partition="$1"
     
-    print_progress "Setting up LUKS encryption on $target_partition..."
+    print_progress "Setting up LUKS1 encryption on $target_partition..."
     
     # Unmount if mounted
     umount "$target_partition" 2>/dev/null || true
@@ -500,9 +507,9 @@ setup_luks_encryption() {
     print_warning "You will now be prompted to enter a strong passphrase for LUKS encryption"
     print_info "Please use a secure passphrase that you will remember!"
     
-    # Format with LUKS
-    if ! cryptsetup luksFormat "$target_partition"; then
-        print_error "Failed to format LUKS partition"
+    # Format with LUKS1
+    if ! cryptsetup luksFormat --type luks1 "$target_partition"; then
+        print_error "Failed to format LUKS1 partition"
         exit 1
     fi
     
@@ -518,7 +525,7 @@ setup_luks_encryption() {
     # Format the encrypted partition
     print_progress "Formatting encrypted partition as ext4..."
     if [[ -n "$OS_NAME" && "$OS_NAME" != "Unknown" ]]; then
-        mkfs.ext4 -F -L "$OS_NAME" "$LUKS_DEVICE" >/dev/null 2>&1
+        mkfs.ext4 -F -L "$OS_NAME_CLEAN" "$LUKS_DEVICE" >/dev/null 2>&1
     else
         mkfs.ext4 -F "$LUKS_DEVICE" >/dev/null 2>&1
     fi
@@ -526,7 +533,7 @@ setup_luks_encryption() {
     # Update DATA_PARTITION to point to the mapper device
     DATA_PARTITION="$LUKS_DEVICE"
     
-    print_success "LUKS encryption setup completed"
+    print_success "LUKS1 encryption setup completed"
 }
 
 create_new_partitions() {
@@ -592,14 +599,14 @@ create_new_partitions() {
         
         get_data_partition_size
         if [[ "$DATA_PARTITION_SIZE" == "100%" ]]; then
-            if [[ -n "$OS_NAME" && "$OS_NAME" != "Unknown" ]]; then
-                parted -s "$TARGET_DEVICE" mkpart "$OS_NAME" ext4 "$current_start" 100%
+            if [[ -n "$OS_NAME_CLEAN" && "$OS_NAME_CLEAN" != "Linux" ]]; then
+                parted -s "$TARGET_DEVICE" mkpart "$OS_NAME_CLEAN" ext4 "$current_start" 100%
             else
                 parted -s "$TARGET_DEVICE" mkpart ROOT ext4 "$current_start" 100%
             fi
         else
-            if [[ -n "$OS_NAME" && "$OS_NAME" != "Unknown" ]]; then
-                parted -s "$TARGET_DEVICE" mkpart "$OS_NAME" ext4 "$current_start" "${DATA_PARTITION_SIZE}GB"
+            if [[ -n "$OS_NAME_CLEAN" && "$OS_NAME_CLEAN" != "Linux" ]]; then
+                parted -s "$TARGET_DEVICE" mkpart "$OS_NAME_CLEAN" ext4 "$current_start" "${DATA_PARTITION_SIZE}GB"
             else
                 parted -s "$TARGET_DEVICE" mkpart ROOT ext4 "$current_start" "${DATA_PARTITION_SIZE}GB"
             fi
@@ -644,14 +651,14 @@ create_new_partitions() {
         
         get_data_partition_size
         if [[ "$DATA_PARTITION_SIZE" == "100%" ]]; then
-            if [[ -n "$OS_NAME" && "$OS_NAME" != "Unknown" ]]; then
-                parted -s "$TARGET_DEVICE" mkpart "$OS_NAME" ext4 "$current_start" 100%
+            if [[ -n "$OS_NAME_CLEAN" && "$OS_NAME_CLEAN" != "Linux" ]]; then
+                parted -s "$TARGET_DEVICE" mkpart "$OS_NAME_CLEAN" ext4 "$current_start" 100%
             else
                 parted -s "$TARGET_DEVICE" mkpart ROOT ext4 "$current_start" 100%
             fi
         else
-            if [[ -n "$OS_NAME" && "$OS_NAME" != "Unknown" ]]; then
-                parted -s "$TARGET_DEVICE" mkpart "$OS_NAME" ext4 "$current_start" "${DATA_PARTITION_SIZE}GB"
+            if [[ -n "$OS_NAME_CLEAN" && "$OS_NAME_CLEAN" != "Linux" ]]; then
+                parted -s "$TARGET_DEVICE" mkpart "$OS_NAME_CLEAN" ext4 "$current_start" "${DATA_PARTITION_SIZE}GB"
             else
                 parted -s "$TARGET_DEVICE" mkpart ROOT ext4 "$current_start" "${DATA_PARTITION_SIZE}GB"
             fi
@@ -702,8 +709,8 @@ format_partitions() {
         setup_luks_encryption "$DATA_PARTITION"
     else
         print_progress "Formatting data partition as ext4..."
-        if [[ -n "$OS_NAME" && "$OS_NAME" != "Unknown" ]]; then
-            mkfs.ext4 -F -L "$OS_NAME" "$DATA_PARTITION" >/dev/null 2>&1
+        if [[ -n "$OS_NAME_CLEAN" && "$OS_NAME_CLEAN" != "Linux" ]]; then
+            mkfs.ext4 -F -L "$OS_NAME_CLEAN" "$DATA_PARTITION" >/dev/null 2>&1
         else
             mkfs.ext4 -F "$DATA_PARTITION" >/dev/null 2>&1
         fi
@@ -996,34 +1003,61 @@ update_crypttab() {
         print_progress "Updating crypttab for LUKS..."
         
         local luks_uuid
+        # Find the actual encrypted partition (not the mapper device)
+        local encrypted_partition=""
+        
         if [[ "$USE_EXISTING_PARTITIONS" == "yes" ]]; then
-            # For existing partitions, get UUID of the original partition
-            luks_uuid=$(blkid -o value -s UUID "${DATA_PARTITION%p*}" 2>/dev/null || blkid -o value -s UUID "${DATA_PARTITION%[0-9]*}" 2>/dev/null)
-        else
-            # For new partitions, get UUID of the partition before LUKS setup
-            local original_partition
-            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
-                if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
-                    original_partition="${TARGET_DEVICE}p3"
-                else
-                    original_partition="${TARGET_DEVICE}p2"
+            # For existing partitions, find the original partition that was encrypted
+            for dev in $(lsblk -ln -o NAME); do
+                if cryptsetup isLuks "/dev/$dev" 2>/dev/null; then
+                    local mapper_name=$(cryptsetup status "$LUKS_MAPPER" 2>/dev/null | grep "device:" | awk '{print $2}')
+                    if [[ "/dev/$dev" == "$mapper_name" ]]; then
+                        encrypted_partition="/dev/$dev"
+                        break
+                    fi
                 fi
-            else
-                if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
-                    if [[ "$INSTALL_TYPE" == "uefi" ]]; then
-                        original_partition="${TARGET_DEVICE}3"
+            done
+        else
+            # For new partitions, determine which partition was encrypted
+            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                if [[ "$INSTALL_TYPE" == "uefi" ]]; then
+                    if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
+                        encrypted_partition="${TARGET_DEVICE}p3"
                     else
-                        original_partition="${TARGET_DEVICE}2"
+                        encrypted_partition="${TARGET_DEVICE}p2"
                     fi
                 else
-                    if [[ "$INSTALL_TYPE" == "uefi" ]]; then
-                        original_partition="${TARGET_DEVICE}2"
+                    if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
+                        encrypted_partition="${TARGET_DEVICE}p2"
                     else
-                        original_partition="${TARGET_DEVICE}1"
+                        encrypted_partition="${TARGET_DEVICE}p1"
+                    fi
+                fi
+            else
+                if [[ "$INSTALL_TYPE" == "uefi" ]]; then
+                    if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
+                        encrypted_partition="${TARGET_DEVICE}3"
+                    else
+                        encrypted_partition="${TARGET_DEVICE}2"
+                    fi
+                elif [[ "$INSTALL_TYPE" == "bios_gpt" ]]; then
+                    if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
+                        encrypted_partition="${TARGET_DEVICE}3"
+                    else
+                        encrypted_partition="${TARGET_DEVICE}2"
+                    fi
+                else # legacy_mbr
+                    if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
+                        encrypted_partition="${TARGET_DEVICE}2"
+                    else
+                        encrypted_partition="${TARGET_DEVICE}1"
                     fi
                 fi
             fi
-            luks_uuid=$(blkid -o value -s UUID "$original_partition" 2>/dev/null)
+        fi
+        
+        if [[ -n "$encrypted_partition" ]]; then
+            luks_uuid=$(blkid -o value -s UUID "$encrypted_partition" 2>/dev/null)
         fi
         
         if [[ -n "$luks_uuid" ]]; then
@@ -1031,6 +1065,15 @@ update_crypttab() {
             print_success "crypttab updated with LUKS configuration"
         else
             print_warning "Could not determine LUKS UUID for crypttab"
+            # Fallback: try to get from current cryptsetup status
+            local fallback_dev=$(cryptsetup status "$LUKS_MAPPER" 2>/dev/null | grep "device:" | awk '{print $2}')
+            if [[ -n "$fallback_dev" ]]; then
+                luks_uuid=$(blkid -o value -s UUID "$fallback_dev" 2>/dev/null)
+                if [[ -n "$luks_uuid" ]]; then
+                    echo "$LUKS_MAPPER UUID=$luks_uuid none luks,discard" > "$MOUNT_TARGET/etc/crypttab"
+                    print_success "crypttab updated with fallback LUKS configuration"
+                fi
+            fi
         fi
     fi
 }
