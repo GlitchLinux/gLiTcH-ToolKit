@@ -182,7 +182,7 @@ detect_boot_type() {
         
         # Check if media is read-only ISO
         if mount | grep -q "/run/live/medium.*ro.*iso9660" 2>/dev/null; then
-            echo "${c6}Iso Boot    ${bold}${c2}"
+            echo "${reset}Iso Boot    ${bold}${c2}"
             return
         fi
     fi
@@ -190,7 +190,7 @@ detect_boot_type() {
     # Method 6: LUKS encryption detection
     if [[ -d /dev/mapper ]] && ls /dev/mapper/luks-* >/dev/null 2>&1; then
         if findmnt /union >/dev/null 2>&1 || [[ $live_score -gt 0 ]]; then
-            echo "${c6}Live Luks   ${bold}${c2}"
+            echo "${reset}Live Luks   ${bold}${c2}"
             return
         fi
     fi
