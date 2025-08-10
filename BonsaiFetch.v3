@@ -63,15 +63,15 @@ create_static_layout_template() {
     
     # Create the EXACT layout template from your document
     cat > "/usr/local/bin/bonsaifetch-templete.txt" << 'EOF'
-" ${c2}${bold}${reset}${c2}${bold}╔══❖${reset}"
-" ${c2}${bold}║${reset}${c6}${c5}  ${c6}${c5}${reset}$os_info${c2}${reset}"
-" ${c2}${bold}║${reset}${c6}${c5}  ${reset}$kernel_info${c2} ${reset}"
-" ${c2}${bold}║${reset}${c6}${c5} 󰉉 ${reset}$disks_space_f ${c2}${reset}"
-" ${c2}${bold}║${reset}${c6}${c5} 󰩟 ${reset}$public_ipv4_adress_wan ${c2}${reset}"
-" ${c2}${bold}║${reset}${c6}${c5} 󰩟 ${reset}$private_ipv4_adress_lan ${c2}${reset}"
-" ${c2}${bold}║${reset}${c6}${c5} 󰍛 ${reset}$memory_info ${c2}${reset}"
-" ${c2}${bold}║${reset}${c6}${c5}  ${boot_status}"
-" ${c2}${bold}╚══❖${reset}"
+" ${c2}${bold}${reset}${c2}${bold}╭────────❖${reset}"
+" ${c2}${bold}│${reset}${c6}${c5}    ${c6}${c5}${reset}$os_info${c2}${reset}"
+" ${c2}${bold}│${reset}${c6}${c5}    ${reset}$kernel_info${c2} ${reset}"
+" ${c2}${bold}│${reset}${c6}${c5} 󰋊   ${reset}$disks_space_f ${c2}${reset}"
+" ${c2}${bold}│${reset}${c6}${c5}    ${reset}$public_ipv4_adress_wan ${c2}${reset}"
+" ${c2}${bold}│${reset}${c6}${c5} 󰩟   ${reset}$private_ipv4_adress_lan ${c2}${reset}"
+" ${c2}${bold}│${reset}${c6}${c5}    ${reset}$memory_info ${c2}${reset}"
+" ${c2}${bold}│${reset}${c6}${c5}    ${boot_status}"
+" ${c2}${bold}╰────❖${reset}"
 "${reset}${reset}"
 EOF
     
