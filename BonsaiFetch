@@ -40,8 +40,8 @@ echo "alias fetch='bonsaifetch'" >> /etc/bash.bashrc
 echo "alias fetch-edit='sudo nano /usr/local/bin/bonsaifetch-templete.txt'" >> /etc/bash.bashrc
 
 print_status() { echo -e "${GREEN}[✓]${NC} $1"; }
-print_info() { echo -e "${BLUE}[i]${NC} $1"; }
-print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
+         print_info() { echo -e "${MAGENTA}[i]${NC} $1"; }
+         print_warning() { echo -e "${MAGENTA}[!]${NC} $1"; }
 print_error() { echo -e "${RED}[✗]${NC} $1"; }
 print_step() { echo -e "${MAGENTA}[STEP]${NC} $1"; }
 
