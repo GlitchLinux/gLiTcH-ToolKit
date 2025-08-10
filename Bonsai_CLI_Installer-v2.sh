@@ -38,6 +38,7 @@ USE_LUKS=""
 LUKS_DEVICE=""
 LUKS_MAPPER="luks-root"
 IS_LOOP_DEVICE=""
+ORIGINAL_DATA_PARTITION=""
 
 # Clear screen and show header
 clear_and_header() {
@@ -75,7 +76,7 @@ install_dependencies() {
     clear_and_header
     show_step "1" "Installing Dependencies"
     
-    local packages=("rsync" "parted" "gdisk" "dosfstools" "e2fsprogs" "pv" "dialog" "cryptsetup")
+    local packages=("rsync" "parted" "gdisk" "dosfstools" "e2fsprogs" "pv" "dialog" "cryptsetup" "wget")
     local missing_packages=()
     
     for package in "${packages[@]}"; do
@@ -105,7 +106,7 @@ get_os_name_from_source() {
         OS_NAME=$(cat /etc/os-release 2>/dev/null | grep -w "PRETTY_NAME" | cut -d '=' -f2 | sed 's/"//g' || echo "Unknown")
     elif [[ -f "$source_path" && "$source_path" =~ \.squashfs$ ]]; then
         # Installing from squashfs file
-        temp_mount="/tmp/squashfs_mount_$"
+        temp_mount="/tmp/squashfs_mount_$$"
         mkdir -p "$temp_mount"
         if mount -t squashfs -o loop "$source_path" "$temp_mount" 2>/dev/null; then
             OS_NAME=$(cat "$temp_mount/etc/os-release" 2>/dev/null | grep -w "PRETTY_NAME" | cut -d '=' -f2 | sed 's/"//g' || echo "Unknown")
@@ -451,6 +452,7 @@ select_existing_partitions() {
         
         if [[ -b "$data_input" ]]; then
             DATA_PARTITION="$data_input"
+            ORIGINAL_DATA_PARTITION="$data_input"
             print_success "Selected data partition: $DATA_PARTITION"
             break
         else
@@ -501,6 +503,9 @@ setup_luks_encryption() {
     
     print_progress "Setting up LUKS1 encryption on $target_partition..."
     
+    # Store original partition for crypttab
+    ORIGINAL_DATA_PARTITION="$target_partition"
+    
     # Unmount if mounted
     umount "$target_partition" 2>/dev/null || true
     
@@ -524,7 +529,7 @@ setup_luks_encryption() {
     
     # Format the encrypted partition
     print_progress "Formatting encrypted partition as ext4..."
-    if [[ -n "$OS_NAME" && "$OS_NAME" != "Unknown" ]]; then
+    if [[ -n "$OS_NAME_CLEAN" && "$OS_NAME_CLEAN" != "Linux" ]]; then
         mkfs.ext4 -F -L "$OS_NAME_CLEAN" "$LUKS_DEVICE" >/dev/null 2>&1
     else
         mkfs.ext4 -F "$LUKS_DEVICE" >/dev/null 2>&1
@@ -1003,61 +1008,9 @@ update_crypttab() {
         print_progress "Updating crypttab for LUKS..."
         
         local luks_uuid
-        # Find the actual encrypted partition (not the mapper device)
-        local encrypted_partition=""
-        
-        if [[ "$USE_EXISTING_PARTITIONS" == "yes" ]]; then
-            # For existing partitions, find the original partition that was encrypted
-            for dev in $(lsblk -ln -o NAME); do
-                if cryptsetup isLuks "/dev/$dev" 2>/dev/null; then
-                    local mapper_name=$(cryptsetup status "$LUKS_MAPPER" 2>/dev/null | grep "device:" | awk '{print $2}')
-                    if [[ "/dev/$dev" == "$mapper_name" ]]; then
-                        encrypted_partition="/dev/$dev"
-                        break
-                    fi
-                fi
-            done
-        else
-            # For new partitions, determine which partition was encrypted
-            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
-                if [[ "$INSTALL_TYPE" == "uefi" ]]; then
-                    if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
-                        encrypted_partition="${TARGET_DEVICE}p3"
-                    else
-                        encrypted_partition="${TARGET_DEVICE}p2"
-                    fi
-                else
-                    if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
-                        encrypted_partition="${TARGET_DEVICE}p2"
-                    else
-                        encrypted_partition="${TARGET_DEVICE}p1"
-                    fi
-                fi
-            else
-                if [[ "$INSTALL_TYPE" == "uefi" ]]; then
-                    if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
-                        encrypted_partition="${TARGET_DEVICE}3"
-                    else
-                        encrypted_partition="${TARGET_DEVICE}2"
-                    fi
-                elif [[ "$INSTALL_TYPE" == "bios_gpt" ]]; then
-                    if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
-                        encrypted_partition="${TARGET_DEVICE}3"
-                    else
-                        encrypted_partition="${TARGET_DEVICE}2"
-                    fi
-                else # legacy_mbr
-                    if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
-                        encrypted_partition="${TARGET_DEVICE}2"
-                    else
-                        encrypted_partition="${TARGET_DEVICE}1"
-                    fi
-                fi
-            fi
-        fi
-        
-        if [[ -n "$encrypted_partition" ]]; then
-            luks_uuid=$(blkid -o value -s UUID "$encrypted_partition" 2>/dev/null)
+        # Use the original partition that was encrypted
+        if [[ -n "$ORIGINAL_DATA_PARTITION" ]]; then
+            luks_uuid=$(blkid -o value -s UUID "$ORIGINAL_DATA_PARTITION" 2>/dev/null)
         fi
         
         if [[ -n "$luks_uuid" ]]; then
@@ -1075,6 +1028,26 @@ update_crypttab() {
                 fi
             fi
         fi
+    fi
+}
+
+update_initramfs() {
+    if [[ "$USE_LUKS" == "yes" ]]; then
+        print_progress "Updating initramfs for LUKS..."
+        
+        # Ensure cryptsetup is installed in target
+        chroot "$MOUNT_TARGET" /bin/bash -c "
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update >/dev/null 2>&1
+            apt-get install -y cryptsetup cryptsetup-initramfs >/dev/null 2>&1
+        " 2>/dev/null
+        
+        # Update initramfs to include LUKS support
+        chroot "$MOUNT_TARGET" /bin/bash -c "
+            update-initramfs -u -k all >/dev/null 2>&1
+        " 2>/dev/null
+        
+        print_success "initramfs updated with LUKS support"
     fi
 }
 
@@ -1105,6 +1078,18 @@ install_grub() {
             
         "uefi")
             print_progress "Installing GRUB for UEFI systems..."
+            
+            # Clean up existing EFI directories that might conflict
+            if [[ -d "$MOUNT_TARGET/boot/efi/EFI/BOOT" ]]; then
+                print_progress "Removing existing /boot/efi/EFI/BOOT directory..."
+                rm -rf "$MOUNT_TARGET/boot/efi/EFI/BOOT"
+            fi
+            
+            if [[ -d "$MOUNT_TARGET/boot/efi/EFI/Bonsai" ]]; then
+                print_progress "Removing existing /boot/efi/EFI/Bonsai directory..."
+                rm -rf "$MOUNT_TARGET/boot/efi/EFI/Bonsai"
+            fi
+            
             chroot "$MOUNT_TARGET" /bin/bash -c "
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update >/dev/null 2>&1
@@ -1157,9 +1142,17 @@ setup_live_boot() {
             return
         fi
         
-        print_progress "Updating GRUB configuration..."
-        chroot "$MOUNT_TARGET" /bin/bash -c "update-grub >/dev/null 2>&1" 2>/dev/null
+        # Install Supreme Bonsai Theme
+        print_progress "Installing Supreme Bonsai Theme..."
+        chroot "$MOUNT_TARGET" /bin/bash -c "
+            cd /tmp
+            wget -q https://raw.githubusercontent.com/GlitchLinux/BonsaiLinux/refs/heads/main/supreme-bonsai-theme.sh
+            bash supreme-bonsai-theme.sh >/dev/null 2>&1
+            sleep 1
+            update-grub >/dev/null 2>&1
+        " 2>/dev/null
         
+        print_success "Supreme Bonsai Theme installed"
         print_success "Live boot setup completed"
     else
         print_info "Skipping live boot setup"
@@ -1172,69 +1165,83 @@ verify_installation() {
     clear_and_header
     show_step "10" "Verifying Installation"
     
+    echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}                    ${WHITE}INSTALLATION VERIFICATION${NC}                 ${CYAN}║${NC}"
+    echo -e "${CYAN}╠══════════════════════════════════════════════════════════╣${NC}"
+    
     local errors=0
     
     if ls "$MOUNT_TARGET/boot/vmlinuz-"* 1>/dev/null 2>&1; then
-        print_success "✓ Kernel found"
+        echo -e "${CYAN}║${NC} Kernel:           ${GREEN}✓ Found${NC}"
     else
-        print_error "✗ No kernel found"
+        echo -e "${CYAN}║${NC} Kernel:           ${RED}✗ Missing${NC}"
         ((errors++))
     fi
     
     if ls "$MOUNT_TARGET/boot/initrd.img-"* 1>/dev/null 2>&1; then
-        print_success "✓ Initramfs found"
+        echo -e "${CYAN}║${NC} Initramfs:        ${GREEN}✓ Found${NC}"
     else
-        print_error "✗ No initramfs found"
+        echo -e "${CYAN}║${NC} Initramfs:        ${RED}✗ Missing${NC}"
         ((errors++))
     fi
     
     if [[ -f "$MOUNT_TARGET/boot/grub/grub.cfg" ]]; then
-        print_success "✓ GRUB configuration found"
+        echo -e "${CYAN}║${NC} GRUB Config:      ${GREEN}✓ Found${NC}"
     else
-        print_error "✗ GRUB configuration missing"
+        echo -e "${CYAN}║${NC} GRUB Config:      ${RED}✗ Missing${NC}"
         ((errors++))
     fi
     
     if [[ -f "$MOUNT_TARGET/etc/fstab" ]]; then
         if [[ "$USE_LUKS" == "yes" ]]; then
             if grep -q "$(blkid -o value -s UUID "$LUKS_DEVICE")" "$MOUNT_TARGET/etc/fstab"; then
-                print_success "✓ fstab configured correctly for LUKS"
+                echo -e "${CYAN}║${NC} fstab (LUKS):     ${GREEN}✓ Configured${NC}"
             else
-                print_error "✗ fstab LUKS configuration issue"
+                echo -e "${CYAN}║${NC} fstab (LUKS):     ${RED}✗ Issue${NC}"
                 ((errors++))
             fi
         else
             if grep -q "$(blkid -o value -s UUID "$DATA_PARTITION")" "$MOUNT_TARGET/etc/fstab"; then
-                print_success "✓ fstab configured correctly"
+                echo -e "${CYAN}║${NC} fstab:            ${GREEN}✓ Configured${NC}"
             else
-                print_error "✗ fstab configuration issue"
+                echo -e "${CYAN}║${NC} fstab:            ${RED}✗ Issue${NC}"
                 ((errors++))
             fi
         fi
     else
-        print_error "✗ fstab missing"
+        echo -e "${CYAN}║${NC} fstab:            ${RED}✗ Missing${NC}"
         ((errors++))
     fi
     
     if [[ "$USE_LUKS" == "yes" ]]; then
         if [[ -f "$MOUNT_TARGET/etc/crypttab" ]] && grep -q "$LUKS_MAPPER" "$MOUNT_TARGET/etc/crypttab"; then
-            print_success "✓ crypttab configured for LUKS"
+            echo -e "${CYAN}║${NC} crypttab:         ${GREEN}✓ Configured${NC}"
         else
-            print_warning "⚠ crypttab configuration may be incomplete"
+            echo -e "${CYAN}║${NC} crypttab:         ${YELLOW}⚠ Incomplete${NC}"
+        fi
+        
+        if grep -q "GRUB_ENABLE_CRYPTODISK=y" "$MOUNT_TARGET/etc/default/grub"; then
+            echo -e "${CYAN}║${NC} GRUB Cryptodisk:  ${GREEN}✓ Enabled${NC}"
+        else
+            echo -e "${CYAN}║${NC} GRUB Cryptodisk:  ${RED}✗ Disabled${NC}"
+            ((errors++))
         fi
     fi
     
     if [[ "$INSTALL_TYPE" == "uefi" ]]; then
         if [[ -f "$MOUNT_TARGET/boot/efi/EFI/BOOT/bootx64.efi" ]] || [[ -d "$MOUNT_TARGET/boot/efi/EFI/debian" ]] || [[ -d "$MOUNT_TARGET/boot/efi/EFI/Debian" ]]; then
-            print_success "✓ UEFI bootloader found"
+            echo -e "${CYAN}║${NC} UEFI Bootloader:  ${GREEN}✓ Found${NC}"
         else
-            print_warning "⚠ UEFI bootloader may not be properly installed"
+            echo -e "${CYAN}║${NC} UEFI Bootloader:  ${YELLOW}⚠ May be missing${NC}"
         fi
     fi
     
     if [[ -f "$MOUNT_TARGET/boot/live/filesystem.squashfs" ]]; then
-        print_success "✓ Live boot environment configured"
+        echo -e "${CYAN}║${NC} Live Boot:        ${GREEN}✓ Configured${NC}"
     fi
+    
+    echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
+    echo
     
     if [[ $errors -eq 0 ]]; then
         print_success "Installation verification passed!"
@@ -1281,16 +1288,19 @@ show_completion() {
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════╝${NC}"
     echo
     
-    print_main "Installation Details:"
-    echo -e "  ${CYAN}•${NC} Target Device:   ${WHITE}$TARGET_DEVICE${NC}" 
-    echo -e "  ${CYAN}•${NC} Data Partition:  ${WHITE}$DATA_PARTITION${NC}"
-    [[ -n "$EFI_PARTITION" ]] && echo -e "  ${CYAN}•${NC} EFI Partition:   ${WHITE}$EFI_PARTITION${NC}"
-    [[ "$USE_SEPARATE_BOOT" == "yes" ]] && echo -e "  ${CYAN}•${NC} Boot Partition:  ${WHITE}$BOOT_PARTITION ($BOOT_PARTITION_FS)${NC}"
-    echo -e "  ${CYAN}•${NC} Boot Type:       ${WHITE}$INSTALL_TYPE${NC}"
-    echo -e "  ${CYAN}•${NC} OS Name:         ${WHITE}$OS_NAME${NC}"
-    [[ "$USE_LUKS" == "yes" ]] && echo -e "  ${CYAN}•${NC} LUKS Encryption: ${WHITE}Enabled${NC}"
-    [[ "$IS_LOOP_DEVICE" == "yes" ]] && echo -e "  ${CYAN}•${NC} Loop Device:     ${WHITE}Yes${NC}"
-    [[ -f "$MOUNT_TARGET/boot/live/filesystem.squashfs" ]] && echo -e "  ${CYAN}•${NC} Live Boot:       ${WHITE}Enabled${NC}"
+    echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}                      ${WHITE}INSTALLATION DETAILS${NC}                    ${CYAN}║${NC}"
+    echo -e "${CYAN}╠══════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${CYAN}║${NC} Target Device:    ${WHITE}$TARGET_DEVICE${NC}"
+    echo -e "${CYAN}║${NC} Data Partition:   ${WHITE}$DATA_PARTITION${NC}"
+    [[ -n "$EFI_PARTITION" ]] && echo -e "${CYAN}║${NC} EFI Partition:    ${WHITE}$EFI_PARTITION${NC}"
+    [[ "$USE_SEPARATE_BOOT" == "yes" ]] && echo -e "${CYAN}║${NC} Boot Partition:   ${WHITE}$BOOT_PARTITION ($BOOT_PARTITION_FS)${NC}"
+    echo -e "${CYAN}║${NC} Boot Type:        ${WHITE}$INSTALL_TYPE${NC}"
+    echo -e "${CYAN}║${NC} OS Name:          ${WHITE}$OS_NAME${NC}"
+    [[ "$USE_LUKS" == "yes" ]] && echo -e "${CYAN}║${NC} LUKS Encryption:  ${WHITE}Enabled${NC}"
+    [[ "$IS_LOOP_DEVICE" == "yes" ]] && echo -e "${CYAN}║${NC} Loop Device:      ${WHITE}Yes${NC}"
+    [[ -f "$MOUNT_TARGET/boot/live/filesystem.squashfs" ]] && echo -e "${CYAN}║${NC} Live Boot:        ${WHITE}Enabled${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
     echo
     
     if [[ "$USE_LUKS" == "yes" ]]; then
@@ -1321,6 +1331,7 @@ main() {
     prepare_chroot
     update_fstab
     update_crypttab
+    update_initramfs
     install_grub
     setup_live_boot
     
@@ -1336,4 +1347,4 @@ main() {
 
 trap cleanup_mounts EXIT
 
-main "$@"
+main "$@" "
