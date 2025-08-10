@@ -251,7 +251,7 @@ detect_boot_type() {
         fi
     elif [[ $live_score -ge 3 ]]; then
         # Medium confidence live system
-        echo "${c5} ${reset}Live Boot   ${bold}${c2}"
+        echo "${c5}${reset}Live Boot   ${bold}${c2}"
     elif [[ $install_score -ge 4 ]]; then
         # High confidence installed system
         echo "${c5}${reset}Persistent ${bold}${c2}"
@@ -260,7 +260,7 @@ detect_boot_type() {
         if [[ -f /etc/fstab ]] && grep -q "UUID=" /etc/fstab 2>/dev/null; then
             echo "${c5}${reset}Persistent ${bold}${c2}"
         else
-            echo "${c5} ${reset}Live Boot ${bold}${c2}"
+            echo "${c5}${reset}Live Boot ${bold}${c2}"
         fi
     fi
 }
