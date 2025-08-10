@@ -1082,6 +1082,15 @@ install_grub() {
     clear_and_header
     show_step "8" "Installing Bootloader"
     
+    # Configure GRUB for LUKS if encryption is enabled
+    if [[ "$USE_LUKS" == "yes" ]]; then
+        print_progress "Configuring GRUB for LUKS encryption..."
+        chroot "$MOUNT_TARGET" /bin/bash -c "
+            echo 'GRUB_ENABLE_CRYPTODISK=y' >> /etc/default/grub
+        " 2>/dev/null
+        print_success "GRUB cryptodisk support enabled"
+    fi
+    
     case "$INSTALL_TYPE" in
         "legacy_mbr"|"bios_gpt")
             print_progress "Installing GRUB for BIOS systems..."
@@ -1096,6 +1105,18 @@ install_grub() {
             
         "uefi")
             print_progress "Installing GRUB for UEFI systems..."
+            
+            # Clean up existing EFI directories that might conflict
+            if [[ -d "$MOUNT_TARGET/boot/efi/EFI/BOOT" ]]; then
+                print_progress "Removing existing EFI/BOOT directory..."
+                rm -rf "$MOUNT_TARGET/boot/efi/EFI/BOOT"
+            fi
+            
+            if [[ -d "$MOUNT_TARGET/boot/efi/EFI/Bonsai" ]]; then
+                print_progress "Removing existing EFI/Bonsai directory..."
+                rm -rf "$MOUNT_TARGET/boot/efi/EFI/Bonsai"
+            fi
+            
             chroot "$MOUNT_TARGET" /bin/bash -c "
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update >/dev/null 2>&1
@@ -1105,6 +1126,10 @@ install_grub() {
             " 2>/dev/null
             ;;
     esac
+    
+    if [[ "$USE_LUKS" == "yes" ]]; then
+        print_info "GRUB configured with LUKS support - you'll be prompted for passphrase at boot"
+    fi
     
     print_success "Bootloader installation completed"
     sleep 1
