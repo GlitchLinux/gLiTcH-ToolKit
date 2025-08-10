@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # Bonsai Linux Cyberpunk Fetch Tool Installer v3.0 - Static Layout File Method
@@ -29,15 +30,6 @@ print_banner() {
     echo "╚════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
-
-#sudo mkdir -p /home/root/
-#mkdir -p /home/$user/ && cd /home/$user/
-#sudo rm -f /home/$user/apps* && sudo rm -f /home/root/apps*
-#wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
-#echo "alias apps='bash /home/$user/apps'" >> /etc/bash.bashrc
-
-echo "alias fetch='bonsaifetch'" >> /etc/bash.bashrc
-echo "alias fetch-edit='sudo nano /usr/local/bin/bonsaifetch-templete.txt'" >> /etc/bash.bashrc
 
 print_status() { echo -e "${GREEN}[✓]${NC} $1"; }
          print_info() { echo -e "${MAGENTA}[i]${NC} $1"; }
@@ -346,10 +338,10 @@ main() {
     
     # Add typewriter effects if requested
     if [[ "$1" == "--typewriter" ]] || [[ $- == *i* ]]; then
-        typewriter "${c7} ${c7} Welcome${bold}${c7} to Bonsai v3!"
-	    typewriter "${c7} ${c6} startx${bold}${c7} > Xfce Desktop"
+        typewriter "${c7} ${c7} Welcome${bold}${c7} to $os_info!"
+	    #typewriter "${c7} ${c6} startx${bold}${c7} > Xfce Desktop"
         typewriter "${c7} ${c6} apps${bold}${c7} > Glitch Toolkit"
-
+		sleep 4
         # Show SSH connection info if applicable
         if [[ -n "$SSH_CLIENT" ]] || [[ -n "$SSH_TTY" ]]; then
             ssh_ip=$(echo "$SSH_CLIENT" | cut -d' ' -f1 2>/dev/null || echo "Unknown")
@@ -366,33 +358,6 @@ main() {
 # Parse arguments
 case "$1" in
     "--help"|"-h")
-        echo "Bonsai Linux Fetch Tool - Static Template Edition"
-        echo "Usage: bonsaifetch [options]"
-        echo ""
-        echo "Options:"
-        echo "  --typewriter    Include typewriter effects"
-        echo "  --help, -h      Show this help message"
-        echo ""
-        echo "Examples:"
-        echo "  bonsaifetch                # Perfect static layout"
-        echo "  bonsaifetch --typewriter   # With typewriter effects"
-        echo ""
-        echo "Template File: $LAYOUT_TEMPLATE"
-        echo ""
-        echo "Advanced Boot Detection:"
-        echo "  • LIVE SYSTEM   - Standard live system"
-        echo "  • RAM BOOT      - Live system copied to RAM"
-        echo "  • LIVE LUKS     - Encrypted live system"
-        echo "  • ISO BOOT      - Booted from ISO/IMG"
-        echo "  • PERSISTENT    - Live system with persistence"
-        echo "  • FULL SYSTEM   - Normal installed system"
-        echo ""
-        echo "Static Layout Features:"
-        echo "  ✓ Uses exact static template file"
-        echo "  ✓ Perfect ASCII art positioning guaranteed"
-        echo "  ✓ No variable-length formatting issues"
-        echo "  ✓ Consistent layout every time"
-        echo "  ✓ Easy to modify template if needed"
         exit 0
         ;;
     *)
@@ -515,12 +480,6 @@ EOF
 test_static_layout() {
     print_step "Testing static layout template..."
     
-    echo ""
-    print_info "Static Layout Test:"
-    echo -e "${CYAN}╔════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║                         STATIC TEMPLATE TEST                               ║${NC}"
-    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════════════╝${NC}"
-    
     # Test bonsaifetch with static template
     if command -v bonsaifetch >/dev/null 2>&1; then
         bonsaifetch --typewriter 2>/dev/null || {
@@ -530,8 +489,6 @@ test_static_layout() {
         print_error "bonsaifetch command not found"
     fi
     
-    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════════════╝${NC}"
-    echo ""
 }
 
 # Main installation function
@@ -539,15 +496,6 @@ main() {
     print_banner
     
     check_root
-    
-    print_info "Starting Bonsai Linux Static Template Fetch Tool installation..."
-    print_info "This will create:"
-    print_info "  • Static layout template file with EXACT positioning"
-    print_info "  • 'bonsaifetch' command that uses the static template"
-    print_info "  • Perfect ASCII art alignment guaranteed"
-    print_info "  • Advanced boot detection with 10+ verification methods"
-    print_info "  • Management tools for template editing"
-    print_info "  • MOTD components (DISABLED by default)"
     
     # Ask for confirmation
     read -p "Continue with installation? [Y/n]: " -n 1 -r
@@ -584,14 +532,6 @@ main() {
     echo -e "  ${CYAN}sudo bonsai-motd enable${NC}        # Enable MOTD on login"
     echo -e "  ${CYAN}sudo bonsai-motd edit-template${NC} # Edit layout template"
     echo ""
-    print_info "✨ Static Template Features:"
-    echo "  ✓ Uses exact static template file from your specification"
-    echo "  ✓ Perfect ASCII art positioning guaranteed every time"
-    echo "  ✓ No variable-length formatting issues ever"
-    echo "  ✓ Consistent layout regardless of content length"
-    echo "  ✓ Easy template modification with management tools"
-    echo "  ✓ Template file: $LAYOUT_FILE"
-    echo ""
     print_info "🚀 Boot Detection Types:"
     echo "  • LIVE SYSTEM   - Standard live system from media"
     echo "  • RAM BOOT      - Live system copied to RAM"
@@ -600,17 +540,15 @@ main() {
     echo "  • PERSISTENT    - Live system with persistence"
     echo "  • FULL SYSTEM   - Normal installed system"
     echo ""
-    print_warning "MOTD is DISABLED by default - use 'bonsaifetch' command instead!"
-    print_info "Try it now: bonsaifetch --typewriter"
-    echo ""
-    print_info "🔧 Template Editing:"
-    echo -e "  ${CYAN}sudo bonsai-motd edit-template${NC}  # Edit the exact layout"
-    echo "  The template uses variable substitution with perfect positioning"
-    echo "  Variables: \$boot_status, \$os_info, \$kernel_info, \$cpu_info, etc."
 }
 
 # Run the main function
 main "$@"
 
-cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/CaskaydiaCove-Icons-Install.sh && sudo bash CaskaydiaCove-Icons-Install.sh && exit
-
+cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/CaskaydiaCove-Icons-Install.sh 
+echo ""
+echo "          IF YOU ARE INSTALLING BONSAIFETCH FOR THE FIRST TIME"
+echo "             YOU WILL NEED NEED THE CASKAYDIACOVE-ICON PACK"
+echo ""
+sudo bash CaskaydiaCove-Icons-Install.sh
+exit
