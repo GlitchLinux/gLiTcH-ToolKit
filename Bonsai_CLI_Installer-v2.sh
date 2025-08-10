@@ -1347,4 +1347,4 @@ main() {
 
 trap cleanup_mounts EXIT
 
-main "$@" "
+main "$@"
