@@ -190,7 +190,7 @@ detect_boot_type() {
     # Method 6: LUKS encryption detection
     if [[ -d /dev/mapper ]] && ls /dev/mapper/luks-* >/dev/null 2>&1; then
         if findmnt /union >/dev/null 2>&1 || [[ $live_score -gt 0 ]]; then
-            echo "${reset}Live Luks   ${bold}${c2}"
+            echo "${reset} Persistent Luks   ${bold}${c2}"
             return
         fi
     fi
