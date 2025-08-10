@@ -1,0 +1,4 @@
+cd /home/ 
+wget https://raw.githubusercontent.com/GlitchLinux/ICONPACK/refs/heads/main/NerdFont-ICONS-CATEGORIES.txt
+l3afpad NerdFont-ICONS-CATEGORIES.txt
+exit
