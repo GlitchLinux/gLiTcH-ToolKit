@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# Enhanced Debian Live Installer - Complete Version with Fixed Progress Bar
+# Enhanced Bonsai Live Installer - Complete Version with LUKS, Boot Partition & Loop Device Support
 # All functions included - ready to run
 
 set -e
 
 # Enhanced color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
+RED='\033[38;5;198m'
+GREEN='\033[38;5;198m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
+BLUE='\033[0;96m'
 WHITE='\033[1;37m'
 MAGENTA='\033[38;5;198m'
 BRIGHT_GREEN='\033[0;96m'
@@ -25,9 +25,20 @@ INSTALL_TYPE=""
 TARGET_DEVICE=""
 DATA_PARTITION=""
 EFI_PARTITION=""
+BOOT_PARTITION=""
 USE_EXISTING_PARTITIONS=""
+USE_SEPARATE_BOOT=""
+BOOT_PARTITION_SIZE=""
+BOOT_PARTITION_FS=""
 DATA_PARTITION_SIZE=""
 ORIGINAL_SQUASHFS=""
+OS_NAME=""
+OS_NAME_CLEAN=""
+USE_LUKS=""
+LUKS_DEVICE=""
+LUKS_MAPPER="luks-root"
+IS_LOOP_DEVICE=""
+ORIGINAL_DATA_PARTITION=""
 
 # Clear screen and show header
 clear_and_header() {
@@ -65,7 +76,7 @@ install_dependencies() {
     clear_and_header
     show_step "1" "Installing Dependencies"
     
-    local packages=("rsync" "parted" "gdisk" "dosfstools" "e2fsprogs" "pv" "dialog")
+    local packages=("rsync" "parted" "gdisk" "dosfstools" "e2fsprogs" "pv" "dialog" "cryptsetup" "wget")
     local missing_packages=()
     
     for package in "${packages[@]}"; do
@@ -86,6 +97,37 @@ install_dependencies() {
     sleep 1
 }
 
+get_os_name_from_source() {
+    local source_path="$1"
+    local temp_mount=""
+    
+    if [[ "$source_path" == "/" ]]; then
+        # Installing from current system
+        OS_NAME=$(cat /etc/os-release 2>/dev/null | grep -w "PRETTY_NAME" | cut -d '=' -f2 | sed 's/"//g' || echo "Unknown")
+    elif [[ -f "$source_path" && "$source_path" =~ \.squashfs$ ]]; then
+        # Installing from squashfs file
+        temp_mount="/tmp/squashfs_mount_$$"
+        mkdir -p "$temp_mount"
+        if mount -t squashfs -o loop "$source_path" "$temp_mount" 2>/dev/null; then
+            OS_NAME=$(cat "$temp_mount/etc/os-release" 2>/dev/null | grep -w "PRETTY_NAME" | cut -d '=' -f2 | sed 's/"//g' || echo "Unknown")
+            umount "$temp_mount" 2>/dev/null || true
+        else
+            OS_NAME="Unknown"
+        fi
+        rmdir "$temp_mount" 2>/dev/null || true
+    else
+        OS_NAME="Unknown"
+    fi
+    
+    # Clean OS name for safe use in partition labels and parted commands
+    # Remove problematic characters and limit length
+    OS_NAME_CLEAN=$(echo "$OS_NAME" | sed 's/[^a-zA-Z0-9._-]//g' | cut -c1-15)
+    [[ -z "$OS_NAME_CLEAN" ]] && OS_NAME_CLEAN="Linux"
+    
+    print_info "Detected OS: $OS_NAME"
+    print_info "Clean partition name: $OS_NAME_CLEAN"
+}
+
 select_install_source() {
     clear_and_header
     show_step "2" "Select Installation Source"
@@ -101,16 +143,31 @@ select_install_source() {
         case $choice in
             1)
                 INSTALL_SOURCE_TYPE="current"
+                # Enhanced squashfs detection for both Debian and Ubuntu
                 if [[ -f "/run/live/medium/live/filesystem.squashfs" ]]; then
                     INSTALL_SOURCE="/run/live/medium/live/filesystem.squashfs"
                     ORIGINAL_SQUASHFS="$INSTALL_SOURCE"
-                    print_info "Detected live environment, using: $INSTALL_SOURCE"
+                    print_info "Detected Debian live environment, using: $INSTALL_SOURCE"
+                elif [[ -f "/cdrom/casper/filesystem.squashfs" ]]; then
+                    INSTALL_SOURCE="/cdrom/casper/filesystem.squashfs"
+                    ORIGINAL_SQUASHFS="$INSTALL_SOURCE"
+                    print_info "Detected Ubuntu live environment, using: $INSTALL_SOURCE"
                 elif [[ -d "/run/live/medium/live" ]]; then
                     local squashfs_file=$(find /run/live/medium/live -name "*.squashfs" | head -1)
                     if [[ -n "$squashfs_file" ]]; then
                         INSTALL_SOURCE="$squashfs_file"
                         ORIGINAL_SQUASHFS="$INSTALL_SOURCE"
                         print_info "Found squashfs file: $INSTALL_SOURCE"
+                    else
+                        INSTALL_SOURCE="/"
+                        print_info "No squashfs found, will copy from root filesystem: $INSTALL_SOURCE"
+                    fi
+                elif [[ -d "/cdrom/casper" ]]; then
+                    local squashfs_file=$(find /cdrom/casper -name "*.squashfs" | head -1)
+                    if [[ -n "$squashfs_file" ]]; then
+                        INSTALL_SOURCE="$squashfs_file"
+                        ORIGINAL_SQUASHFS="$INSTALL_SOURCE"
+                        print_info "Found Ubuntu squashfs file: $INSTALL_SOURCE"
                     else
                         INSTALL_SOURCE="/"
                         print_info "No squashfs found, will copy from root filesystem: $INSTALL_SOURCE"
@@ -144,6 +201,8 @@ select_install_source() {
         esac
     done
     
+    # Get OS name from source
+    get_os_name_from_source "$INSTALL_SOURCE"
     sleep 1
 }
 
@@ -192,17 +251,31 @@ select_target_disk() {
     print_main "Available storage devices:"
     lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,LABEL
     echo
+    print_info "You can also specify loop devices (e.g., /dev/loop0)"
+    echo
     
     while true; do
-        print_prompt "Enter target disk (e.g., sda, nvme0n1): "
+        print_prompt "Enter target disk (e.g., sda, nvme0n1, /dev/loop0): "
         read -r disk_input
         
         if [[ ! "$disk_input" =~ ^/dev/ ]]; then
             disk_input="/dev/$disk_input"
         fi
         
-        if [[ -b "$disk_input" ]]; then
+        # Check for loop device
+        if [[ "$disk_input" =~ /dev/loop[0-9]+ ]]; then
+            IS_LOOP_DEVICE="yes"
+            if [[ -b "$disk_input" ]]; then
+                TARGET_DEVICE="$disk_input"
+                print_success "Selected loop device: $TARGET_DEVICE"
+                break
+            else
+                print_error "Loop device not found: $disk_input"
+                print_info "You may need to create it first with: losetup"
+            fi
+        elif [[ -b "$disk_input" ]]; then
             TARGET_DEVICE="$disk_input"
+            IS_LOOP_DEVICE="no"
             print_success "Selected target disk: $TARGET_DEVICE"
             break
         else
@@ -238,6 +311,8 @@ select_partitioning_method() {
                 print_prompt "Are you sure? Type 'YES' to confirm: "
                 read -r confirm
                 if [[ "$confirm" == "YES" ]]; then
+                    select_boot_partition_option
+                    select_luks_encryption
                     create_new_partitions
                 else
                     print_info "Operation cancelled"
@@ -252,6 +327,63 @@ select_partitioning_method() {
     done
 }
 
+select_boot_partition_option() {
+    print_main "Boot partition configuration:"
+    print_prompt "Create separate /boot partition? (y/N): "
+    read -r boot_choice
+    
+    if [[ "$boot_choice" =~ ^[Yy]$ ]]; then
+        USE_SEPARATE_BOOT="yes"
+        
+        while true; do
+            print_prompt "Enter /boot partition size in MB (recommended: 256-512): "
+            read -r boot_size
+            if [[ "$boot_size" =~ ^[0-9]+$ ]] && [[ $boot_size -ge 100 ]]; then
+                BOOT_PARTITION_SIZE="$boot_size"
+                break
+            else
+                print_error "Invalid size. Please enter a number >= 100"
+            fi
+        done
+        
+        print_main "Select filesystem for /boot partition:"
+        echo "1) ext2 (recommended for /boot)"
+        echo "2) ext3"
+        echo "3) ext4"
+        
+        while true; do
+            print_prompt "Enter choice (1-3): "
+            read -r fs_choice
+            case $fs_choice in
+                1) BOOT_PARTITION_FS="ext2"; break;;
+                2) BOOT_PARTITION_FS="ext3"; break;;
+                3) BOOT_PARTITION_FS="ext4"; break;;
+                *) print_error "Invalid choice";;
+            esac
+        done
+        
+        print_info "Will create ${BOOT_PARTITION_SIZE}MB /boot partition with $BOOT_PARTITION_FS"
+    else
+        USE_SEPARATE_BOOT="no"
+        print_info "Will use single root partition"
+    fi
+}
+
+select_luks_encryption() {
+    print_main "LUKS encryption configuration:"
+    print_prompt "Encrypt data partition with LUKS? (y/N): "
+    read -r luks_choice
+    
+    if [[ "$luks_choice" =~ ^[Yy]$ ]]; then
+        USE_LUKS="yes"
+        print_warning "You will be prompted for a strong passphrase during encryption setup"
+        print_info "LUKS encryption will be applied to the data/root partition"
+    else
+        USE_LUKS="no"
+        print_info "No encryption will be used"
+    fi
+}
+
 select_existing_partitions() {
     print_main "Current partition layout for $TARGET_DEVICE:"
     lsblk "$TARGET_DEVICE"
@@ -263,7 +395,11 @@ select_existing_partitions() {
             read -r efi_input
             
             if [[ ! "$efi_input" =~ ^/dev/ ]]; then
-                efi_input="${TARGET_DEVICE}${efi_input##*[a-z]}"
+                if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                    efi_input="${TARGET_DEVICE}p${efi_input##*[a-z]}"
+                else
+                    efi_input="${TARGET_DEVICE}${efi_input##*[a-z]}"
+                fi
             fi
             
             if [[ -b "$efi_input" ]]; then
@@ -276,22 +412,66 @@ select_existing_partitions() {
         done
     fi
     
+    # Ask for boot partition
+    print_prompt "Enter partition to use as /boot (hit enter to skip): "
+    read -r boot_input
+    
+    if [[ -n "$boot_input" ]]; then
+        if [[ ! "$boot_input" =~ ^/dev/ ]]; then
+            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                boot_input="${TARGET_DEVICE}p${boot_input##*[a-z]}"
+            else
+                boot_input="${TARGET_DEVICE}${boot_input##*[a-z]}"
+            fi
+        fi
+        
+        if [[ -b "$boot_input" ]]; then
+            BOOT_PARTITION="$boot_input"
+            USE_SEPARATE_BOOT="yes"
+            print_success "Selected boot partition: $BOOT_PARTITION"
+        else
+            print_error "Invalid boot partition: $boot_input"
+            USE_SEPARATE_BOOT="no"
+        fi
+    else
+        USE_SEPARATE_BOOT="no"
+        print_info "No separate boot partition will be used"
+    fi
+    
     while true; do
         print_prompt "Enter data/root partition (e.g., ${TARGET_DEVICE}2): "
         read -r data_input
         
         if [[ ! "$data_input" =~ ^/dev/ ]]; then
-            data_input="${TARGET_DEVICE}${data_input##*[a-z]}"
+            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                data_input="${TARGET_DEVICE}p${data_input##*[a-z]}"
+            else
+                data_input="${TARGET_DEVICE}${data_input##*[a-z]}"
+            fi
         fi
         
         if [[ -b "$data_input" ]]; then
             DATA_PARTITION="$data_input"
+            ORIGINAL_DATA_PARTITION="$data_input"
             print_success "Selected data partition: $DATA_PARTITION"
             break
         else
             print_error "Invalid partition: $data_input"
         fi
     done
+    
+    # Ask for LUKS encryption on existing partition
+    print_warning "Do you want to encrypt the data partition with LUKS?"
+    print_warning "This will FORMAT and ERASE all data on $DATA_PARTITION"
+    print_prompt "Encrypt with LUKS? (y/N): "
+    read -r luks_choice
+    
+    if [[ "$luks_choice" =~ ^[Yy]$ ]]; then
+        USE_LUKS="yes"
+        print_warning "Data partition will be encrypted with LUKS"
+    else
+        USE_LUKS="no"
+    fi
 }
 
 get_data_partition_size() {
@@ -318,47 +498,190 @@ get_data_partition_size() {
     done
 }
 
-# MISSING FUNCTION 1: create_new_partitions
+setup_luks_encryption() {
+    local target_partition="$1"
+    
+    print_progress "Setting up LUKS1 encryption on $target_partition..."
+    
+    # Store original partition for crypttab
+    ORIGINAL_DATA_PARTITION="$target_partition"
+    
+    # Unmount if mounted
+    umount "$target_partition" 2>/dev/null || true
+    
+    print_warning "You will now be prompted to enter a strong passphrase for LUKS encryption"
+    print_info "Please use a secure passphrase that you will remember!"
+    
+    # Format with LUKS1
+    if ! cryptsetup luksFormat --type luks1 "$target_partition"; then
+        print_error "Failed to format LUKS1 partition"
+        exit 1
+    fi
+    
+    print_info "Opening LUKS partition..."
+    if ! cryptsetup luksOpen "$target_partition" "$LUKS_MAPPER"; then
+        print_error "Failed to open LUKS partition"
+        exit 1
+    fi
+    
+    LUKS_DEVICE="/dev/mapper/$LUKS_MAPPER"
+    print_success "LUKS partition opened as $LUKS_DEVICE"
+    
+    # Format the encrypted partition
+    print_progress "Formatting encrypted partition as ext4..."
+    if [[ -n "$OS_NAME_CLEAN" && "$OS_NAME_CLEAN" != "Linux" ]]; then
+        mkfs.ext4 -F -L "$OS_NAME_CLEAN" "$LUKS_DEVICE" >/dev/null 2>&1
+    else
+        mkfs.ext4 -F "$LUKS_DEVICE" >/dev/null 2>&1
+    fi
+    
+    # Update DATA_PARTITION to point to the mapper device
+    DATA_PARTITION="$LUKS_DEVICE"
+    
+    print_success "LUKS1 encryption setup completed"
+}
+
 create_new_partitions() {
     print_progress "Creating new partition table on $TARGET_DEVICE..."
     
     umount "${TARGET_DEVICE}"* 2>/dev/null || true
     
+    local current_start="1MiB"
+    
     if [[ "$INSTALL_TYPE" == "legacy_mbr" ]]; then
         parted -s "$TARGET_DEVICE" mklabel msdos
+        
+        if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
+            parted -s "$TARGET_DEVICE" mkpart primary "$BOOT_PARTITION_FS" "$current_start" "${BOOT_PARTITION_SIZE}MiB"
+            parted -s "$TARGET_DEVICE" set 1 boot on
+            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                BOOT_PARTITION="${TARGET_DEVICE}p1"
+            else
+                BOOT_PARTITION="${TARGET_DEVICE}1"
+            fi
+            current_start="${BOOT_PARTITION_SIZE}MiB"
+        fi
+        
         get_data_partition_size
         if [[ "$DATA_PARTITION_SIZE" == "100%" ]]; then
-            parted -s "$TARGET_DEVICE" mkpart primary ext4 1MiB 100%
+            parted -s "$TARGET_DEVICE" mkpart primary ext4 "$current_start" 100%
         else
-            parted -s "$TARGET_DEVICE" mkpart primary ext4 1MiB "${DATA_PARTITION_SIZE}GB"
+            parted -s "$TARGET_DEVICE" mkpart primary ext4 "$current_start" "${DATA_PARTITION_SIZE}GB"
         fi
-        parted -s "$TARGET_DEVICE" set 1 boot on
-        DATA_PARTITION="${TARGET_DEVICE}1"
+        
+        if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
+            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                DATA_PARTITION="${TARGET_DEVICE}p2"
+            else
+                DATA_PARTITION="${TARGET_DEVICE}2"
+            fi
+        else
+            parted -s "$TARGET_DEVICE" set 1 boot on
+            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                DATA_PARTITION="${TARGET_DEVICE}p1"
+            else
+                DATA_PARTITION="${TARGET_DEVICE}1"
+            fi
+        fi
         
     elif [[ "$INSTALL_TYPE" == "bios_gpt" ]]; then
         parted -s "$TARGET_DEVICE" mklabel gpt
         parted -s "$TARGET_DEVICE" mkpart BIOS_GRUB 1MiB 2MiB
         parted -s "$TARGET_DEVICE" set 1 bios_grub on
+        current_start="2MiB"
+        
+        if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
+            local boot_end=$((2 + BOOT_PARTITION_SIZE))
+            parted -s "$TARGET_DEVICE" mkpart BOOT "$BOOT_PARTITION_FS" "$current_start" "${boot_end}MiB"
+            parted -s "$TARGET_DEVICE" set 2 boot on
+            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                BOOT_PARTITION="${TARGET_DEVICE}p2"
+            else
+                BOOT_PARTITION="${TARGET_DEVICE}2"
+            fi
+            current_start="${boot_end}MiB"
+        fi
+        
         get_data_partition_size
         if [[ "$DATA_PARTITION_SIZE" == "100%" ]]; then
-            parted -s "$TARGET_DEVICE" mkpart primary ext4 2MiB 100%
+            if [[ -n "$OS_NAME_CLEAN" && "$OS_NAME_CLEAN" != "Linux" ]]; then
+                parted -s "$TARGET_DEVICE" mkpart "$OS_NAME_CLEAN" ext4 "$current_start" 100%
+            else
+                parted -s "$TARGET_DEVICE" mkpart ROOT ext4 "$current_start" 100%
+            fi
         else
-            parted -s "$TARGET_DEVICE" mkpart primary ext4 2MiB "${DATA_PARTITION_SIZE}GB"
+            if [[ -n "$OS_NAME_CLEAN" && "$OS_NAME_CLEAN" != "Linux" ]]; then
+                parted -s "$TARGET_DEVICE" mkpart "$OS_NAME_CLEAN" ext4 "$current_start" "${DATA_PARTITION_SIZE}GB"
+            else
+                parted -s "$TARGET_DEVICE" mkpart ROOT ext4 "$current_start" "${DATA_PARTITION_SIZE}GB"
+            fi
         fi
-        DATA_PARTITION="${TARGET_DEVICE}2"
+        
+        if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
+            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                DATA_PARTITION="${TARGET_DEVICE}p3"
+            else
+                DATA_PARTITION="${TARGET_DEVICE}3"
+            fi
+        else
+            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                DATA_PARTITION="${TARGET_DEVICE}p2"
+            else
+                DATA_PARTITION="${TARGET_DEVICE}2"
+            fi
+        fi
         
     elif [[ "$INSTALL_TYPE" == "uefi" ]]; then
         parted -s "$TARGET_DEVICE" mklabel gpt
-        parted -s "$TARGET_DEVICE" mkpart Bonsai-EFI fat32 1MiB 81MiB
+        parted -s "$TARGET_DEVICE" mkpart EFI fat32 1MiB 96MiB
         parted -s "$TARGET_DEVICE" set 1 esp on
+        if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+            EFI_PARTITION="${TARGET_DEVICE}p1"
+        else
+            EFI_PARTITION="${TARGET_DEVICE}1"
+        fi
+        current_start="96MiB"
+        
+        if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
+            local boot_end=$((101 + BOOT_PARTITION_SIZE))
+            parted -s "$TARGET_DEVICE" mkpart BOOT "$BOOT_PARTITION_FS" "$current_start" "${boot_end}MiB"
+            parted -s "$TARGET_DEVICE" set 2 boot on
+            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                BOOT_PARTITION="${TARGET_DEVICE}p2"
+            else
+                BOOT_PARTITION="${TARGET_DEVICE}2"
+            fi
+            current_start="${boot_end}MiB"
+        fi
+        
         get_data_partition_size
         if [[ "$DATA_PARTITION_SIZE" == "100%" ]]; then
-            parted -s "$TARGET_DEVICE" mkpart Bonsai-ROOT ext4 81MiB 100%
+            if [[ -n "$OS_NAME_CLEAN" && "$OS_NAME_CLEAN" != "Linux" ]]; then
+                parted -s "$TARGET_DEVICE" mkpart "$OS_NAME_CLEAN" ext4 "$current_start" 100%
+            else
+                parted -s "$TARGET_DEVICE" mkpart ROOT ext4 "$current_start" 100%
+            fi
         else
-            parted -s "$TARGET_DEVICE" mkpart Bonsai-ROOT ext4 81MiB "${DATA_PARTITION_SIZE}GB"
+            if [[ -n "$OS_NAME_CLEAN" && "$OS_NAME_CLEAN" != "Linux" ]]; then
+                parted -s "$TARGET_DEVICE" mkpart "$OS_NAME_CLEAN" ext4 "$current_start" "${DATA_PARTITION_SIZE}GB"
+            else
+                parted -s "$TARGET_DEVICE" mkpart ROOT ext4 "$current_start" "${DATA_PARTITION_SIZE}GB"
+            fi
         fi
-        EFI_PARTITION="${TARGET_DEVICE}1"
-        DATA_PARTITION="${TARGET_DEVICE}2"
+        
+        if [[ "$USE_SEPARATE_BOOT" == "yes" ]]; then
+            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                DATA_PARTITION="${TARGET_DEVICE}p3"
+            else
+                DATA_PARTITION="${TARGET_DEVICE}3"
+            fi
+        else
+            if [[ "$IS_LOOP_DEVICE" == "yes" ]]; then
+                DATA_PARTITION="${TARGET_DEVICE}p2"
+            else
+                DATA_PARTITION="${TARGET_DEVICE}2"
+            fi
+        fi
     fi
     
     sleep 2
@@ -369,39 +692,56 @@ create_new_partitions() {
     print_success "Partitions created successfully"
 }
 
-# MISSING FUNCTION 2: format_partitions
 format_partitions() {
     print_progress "Formatting partitions..."
     
     if [[ "$INSTALL_TYPE" == "uefi" && -n "$EFI_PARTITION" ]]; then
         print_progress "Formatting EFI partition as FAT32..."
-        mkfs.fat -F32 -n "Bonsai-EFI" "$EFI_PARTITION" >/dev/null 2>&1
+        mkfs.fat -F32 -n "EFI" "$EFI_PARTITION" >/dev/null 2>&1
     fi
     
-    print_progress "Formatting data partition as ext4..."
-    mkfs.ext4 -F -L "Bonsai-ROOT" "$DATA_PARTITION" >/dev/null 2>&1
+    if [[ "$USE_SEPARATE_BOOT" == "yes" && -n "$BOOT_PARTITION" ]]; then
+        print_progress "Formatting boot partition as $BOOT_PARTITION_FS..."
+        case "$BOOT_PARTITION_FS" in
+            "ext2") mkfs.ext2 -F -L "BOOT" "$BOOT_PARTITION" >/dev/null 2>&1;;
+            "ext3") mkfs.ext3 -F -L "BOOT" "$BOOT_PARTITION" >/dev/null 2>&1;;
+            "ext4") mkfs.ext4 -F -L "BOOT" "$BOOT_PARTITION" >/dev/null 2>&1;;
+        esac
+    fi
+    
+    # Handle LUKS encryption for data partition
+    if [[ "$USE_LUKS" == "yes" ]]; then
+        setup_luks_encryption "$DATA_PARTITION"
+    else
+        print_progress "Formatting data partition as ext4..."
+        if [[ -n "$OS_NAME_CLEAN" && "$OS_NAME_CLEAN" != "Linux" ]]; then
+            mkfs.ext4 -F -L "$OS_NAME_CLEAN" "$DATA_PARTITION" >/dev/null 2>&1
+        else
+            mkfs.ext4 -F "$DATA_PARTITION" >/dev/null 2>&1
+        fi
+    fi
     
     print_success "Partitions formatted successfully"
 }
 
-# MISSING FUNCTION 3: display_install_summary
 display_install_summary() {
     clear_and_header
     show_step "6" "Installation Summary"
+
+    echo -e "${CYAN}¤${NC} Source:           ${WHITE}$INSTALL_SOURCE${NC}"
+    echo -e "${CYAN}¤${NC} Target Device:    ${WHITE}$TARGET_DEVICE${NC}"
+    echo -e "${CYAN}¤${NC} Install Type:     ${WHITE}$INSTALL_TYPE${NC}"
+    echo -e "${CYAN}¤${NC} OS Name:          ${WHITE}$OS_NAME${NC}"
+    echo -e "${CYAN}¤${NC} Data Partition:   ${WHITE}$DATA_PARTITION${NC}"
+    [[ -n "$EFI_PARTITION" ]] && echo -e "${CYAN}¤${NC} EFI Partition:    ${WHITE}$EFI_PARTITION${NC}"
+    [[ "$USE_SEPARATE_BOOT" == "yes" ]] && echo -e "${CYAN}¤${NC} Boot Partition:   ${WHITE}$BOOT_PARTITION ($BOOT_PARTITION_FS)${NC}"
+    echo -e "${CYAN}¤${NC} Use Existing:     ${WHITE}$USE_EXISTING_PARTITIONS${NC}"
+    [[ "$USE_LUKS" == "yes" ]] && echo -e "${CYAN}¤${NC} LUKS Encryption:  ${WHITE}Enabled${NC}"
+    [[ "$IS_LOOP_DEVICE" == "yes" ]] && echo -e "${CYAN}¤${NC} Loop Device:      ${WHITE}Yes${NC}"
+    echo""
     
-    echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}                    ${WHITE}INSTALLATION SUMMARY${NC}                   ${CYAN}║${NC}"
-    echo -e "${CYAN}╠══════════════════════════════════════════════════════════╣${NC}"
-    echo -e "${CYAN}║${NC} Source:           ${WHITE}$INSTALL_SOURCE${NC}"
-    echo -e "${CYAN}║${NC} Target Device:    ${WHITE}$TARGET_DEVICE${NC}"
-    echo -e "${CYAN}║${NC} Install Type:     ${WHITE}$INSTALL_TYPE${NC}"
-    echo -e "${CYAN}║${NC} Data Partition:   ${WHITE}$DATA_PARTITION${NC}"
-    [[ -n "$EFI_PARTITION" ]] && echo -e "${CYAN}║${NC} EFI Partition:    ${WHITE}$EFI_PARTITION${NC}"
-    echo -e "${CYAN}║${NC} Use Existing:     ${WHITE}$USE_EXISTING_PARTITIONS${NC}"
-    echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
-    echo
-    
-    print_warning "Please verify the above settings before proceeding!"
+    print_warning "Verify the above settings before proceeding!"
+    echo ""
     print_prompt "Continue with installation? (y/N): "
     read -r confirm
     
@@ -411,7 +751,6 @@ display_install_summary() {
     fi
 }
 
-# MISSING FUNCTION 4: mount_source
 mount_source() {
     if [[ "$INSTALL_SOURCE" == "/" ]]; then
         print_info "Using current root filesystem as source"
@@ -430,7 +769,6 @@ mount_source() {
     fi
 }
 
-# MISSING FUNCTION 5: mount_target
 mount_target() {
     print_progress "Mounting target partitions..."
     
@@ -441,6 +779,16 @@ mount_target() {
     else
         print_error "Failed to mount data partition"
         exit 1
+    fi
+    
+    if [[ "$USE_SEPARATE_BOOT" == "yes" && -n "$BOOT_PARTITION" ]]; then
+        mkdir -p "$MOUNT_TARGET/boot"
+        if mount "$BOOT_PARTITION" "$MOUNT_TARGET/boot"; then
+            print_success "Boot partition mounted"
+        else
+            print_error "Failed to mount boot partition"
+            exit 1
+        fi
     fi
     
     if [[ "$INSTALL_TYPE" == "uefi" && -n "$EFI_PARTITION" ]]; then
@@ -454,7 +802,6 @@ mount_target() {
     fi
 }
 
-# FIXED PROGRESS BAR FUNCTION
 show_rsync_progress() {
     local source="$1"
     local target="$2"
@@ -480,10 +827,10 @@ show_rsync_progress() {
     clear
     
     # Create control file
-    local control_file="/tmp/progress_control_$$"
+    local control_file="/tmp/progress_control_$"
     echo "running" > "$control_file"
     
-    # Simple progress monitor - CLEAN VERSION
+    # Simple progress monitor
     {
         local start_time=$(date +%s)
         local last_size=0
@@ -510,7 +857,7 @@ show_rsync_progress() {
             # Calculate speed and ETA
             local current_time=$(date +%s)
             local elapsed=$((current_time - start_time))
-            local eta="calculating"
+            local eta=""
             
             if [[ $elapsed -gt 10 && $progress_percent -gt 3 ]]; then
                 local speed_mb=0
@@ -530,32 +877,28 @@ show_rsync_progress() {
                 fi
             fi
             
-            # CLEAN: Perfect progress bar width calculation
+            # Progress bar
             local border_line="┌─ Installation Progress ─────────────────────────────────────────────────────────────────────────┐"
             local border_width=${#border_line}
             
-            # Calculate available space for progress bar
             local prefix="│ ["
             local suffix="] $(printf "%3d" $progress_percent)% │"
             local reserved_chars=$((${#prefix} + ${#suffix}))
             local available_width=$((border_width - reserved_chars))
             
-            # Create progress bar
             local bar=""
             local bar_length=$available_width
             local filled=$((progress_percent * bar_length / 100))
             for ((i=0; i<filled; i++)); do bar+="█"; done
             for ((i=filled; i<bar_length; i++)); do bar+="░"; done
             
-            # CLEAN: Display with NO TEXT BLEED
             echo "┌─ Installation Progress ─────────────────────────────────────────────────────────────────────────┐"
             printf "│ [%s] %3d%% │\n" "$bar" "$progress_percent"
             echo "└─────────────────────────────────────────────────────────────────────────────────────────────────┘"
-            printf "│   Files:   %6d / %-6d    ¦ Data: %4dMB / %-4dMB   ¦  Time: %2ds   |   ETA: %-7s │\n" \
+            printf "│ Files: %6d / %-6d │ Data: %4dMB / %-4dMB │ Time: %2ds |  ETA: %-7s \n" \
                 "$current_files" "$total_files" "$current_mb" "$total_mb" "$elapsed" "$eta"
-            echo "└─────────────────────────────────────────────────────────────────────────────────────────────────┘"
+            echo "└───────────────────────────────────────────────────────────────────────────❖"
             
-            # CRITICAL: Clear rest of screen to prevent text bleed
             printf "\033[J"
             
             sleep 2
@@ -635,7 +978,17 @@ update_fstab() {
     
     {
         echo "# <file system> <mount point> <type> <options> <dump> <pass>"
-        echo "UUID=$(blkid -o value -s UUID "$DATA_PARTITION") / $(blkid -o value -s TYPE "$DATA_PARTITION") defaults 0 1"
+        
+        if [[ "$USE_LUKS" == "yes" ]]; then
+            # For LUKS, use the mapper device UUID
+            echo "UUID=$(blkid -o value -s UUID "$LUKS_DEVICE") / $(blkid -o value -s TYPE "$LUKS_DEVICE") defaults 0 1"
+        else
+            echo "UUID=$(blkid -o value -s UUID "$DATA_PARTITION") / $(blkid -o value -s TYPE "$DATA_PARTITION") defaults 0 1"
+        fi
+        
+        if [[ "$USE_SEPARATE_BOOT" == "yes" && -n "$BOOT_PARTITION" ]]; then
+            echo "UUID=$(blkid -o value -s UUID "$BOOT_PARTITION") /boot $(blkid -o value -s TYPE "$BOOT_PARTITION") defaults 0 2"
+        fi
         
         if [[ "$INSTALL_TYPE" == "uefi" && -n "$EFI_PARTITION" ]]; then
             echo "UUID=$(blkid -o value -s UUID "$EFI_PARTITION") /boot/efi vfat umask=0077 0 2"
@@ -647,9 +1000,66 @@ update_fstab() {
     print_success "fstab updated"
 }
 
+update_crypttab() {
+    if [[ "$USE_LUKS" == "yes" ]]; then
+        print_progress "Updating crypttab for LUKS..."
+        
+        local luks_uuid
+        # Use the original partition that was encrypted
+        if [[ -n "$ORIGINAL_DATA_PARTITION" ]]; then
+            luks_uuid=$(blkid -o value -s UUID "$ORIGINAL_DATA_PARTITION" 2>/dev/null)
+        fi
+        
+        if [[ -n "$luks_uuid" ]]; then
+            echo "$LUKS_MAPPER UUID=$luks_uuid none luks,discard" > "$MOUNT_TARGET/etc/crypttab"
+            print_success "crypttab updated with LUKS configuration"
+        else
+            print_warning "Could not determine LUKS UUID for crypttab"
+            # Fallback: try to get from current cryptsetup status
+            local fallback_dev=$(cryptsetup status "$LUKS_MAPPER" 2>/dev/null | grep "device:" | awk '{print $2}')
+            if [[ -n "$fallback_dev" ]]; then
+                luks_uuid=$(blkid -o value -s UUID "$fallback_dev" 2>/dev/null)
+                if [[ -n "$luks_uuid" ]]; then
+                    echo "$LUKS_MAPPER UUID=$luks_uuid none luks,discard" > "$MOUNT_TARGET/etc/crypttab"
+                    print_success "crypttab updated with fallback LUKS configuration"
+                fi
+            fi
+        fi
+    fi
+}
+
+update_initramfs() {
+    if [[ "$USE_LUKS" == "yes" ]]; then
+        print_progress "Updating initramfs for LUKS..."
+        
+        # Ensure cryptsetup is installed in target
+        chroot "$MOUNT_TARGET" /bin/bash -c "
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update >/dev/null 2>&1
+            apt-get install -y cryptsetup cryptsetup-initramfs >/dev/null 2>&1
+        " 2>/dev/null
+        
+        # Update initramfs to include LUKS support
+        chroot "$MOUNT_TARGET" /bin/bash -c "
+            update-initramfs -u -k all >/dev/null 2>&1
+        " 2>/dev/null
+        
+        print_success "initramfs updated with LUKS support"
+    fi
+}
+
 install_grub() {
     clear_and_header
     show_step "8" "Installing Bootloader"
+    
+    # Configure GRUB for LUKS if encryption is enabled
+    if [[ "$USE_LUKS" == "yes" ]]; then
+        print_progress "Configuring GRUB for LUKS encryption..."
+        chroot "$MOUNT_TARGET" /bin/bash -c "
+            echo 'GRUB_ENABLE_CRYPTODISK=y' >> /etc/default/grub
+        " 2>/dev/null
+        print_success "GRUB cryptodisk support enabled"
+    fi
     
     case "$INSTALL_TYPE" in
         "legacy_mbr"|"bios_gpt")
@@ -665,6 +1075,18 @@ install_grub() {
             
         "uefi")
             print_progress "Installing GRUB for UEFI systems..."
+            
+            # Clean up existing EFI directories that might conflict
+            if [[ -d "$MOUNT_TARGET/boot/efi/EFI/BOOT" ]]; then
+                print_progress "Removing existing /boot/efi/EFI/BOOT directory..."
+                rm -rf "$MOUNT_TARGET/boot/efi/EFI/BOOT"
+            fi
+            
+            if [[ -d "$MOUNT_TARGET/boot/efi/EFI/Bonsai" ]]; then
+                print_progress "Removing existing /boot/efi/EFI/Bonsai directory..."
+                rm -rf "$MOUNT_TARGET/boot/efi/EFI/Bonsai"
+            fi
+            
             chroot "$MOUNT_TARGET" /bin/bash -c "
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update >/dev/null 2>&1
@@ -674,6 +1096,10 @@ install_grub() {
             " 2>/dev/null
             ;;
     esac
+    
+    if [[ "$USE_LUKS" == "yes" ]]; then
+        print_info "GRUB configured with LUKS support - you'll be prompted for passphrase at boot"
+    fi
     
     print_success "Bootloader installation completed"
     sleep 1
@@ -693,6 +1119,7 @@ setup_live_boot() {
     if [[ "$setup_live" =~ ^[Yy]$ ]]; then
         print_progress "Setting up live boot environment..."
         
+        # Create directory structure
         mkdir -p "$MOUNT_TARGET/boot/live"
         
         if [[ -n "$ORIGINAL_SQUASHFS" && -f "$ORIGINAL_SQUASHFS" ]]; then
@@ -700,17 +1127,29 @@ setup_live_boot() {
             cp "$ORIGINAL_SQUASHFS" "$MOUNT_TARGET/boot/live/filesystem.squashfs"
             print_success "Squashfs copied to /boot/live/filesystem.squashfs"
         elif [[ -f "/run/live/medium/live/filesystem.squashfs" ]]; then
-            print_progress "Copying default squashfs to target system..."
+            print_progress "Copying Debian squashfs to target system..."
             cp "/run/live/medium/live/filesystem.squashfs" "$MOUNT_TARGET/boot/live/filesystem.squashfs"
+            print_success "Squashfs copied to /boot/live/filesystem.squashfs"
+        elif [[ -f "/cdrom/casper/filesystem.squashfs" ]]; then
+            print_progress "Copying Ubuntu squashfs to target system..."
+            cp "/cdrom/casper/filesystem.squashfs" "$MOUNT_TARGET/boot/live/filesystem.squashfs"
             print_success "Squashfs copied to /boot/live/filesystem.squashfs"
         else
             print_warning "No squashfs file found to copy"
             return
         fi
         
-        print_progress "Updating GRUB configuration..."
-        chroot "$MOUNT_TARGET" /bin/bash -c "update-grub >/dev/null 2>&1" 2>/dev/null
+        # Install Supreme Bonsai Theme
+        print_progress "Installing Supreme Bonsai Theme..."
+        chroot "$MOUNT_TARGET" /bin/bash -c "
+            cd /tmp
+            wget -q https://raw.githubusercontent.com/GlitchLinux/BonsaiLinux/refs/heads/main/supreme-bonsai-theme.sh
+            bash supreme-bonsai-theme.sh >/dev/null 2>&1
+            sleep 1
+            update-grub >/dev/null 2>&1
+        " 2>/dev/null
         
+        print_success "Supreme Bonsai Theme installed"
         print_success "Live boot setup completed"
     else
         print_info "Skipping live boot setup"
@@ -726,44 +1165,75 @@ verify_installation() {
     local errors=0
     
     if ls "$MOUNT_TARGET/boot/vmlinuz-"* 1>/dev/null 2>&1; then
-        print_success "✓ Kernel found"
+        echo -e "${CYAN}¤${NC} Kernel:           ${GREEN}✓ Found${NC}"
     else
-        print_error "✗ No kernel found"
+        echo -e "${CYAN}¤${NC} Kernel:           ${RED}✗ Missing${NC}"
         ((errors++))
     fi
     
     if ls "$MOUNT_TARGET/boot/initrd.img-"* 1>/dev/null 2>&1; then
-        print_success "✓ Initramfs found"
+        echo -e "${CYAN}¤${NC} Initramfs:        ${GREEN}✓ Found${NC}"
     else
-        print_error "✗ No initramfs found"
+        echo -e "${CYAN}¤${NC} Initramfs:        ${RED}✗ Missing${NC}"
         ((errors++))
     fi
     
     if [[ -f "$MOUNT_TARGET/boot/grub/grub.cfg" ]]; then
-        print_success "✓ GRUB configuration found"
+        echo -e "${CYAN}¤${NC} GRUB Config:      ${GREEN}✓ Found${NC}"
     else
-        print_error "✗ GRUB configuration missing"
+        echo -e "${CYAN}¤${NC} GRUB Config:      ${RED}✗ Missing${NC}"
         ((errors++))
     fi
     
-    if [[ -f "$MOUNT_TARGET/etc/fstab" ]] && grep -q "$(blkid -o value -s UUID "$DATA_PARTITION")" "$MOUNT_TARGET/etc/fstab"; then
-        print_success "✓ fstab configured correctly"
+    if [[ -f "$MOUNT_TARGET/etc/fstab" ]]; then
+        if [[ "$USE_LUKS" == "yes" ]]; then
+            if grep -q "$(blkid -o value -s UUID "$LUKS_DEVICE")" "$MOUNT_TARGET/etc/fstab"; then
+                echo -e "${CYAN}¤${NC} fstab (LUKS):     ${GREEN}✓ Configured${NC}"
+            else
+                echo -e "${CYAN}¤${NC} fstab (LUKS):     ${RED}✗ Issue${NC}"
+                ((errors++))
+            fi
+        else
+            if grep -q "$(blkid -o value -s UUID "$DATA_PARTITION")" "$MOUNT_TARGET/etc/fstab"; then
+                echo -e "${CYAN}¤${NC} fstab:            ${GREEN}✓ Configured${NC}"
+            else
+                echo -e "${CYAN}¤${NC} fstab:            ${RED}✗ Issue${NC}"
+                ((errors++))
+            fi
+        fi
     else
-        print_error "✗ fstab configuration issue"
+        echo -e "${CYAN}¤${NC} fstab:            ${RED}✗ Missing${NC}"
         ((errors++))
+    fi
+    
+    if [[ "$USE_LUKS" == "yes" ]]; then
+        if [[ -f "$MOUNT_TARGET/etc/crypttab" ]] && grep -q "$LUKS_MAPPER" "$MOUNT_TARGET/etc/crypttab"; then
+            echo -e "${CYAN}¤${NC} crypttab:         ${GREEN}✓ Configured${NC}"
+        else
+            echo -e "${CYAN}¤${NC} crypttab:         ${YELLOW}⚠ Incomplete${NC}"
+        fi
+        
+        if grep -q "GRUB_ENABLE_CRYPTODISK=y" "$MOUNT_TARGET/etc/default/grub"; then
+            echo -e "${CYAN}¤${NC} GRUB Cryptodisk:  ${GREEN}✓ Enabled${NC}"
+        else
+            echo -e "${CYAN}¤${NC} GRUB Cryptodisk:  ${RED}✗ Disabled${NC}"
+            ((errors++))
+        fi
     fi
     
     if [[ "$INSTALL_TYPE" == "uefi" ]]; then
         if [[ -f "$MOUNT_TARGET/boot/efi/EFI/BOOT/bootx64.efi" ]] || [[ -d "$MOUNT_TARGET/boot/efi/EFI/debian" ]] || [[ -d "$MOUNT_TARGET/boot/efi/EFI/Debian" ]]; then
-            print_success "✓ UEFI bootloader found"
+            echo -e "${CYAN}¤${NC} UEFI Bootloader:  ${GREEN}✓ Found${NC}"
         else
-            print_warning "⚠ UEFI bootloader may not be properly installed"
+            echo -e "${CYAN}¤${NC} UEFI Bootloader:  ${YELLOW}⚠ May be missing${NC}"
         fi
     fi
     
-    if [[ -f "$MOUNT_TARGET/live/filesystem.squashfs" ]]; then
-        print_success "✓ Live boot environment configured"
+    if [[ -f "$MOUNT_TARGET/boot/live/filesystem.squashfs" ]]; then
+        echo -e "${CYAN}¤${NC} Live Boot:        ${GREEN}✓ Configured${NC}"
     fi
+    
+    echo
     
     if [[ $errors -eq 0 ]]; then
         print_success "Installation verification passed!"
@@ -775,6 +1245,12 @@ verify_installation() {
 }
 
 cleanup_mounts() {
+    # Close LUKS device if it was opened
+    if [[ "$USE_LUKS" == "yes" && -b "$LUKS_DEVICE" ]]; then
+        print_progress "Closing LUKS device..."
+        cryptsetup luksClose "$LUKS_MAPPER" 2>/dev/null || true
+    fi
+    
     umount "$MOUNT_TARGET/dev/pts" 2>/dev/null || true
     umount "$MOUNT_TARGET/run" 2>/dev/null || true
     umount "$MOUNT_TARGET/sys" 2>/dev/null || true
@@ -784,6 +1260,11 @@ cleanup_mounts() {
     if [[ "$INSTALL_TYPE" == "uefi" && -n "$EFI_PARTITION" ]]; then
         umount "$MOUNT_TARGET/boot/efi" 2>/dev/null || true
     fi
+    
+    if [[ "$USE_SEPARATE_BOOT" == "yes" && -n "$BOOT_PARTITION" ]]; then
+        umount "$MOUNT_TARGET/boot" 2>/dev/null || true
+    fi
+    
     umount "$MOUNT_TARGET" 2>/dev/null || true
     
     if [[ "$INSTALL_SOURCE" == "$MOUNT_LIVE" ]]; then
@@ -794,18 +1275,26 @@ cleanup_mounts() {
 show_completion() {
     clear_and_header
     
-    echo -e "${GREEN}╔══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║${NC}${WHITE}INSTALLATION COMPLETED SUCCESSFULLY!${NC}            ${GREEN}║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════════════════════════╝${NC}"
+    	              # INSTALLATION COMPLETED
+    echo -e "${CYAN}╔══════════════════════════❖${NC}"
+    echo -e "${CYAN}║${NC}${WHITE}INSTALLATION COMPLETED${NC}${CYAN}${NC}"
+    echo -e "${CYAN}╚═══════════════════════════════════════════════❖${NC}"
+    echo -e "${CYAN}║${NC} Target Device:    ${WHITE}$TARGET_DEVICE${NC}"
+    echo -e "${CYAN}║${NC} Data Partition:   ${WHITE}$DATA_PARTITION${NC}"
+    [[ -n "$EFI_PARTITION" ]] && echo -e "${CYAN}║${NC} EFI Partition:    ${WHITE}$EFI_PARTITION${NC}"
+    [[ "$USE_SEPARATE_BOOT" == "yes" ]] && echo -e "${CYAN}║${NC} Boot Partition:   ${WHITE}$BOOT_PARTITION ($BOOT_PARTITION_FS)${NC}"
+    echo -e "${CYAN}║${NC} Boot Type:        ${WHITE}$INSTALL_TYPE${NC}"
+    echo -e "${CYAN}║${NC} OS Name:          ${WHITE}$OS_NAME${NC}"
+    [[ "$USE_LUKS" == "yes" ]] && echo -e "${CYAN}║${NC} LUKS Encryption:  ${WHITE}Enabled${NC}"
+    [[ "$IS_LOOP_DEVICE" == "yes" ]] && echo -e "${CYAN}║${NC} Loop Device:      ${WHITE}Yes${NC}"
+    [[ -f "$MOUNT_TARGET/boot/live/filesystem.squashfs" ]] && echo -e "${CYAN}║${NC} Live Boot:        ${WHITE}Enabled${NC}"
+    echo -e "${CYAN}╚═══════════════════════════════════════════════❖${NC}"
     echo
     
-    print_main "Installation Details:"
-    echo -e "  ${CYAN}•${NC} Target Device:   ${WHITE}$TARGET_DEVICE${NC}" 
-    echo -e "  ${CYAN}•${NC} Data Partition:  ${WHITE}$DATA_PARTITION${NC}"
-    [[ -n "$EFI_PARTITION" ]] && echo -e "  ${CYAN}•${NC} EFI Partition:   ${WHITE}$EFI_PARTITION${NC}"
-    echo -e "  ${CYAN}•${NC} Boot Type:       ${WHITE}$INSTALL_TYPE${NC}"
-    [[ -f "$MOUNT_TARGET/live/filesystem.squashfs" ]] && echo -e "  ${CYAN}•${NC} Live Boot:       ${WHITE}Enabled${NC}"
-    echo
+    if [[ "$USE_LUKS" == "yes" ]]; then
+        print_warning "IMPORTANT: Remember your LUKS passphrase - you'll need it to boot!"
+        echo
+    fi
     
     print_warning "Remove installation media and reboot to use the new system"
     echo
@@ -814,7 +1303,7 @@ show_completion() {
 main() {
     check_root
     
-    install_dependencies
+    #install_dependencies
     select_install_source
     select_install_type
     select_target_disk
@@ -829,6 +1318,8 @@ main() {
     sync_filesystem
     prepare_chroot
     update_fstab
+    update_crypttab
+    update_initramfs
     install_grub
     setup_live_boot
     
