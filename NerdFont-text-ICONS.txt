@@ -1,4 +1,5 @@
 cd /home/ 
-wget https://raw.githubusercontent.com/GlitchLinux/ICONPACK/refs/heads/main/NerdFont-ICONS-CATEGORIES.txt
-l3afpad NerdFont-ICONS-CATEGORIES.txt
+wget https://github.com/GlitchLinux/ICONPACK/blob/main/NerdFont-ICONS-CATEGORIES.txt
+sudo chmod 777 NerdFont-ICONS-CATEGORIES.txt
+cat NerdFont-ICONS-CATEGORIES.txt
 exit
