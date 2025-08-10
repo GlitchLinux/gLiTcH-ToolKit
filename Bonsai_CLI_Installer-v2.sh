@@ -1105,18 +1105,6 @@ install_grub() {
             
         "uefi")
             print_progress "Installing GRUB for UEFI systems..."
-            
-            # Clean up existing EFI directories that might conflict
-            if [[ -d "$MOUNT_TARGET/boot/efi/EFI/BOOT" ]]; then
-                print_progress "Removing existing EFI/BOOT directory..."
-                rm -rf "$MOUNT_TARGET/boot/efi/EFI/BOOT"
-            fi
-            
-            if [[ -d "$MOUNT_TARGET/boot/efi/EFI/Bonsai" ]]; then
-                print_progress "Removing existing EFI/Bonsai directory..."
-                rm -rf "$MOUNT_TARGET/boot/efi/EFI/Bonsai"
-            fi
-            
             chroot "$MOUNT_TARGET" /bin/bash -c "
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update >/dev/null 2>&1
