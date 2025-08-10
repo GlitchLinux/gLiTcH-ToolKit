@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# Enhanced Debian Live Installer - Complete Version with LUKS, Boot Partition & Loop Device Support
+# Enhanced Bonsai Live Installer - Complete Version with LUKS, Boot Partition & Loop Device Support
 # All functions included - ready to run
 
 set -e
 
 # Enhanced color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
+RED='\033[38;5;198m'
+GREEN='\033[38;5;198m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
+BLUE='\033[0;96m'
 WHITE='\033[1;37m'
 MAGENTA='\033[38;5;198m'
 BRIGHT_GREEN='\033[0;96m'
