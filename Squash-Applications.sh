@@ -35,7 +35,7 @@ check_dependencies() {
     local deps=("mksquashfs" "which" "find")
     
     for dep in "${deps[@]}"; do
-        if ! command -v "$dep" &> /dev/null; then
+        if ! command -v "$dep" >/dev/null 2>&1; then
             print_error "$dep is required but not installed."
             if [[ "$dep" == "mksquashfs" ]]; then
                 echo "Please install squashfs-tools: sudo apt install squashfs-tools"
@@ -53,14 +53,17 @@ safe_copy() {
     # Remove leading slash to get relative path
     local rel_path="${src_file#/}"
     local dest_file="$dest_root/$rel_path"
-    local dest_dir=$(dirname "$dest_file")
+    local dest_dir
+    dest_dir=$(dirname "$dest_file")
     
     # Create directory structure
     mkdir -p "$dest_dir"
     
     # Copy file if it exists and is readable
     if [[ -r "$src_file" ]]; then
-        cp "$src_file" "$dest_file" 2>/dev/null && return 0
+        if cp "$src_file" "$dest_file" 2>/dev/null; then
+            return 0
+        fi
     fi
     return 1
 }
@@ -75,7 +78,7 @@ find_app_files() {
     
     # Find executable in PATH and get its location
     local exec_path=""
-    if command -v "$app_name" &> /dev/null; then
+    if command -v "$app_name" >/dev/null 2>&1; then
         exec_path=$(which "$app_name")
         print_status "Found executable: $exec_path"
         
@@ -86,20 +89,19 @@ find_app_files() {
         fi
         
         # Find and copy library dependencies
-        if [[ -x "$exec_path" ]] && command -v ldd &> /dev/null; then
+        if [[ -x "$exec_path" ]] && command -v ldd >/dev/null 2>&1; then
             print_status "🔗 Finding library dependencies..."
             local lib_count=0
+            local lib_file
             
-            while read -r lib; do
-                if [[ -f "$lib" ]] && safe_copy "$lib" "$squashfs_root"; then
-                    ((lib_count++))
+            # Process library dependencies one by one
+            ldd "$exec_path" 2>/dev/null | grep -E "=> /" | awk '{print $3}' | while IFS= read -r lib_file; do
+                if [[ -f "$lib_file" ]] && safe_copy "$lib_file" "$squashfs_root"; then
+                    echo "Library copied: $lib_file" >&2
                 fi
-            done < <(ldd "$exec_path" 2>/dev/null | grep -E "=> /" | awk '{print $3}')
+            done
             
-            if [[ $lib_count -gt 0 ]]; then
-                print_status "✓ Copied $lib_count library dependencies"
-                found_files=$((found_files + lib_count))
-            fi
+            print_status "✓ Processed library dependencies"
         fi
     fi
     
@@ -124,17 +126,19 @@ find_app_files() {
     )
     
     print_status "🗂️  Searching system directories..."
+    local pattern
+    local file
     for pattern in "${search_patterns[@]}"; do
-        for file in $pattern 2>/dev/null; do
-            if [[ -e "$file" ]]; then
+        for file in $pattern; do
+            if [[ -e "$file" ]] 2>/dev/null; then
                 if [[ -d "$file" ]]; then
                     # Copy entire directory structure
                     print_status "📁 Found directory: $file"
-                    while read -r subfile; do
-                        if safe_copy "$subfile" "$squashfs_root"; then
-                            ((found_files++))
-                        fi
-                    done < <(find "$file" -type f)
+                    local subfile
+                    find "$file" -type f 2>/dev/null | while IFS= read -r subfile; do
+                        safe_copy "$subfile" "$squashfs_root" && echo "File copied: $subfile" >&2
+                    done
+                    ((found_files++))
                 elif [[ -f "$file" ]]; then
                     # Copy individual file
                     if safe_copy "$file" "$squashfs_root"; then
@@ -143,7 +147,7 @@ find_app_files() {
                     fi
                 fi
             fi
-        done
+        done 2>/dev/null
     done
     
     # Search for configuration files in /etc
@@ -158,16 +162,17 @@ find_app_files() {
         "/etc/conf.d/$app_name"
     )
     
+    local config_item
     for pattern in "${config_patterns[@]}"; do
-        for config_item in $pattern 2>/dev/null; do
-            if [[ -e "$config_item" ]]; then
+        for config_item in $pattern; do
+            if [[ -e "$config_item" ]] 2>/dev/null; then
                 if [[ -d "$config_item" ]]; then
                     print_status "📁 Found config directory: $config_item"
-                    while read -r config_file; do
-                        if safe_copy "$config_file" "$squashfs_root"; then
-                            ((found_files++))
-                        fi
-                    done < <(find "$config_item" -type f)
+                    local config_file
+                    find "$config_item" -type f 2>/dev/null | while IFS= read -r config_file; do
+                        safe_copy "$config_file" "$squashfs_root" && echo "Config copied: $config_file" >&2
+                    done
+                    ((found_files++))
                 elif [[ -f "$config_item" ]]; then
                     if safe_copy "$config_item" "$squashfs_root"; then
                         ((found_files++))
@@ -175,7 +180,7 @@ find_app_files() {
                     fi
                 fi
             fi
-        done
+        done 2>/dev/null
     done
     
     # Search for systemd service files
@@ -189,15 +194,16 @@ find_app_files() {
         "/etc/systemd/system/*$app_name*.service"
     )
     
+    local service_file
     for pattern in "${service_patterns[@]}"; do
-        for service_file in $pattern 2>/dev/null; do
-            if [[ -f "$service_file" ]]; then
+        for service_file in $pattern; do
+            if [[ -f "$service_file" ]] 2>/dev/null; then
                 if safe_copy "$service_file" "$squashfs_root"; then
                     ((found_files++))
                     print_status "🔧 Found service: $service_file"
                 fi
             fi
-        done
+        done 2>/dev/null
     done
     
     # Search for variable data in /var
@@ -212,29 +218,32 @@ find_app_files() {
     for pattern in "${var_patterns[@]}"; do
         if [[ -d "$pattern" ]]; then
             print_status "💾 Found data directory: $pattern"
-            while read -r data_file; do
-                if safe_copy "$data_file" "$squashfs_root"; then
-                    ((found_files++))
-                fi
-            done < <(find "$pattern" -type f)
+            local data_file
+            find "$pattern" -type f 2>/dev/null | while IFS= read -r data_file; do
+                safe_copy "$data_file" "$squashfs_root" && echo "Data copied: $data_file" >&2
+            done
+            ((found_files++))
         fi
     done
     
     # Try to find files using dpkg if available
-    if command -v dpkg-query &> /dev/null; then
-        if dpkg-query -W "$app_name" &> /dev/null 2>&1; then
+    if command -v dpkg-query >/dev/null 2>&1; then
+        if dpkg-query -W "$app_name" >/dev/null 2>&1; then
             print_status "📦 Found package: $app_name, extracting files..."
+            local pkg_file
             
-            while read -r pkg_file; do
-                if [[ -f "$pkg_file" ]] && safe_copy "$pkg_file" "$squashfs_root"; then
-                    ((found_files++))
+            dpkg-query -L "$app_name" 2>/dev/null | grep -v "^/\.$" | sort | while IFS= read -r pkg_file; do
+                if [[ -f "$pkg_file" ]]; then
+                    safe_copy "$pkg_file" "$squashfs_root" && echo "Package file copied: $pkg_file" >&2
                 fi
-            done < <(dpkg-query -L "$app_name" 2>/dev/null | grep -v "^/\.$" | sort)
+            done
+            ((found_files++))
         fi
     fi
     
     # Count actual files copied
-    local actual_files=$(find "$squashfs_root" -type f 2>/dev/null | wc -l)
+    local actual_files
+    actual_files=$(find "$squashfs_root" -type f 2>/dev/null | wc -l)
     
     if [[ $actual_files -eq 0 ]]; then
         print_warning "No files found for application: $app_name"
@@ -277,6 +286,7 @@ main() {
     local successful_apps=()
     
     # Process each application (files will merge naturally in same filesystem structure)
+    local app
     for app in "${apps[@]}"; do
         echo
         print_status "🔄 Processing application: $app"
@@ -296,9 +306,11 @@ main() {
     
     # Show filesystem structure
     print_status "📂 Filesystem structure created:"
-    find "$squashfs_root" -type d | head -20 | sed "s|$squashfs_root|.|g"
-    if [[ $(find "$squashfs_root" -type d | wc -l) -gt 20 ]]; then
-        echo "   ... and $(($(find "$squashfs_root" -type d | wc -l) - 20)) more directories"
+    find "$squashfs_root" -type d 2>/dev/null | head -20 | sed "s|$squashfs_root|.|g"
+    local dir_count
+    dir_count=$(find "$squashfs_root" -type d 2>/dev/null | wc -l)
+    if [[ $dir_count -gt 20 ]]; then
+        echo "   ... and $((dir_count - 20)) more directories"
     fi
     
     # Determine output filename
@@ -313,7 +325,11 @@ main() {
         read -r custom_name
         
         if [[ -z "$custom_name" ]]; then
-            output_name="$(IFS=-; echo "${successful_apps[*]}").squashfs"
+            local joined_names
+            IFS=-
+            joined_names="${successful_apps[*]}"
+            IFS=' '
+            output_name="$joined_names.squashfs"
         else
             output_name="${custom_name}.squashfs"
         fi
@@ -331,9 +347,15 @@ main() {
         print_success "🎉 SquashFS created successfully!"
         echo
         echo "📁 Output file: $output_path"
-        echo "📊 File size: $(du -h "$output_path" | cut -f1)"
-        echo "📈 File count: $(find "$squashfs_root" -type f | wc -l) files"
-        echo "🗂️  Directory count: $(find "$squashfs_root" -type d | wc -l) directories"
+        local file_size
+        file_size=$(du -h "$output_path" | cut -f1)
+        echo "📊 File size: $file_size"
+        local file_count
+        file_count=$(find "$squashfs_root" -type f 2>/dev/null | wc -l)
+        echo "📈 File count: $file_count files"
+        local dir_count_final
+        dir_count_final=$(find "$squashfs_root" -type d 2>/dev/null | wc -l)
+        echo "🗂️  Directory count: $dir_count_final directories"
         echo
         echo "🔧 To mount at boot (add to /etc/fstab):"
         echo "   $output_path / squashfs loop,ro 0 0"
