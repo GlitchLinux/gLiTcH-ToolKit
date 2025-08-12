@@ -72,6 +72,7 @@ safe_copy() {
 find_app_files() {
     local app_name="$1"
     local squashfs_root="$2"
+    local include_system_configs="$3"
     local found_files=0
     
     print_status "🔍 Searching for files related to: $app_name"
@@ -150,81 +151,85 @@ find_app_files() {
         done 2>/dev/null
     done
     
-    # Search for configuration files in /etc
-    print_status "⚙️  Searching for configuration files..."
-    local config_patterns=(
-        "/etc/$app_name"
-        "/etc/$app_name.conf"
-        "/etc/$app_name.cfg"
-        "/etc/$app_name/*"
-        "/etc/default/$app_name"
-        "/etc/sysconfig/$app_name"
-        "/etc/conf.d/$app_name"
-    )
-    
-    local config_item
-    for pattern in "${config_patterns[@]}"; do
-        for config_item in $pattern; do
-            if [[ -e "$config_item" ]] 2>/dev/null; then
-                if [[ -d "$config_item" ]]; then
-                    print_status "📁 Found config directory: $config_item"
-                    local config_file
-                    find "$config_item" -type f 2>/dev/null | while IFS= read -r config_file; do
-                        safe_copy "$config_file" "$squashfs_root" && echo "Config copied: $config_file" >&2
-                    done
-                    ((found_files++))
-                elif [[ -f "$config_item" ]]; then
-                    if safe_copy "$config_item" "$squashfs_root"; then
+    # Search for configuration files in /etc (only if user chose to include system configs)
+    if [[ "$include_system_configs" == "y" ]]; then
+        print_status "⚙️  Searching for configuration files..."
+        local config_patterns=(
+            "/etc/$app_name"
+            "/etc/$app_name.conf"
+            "/etc/$app_name.cfg"
+            "/etc/$app_name/*"
+            "/etc/default/$app_name"
+            "/etc/sysconfig/$app_name"
+            "/etc/conf.d/$app_name"
+        )
+        
+        local config_item
+        for pattern in "${config_patterns[@]}"; do
+            for config_item in $pattern; do
+                if [[ -e "$config_item" ]] 2>/dev/null; then
+                    if [[ -d "$config_item" ]]; then
+                        print_status "📁 Found config directory: $config_item"
+                        local config_file
+                        find "$config_item" -type f 2>/dev/null | while IFS= read -r config_file; do
+                            safe_copy "$config_file" "$squashfs_root" && echo "Config copied: $config_file" >&2
+                        done
                         ((found_files++))
-                        print_status "⚙️  Found config: $config_item"
+                    elif [[ -f "$config_item" ]]; then
+                        if safe_copy "$config_item" "$squashfs_root"; then
+                            ((found_files++))
+                            print_status "⚙️  Found config: $config_item"
+                        fi
                     fi
                 fi
-            fi
-        done 2>/dev/null
-    done
-    
-    # Search for systemd service files
-    print_status "🔧 Searching for service files..."
-    local service_patterns=(
-        "/lib/systemd/system/$app_name.service"
-        "/lib/systemd/system/*$app_name*.service"
-        "/usr/lib/systemd/system/$app_name.service"
-        "/usr/lib/systemd/system/*$app_name*.service"
-        "/etc/systemd/system/$app_name.service"
-        "/etc/systemd/system/*$app_name*.service"
-    )
-    
-    local service_file
-    for pattern in "${service_patterns[@]}"; do
-        for service_file in $pattern; do
-            if [[ -f "$service_file" ]] 2>/dev/null; then
-                if safe_copy "$service_file" "$squashfs_root"; then
-                    ((found_files++))
-                    print_status "🔧 Found service: $service_file"
+            done 2>/dev/null
+        done
+        
+        # Search for systemd service files (only if including system configs)
+        print_status "🔧 Searching for service files..."
+        local service_patterns=(
+            "/lib/systemd/system/$app_name.service"
+            "/lib/systemd/system/*$app_name*.service"
+            "/usr/lib/systemd/system/$app_name.service"
+            "/usr/lib/systemd/system/*$app_name*.service"
+            "/etc/systemd/system/$app_name.service"
+            "/etc/systemd/system/*$app_name*.service"
+        )
+        
+        local service_file
+        for pattern in "${service_patterns[@]}"; do
+            for service_file in $pattern; do
+                if [[ -f "$service_file" ]] 2>/dev/null; then
+                    if safe_copy "$service_file" "$squashfs_root"; then
+                        ((found_files++))
+                        print_status "🔧 Found service: $service_file"
+                    fi
                 fi
+            done 2>/dev/null
+        done
+        
+        # Search for variable data in /var (only if including system configs)
+        print_status "💾 Searching for application data..."
+        local var_patterns=(
+            "/var/lib/$app_name"
+            "/var/cache/$app_name"
+            "/var/log/$app_name"
+            "/var/spool/$app_name"
+        )
+        
+        for pattern in "${var_patterns[@]}"; do
+            if [[ -d "$pattern" ]]; then
+                print_status "💾 Found data directory: $pattern"
+                local data_file
+                find "$pattern" -type f 2>/dev/null | while IFS= read -r data_file; do
+                    safe_copy "$data_file" "$squashfs_root" && echo "Data copied: $data_file" >&2
+                done
+                ((found_files++))
             fi
-        done 2>/dev/null
-    done
-    
-    # Search for variable data in /var
-    print_status "💾 Searching for application data..."
-    local var_patterns=(
-        "/var/lib/$app_name"
-        "/var/cache/$app_name"
-        "/var/log/$app_name"
-        "/var/spool/$app_name"
-    )
-    
-    for pattern in "${var_patterns[@]}"; do
-        if [[ -d "$pattern" ]]; then
-            print_status "💾 Found data directory: $pattern"
-            local data_file
-            find "$pattern" -type f 2>/dev/null | while IFS= read -r data_file; do
-                safe_copy "$data_file" "$squashfs_root" && echo "Data copied: $data_file" >&2
-            done
-            ((found_files++))
-        fi
-    done
+        done
+    else
+        print_status "⏭️  Skipping system configuration files (user choice)"
+    fi
     
     # Try to find files using dpkg if available
     if command -v dpkg-query >/dev/null 2>&1; then
@@ -276,6 +281,33 @@ main() {
     read -ra apps <<< "$app_input"
     
     print_status "Processing ${#apps[@]} application(s): ${apps[*]}"
+    echo
+    
+    # Ask user about including system configuration files
+    echo "📋 Package Options:"
+    echo "   📦 App files only: Executables, libraries, shared data"
+    echo "   🛠️  Full system: + Config files, services, /var data"
+    echo
+    while true; do
+        echo -n "Include system configuration files? [y/N]: "
+        read -r include_configs
+        
+        case "$include_configs" in
+            [Yy]|[Yy][Ee][Ss])
+                include_configs="y"
+                print_status "✅ Will include system configuration files"
+                break
+                ;;
+            [Nn]|[Nn][Oo]|"")
+                include_configs="n"
+                print_status "📦 Will package app files only"
+                break
+                ;;
+            *)
+                print_warning "Please enter 'y' for yes or 'n' for no"
+                ;;
+        esac
+    done
     
     # Create temporary directory with filesystem structure
     local temp_base="/tmp/squashfs_builder_$$"
@@ -290,7 +322,7 @@ main() {
     for app in "${apps[@]}"; do
         echo
         print_status "🔄 Processing application: $app"
-        if find_app_files "$app" "$squashfs_root"; then
+        if find_app_files "$app" "$squashfs_root" "$include_configs"; then
             successful_apps+=("$app")
         fi
     done
