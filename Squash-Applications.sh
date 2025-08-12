@@ -90,11 +90,11 @@ find_app_files() {
             print_status "🔗 Finding library dependencies..."
             local lib_count=0
             
-            ldd "$exec_path" 2>/dev/null | grep -E "=> /" | awk '{print $3}' | while read -r lib; do
+            while read -r lib; do
                 if [[ -f "$lib" ]] && safe_copy "$lib" "$squashfs_root"; then
                     ((lib_count++))
                 fi
-            done
+            done < <(ldd "$exec_path" 2>/dev/null | grep -E "=> /" | awk '{print $3}')
             
             if [[ $lib_count -gt 0 ]]; then
                 print_status "✓ Copied $lib_count library dependencies"
@@ -125,16 +125,16 @@ find_app_files() {
     
     print_status "🗂️  Searching system directories..."
     for pattern in "${search_patterns[@]}"; do
-       # for file in $pattern 2>/dev/null; do
+        for file in $pattern 2>/dev/null; do
             if [[ -e "$file" ]]; then
                 if [[ -d "$file" ]]; then
                     # Copy entire directory structure
                     print_status "📁 Found directory: $file"
-                    find "$file" -type f | while read -r subfile; do
+                    while read -r subfile; do
                         if safe_copy "$subfile" "$squashfs_root"; then
                             ((found_files++))
                         fi
-                    done
+                    done < <(find "$file" -type f)
                 elif [[ -f "$file" ]]; then
                     # Copy individual file
                     if safe_copy "$file" "$squashfs_root"; then
@@ -163,11 +163,11 @@ find_app_files() {
             if [[ -e "$config_item" ]]; then
                 if [[ -d "$config_item" ]]; then
                     print_status "📁 Found config directory: $config_item"
-                    find "$config_item" -type f | while read -r config_file; do
+                    while read -r config_file; do
                         if safe_copy "$config_file" "$squashfs_root"; then
                             ((found_files++))
                         fi
-                    done
+                    done < <(find "$config_item" -type f)
                 elif [[ -f "$config_item" ]]; then
                     if safe_copy "$config_item" "$squashfs_root"; then
                         ((found_files++))
@@ -212,11 +212,11 @@ find_app_files() {
     for pattern in "${var_patterns[@]}"; do
         if [[ -d "$pattern" ]]; then
             print_status "💾 Found data directory: $pattern"
-            find "$pattern" -type f | while read -r data_file; do
+            while read -r data_file; do
                 if safe_copy "$data_file" "$squashfs_root"; then
                     ((found_files++))
                 fi
-            done
+            done < <(find "$pattern" -type f)
         fi
     done
     
@@ -224,14 +224,12 @@ find_app_files() {
     if command -v dpkg-query &> /dev/null; then
         if dpkg-query -W "$app_name" &> /dev/null 2>&1; then
             print_status "📦 Found package: $app_name, extracting files..."
-            local pkg_files
-            pkg_files=$(dpkg-query -L "$app_name" 2>/dev/null | grep -v "^/\.$" | sort)
             
-            echo "$pkg_files" | while read -r pkg_file; do
+            while read -r pkg_file; do
                 if [[ -f "$pkg_file" ]] && safe_copy "$pkg_file" "$squashfs_root"; then
                     ((found_files++))
                 fi
-            done
+            done < <(dpkg-query -L "$app_name" 2>/dev/null | grep -v "^/\.$" | sort)
         fi
     fi
     
