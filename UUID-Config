@@ -1,0 +1,463 @@
+#!/bin/bash
+
+# ext-uuid-setter.sh - Script to manually set UUID on ext partitions
+# Requires root privileges and tune2fs utility
+
+set -euo pipefail  # Exit on error, undefined vars, pipe failures
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Function to check if running as root
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        print_error "This script must be run as root (use sudo)"
+        exit 1
+    fi
+}
+
+# Function to check if tune2fs is available
+check_dependencies() {
+    if ! command -v tune2fs &> /dev/null; then
+        print_error "tune2fs command not found. Please install e2fsprogs package:"
+        echo "  Ubuntu/Debian: sudo apt install e2fsprogs"
+        echo "  RHEL/CentOS/Fedora: sudo dnf install e2fsprogs"
+        echo "  Arch: sudo pacman -S e2fsprogs"
+        exit 1
+    fi
+    
+    if ! command -v blkid &> /dev/null; then
+        print_error "blkid command not found. Please install util-linux package"
+        exit 1
+    fi
+    
+    if ! command -v e2fsck &> /dev/null; then
+        print_error "e2fsck command not found. Please install e2fsprogs package"
+        exit 1
+    fi
+}
+
+# Function to validate UUID format
+validate_uuid() {
+    local uuid="$1"
+    # Convert to lowercase for validation
+    uuid=$(echo "$uuid" | tr '[:upper:]' '[:lower:]')
+    local uuid_regex='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    
+    if [[ ! "$uuid" =~ $uuid_regex ]]; then
+        print_error "UUID must be in format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        print_error "Where x = hexadecimal digit (0-9, a-f, A-F)"
+        return 1
+    fi
+    return 0
+}
+
+# Function to check if partition exists and is ext filesystem
+validate_partition() {
+    local device="$1"
+    
+    # Check if device exists
+    if [[ ! -b "$device" ]]; then
+        print_error "Device $device does not exist or is not a block device"
+        return 1
+    fi
+    
+    # Check filesystem type
+    local fstype=$(blkid -o value -s TYPE "$device" 2>/dev/null || echo "unknown")
+    if [[ ! "$fstype" =~ ^ext[2-4]?$ ]]; then
+        print_error "Device $device is not an ext filesystem (detected: $fstype)"
+        print_warning "This script only works with ext2, ext3, and ext4 filesystems"
+        return 1
+    fi
+    
+    print_success "Detected $fstype filesystem on $device"
+    return 0
+}
+
+# Function to check if partition is mounted
+check_mounted() {
+    local device="$1"
+    local mountpoint=$(findmnt -n -o TARGET --source "$device" 2>/dev/null || echo "")
+    
+    if [[ -n "$mountpoint" ]]; then
+        print_warning "Device $device is currently mounted at: $mountpoint"
+        read -p "Do you want to unmount it? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            print_status "Unmounting $device..."
+            umount "$device" || {
+                print_error "Failed to unmount $device"
+                return 1
+            }
+            print_success "Successfully unmounted $device"
+        else
+            print_error "Cannot proceed while filesystem is mounted"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# Function to run filesystem check
+run_filesystem_check() {
+    local device="$1"
+    
+    print_status "Running filesystem check (required by tune2fs)..."
+    print_warning "This may take a few minutes depending on filesystem size"
+    
+    if e2fsck -f "$device"; then
+        print_success "Filesystem check completed successfully"
+        return 0
+    else
+        local exit_code=$?
+        if [[ $exit_code -eq 1 ]]; then
+            print_warning "Filesystem had errors that were corrected"
+            return 0
+        else
+            print_error "Filesystem check failed with exit code: $exit_code"
+            print_error "Please resolve filesystem issues before proceeding"
+            return 1
+        fi
+    fi
+}
+generate_uuid() {
+    if command -v uuidgen &> /dev/null; then
+        uuidgen
+    else
+        # Fallback UUID generation
+        printf '%08x-%04x-%04x-%04x-%012x\n' \
+            $((RANDOM * RANDOM)) \
+            $((RANDOM % 65536)) \
+            $((RANDOM % 65536)) \
+            $((RANDOM % 65536)) \
+            $((RANDOM * RANDOM * RANDOM))
+    fi
+}
+
+# Function to backup current UUID
+backup_uuid() {
+    local device="$1"
+    local current_uuid=$(blkid -o value -s UUID "$device" 2>/dev/null || echo "none")
+    
+    if [[ "$current_uuid" != "none" ]]; then
+        local backup_file="/tmp/uuid_backup_$(basename "$device")_$(date +%s).txt"
+        echo "Device: $device" > "$backup_file"
+        echo "Original UUID: $current_uuid" >> "$backup_file"
+        echo "Date: $(date)" >> "$backup_file"
+        print_status "Current UUID backed up to: $backup_file"
+    else
+        print_warning "No existing UUID found on $device"
+        current_uuid="none"
+    fi
+    
+    echo "$current_uuid"
+}
+
+# Function to set new UUID
+set_uuid() {
+    local device="$1"
+    local new_uuid="$2"
+    
+    # Convert UUID to lowercase (tune2fs expects lowercase)
+    new_uuid=$(echo "$new_uuid" | tr '[:upper:]' '[:lower:]')
+    
+    print_status "Setting UUID $new_uuid on $device..."
+    
+    # First, let's check if this UUID is already in use
+    if blkid -U "$new_uuid" &>/dev/null; then
+        local existing_device=$(blkid -U "$new_uuid")
+        print_warning "UUID $new_uuid is already in use by device: $existing_device"
+        read -p "Continue anyway? This might cause conflicts! (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_status "Operation cancelled"
+            return 1
+        fi
+    fi
+    
+    # Run filesystem check first (required by tune2fs)
+    if ! run_filesystem_check "$device"; then
+        return 1
+    fi
+    
+    # Now attempt to set the UUID
+    print_status "Attempting to set UUID..."
+    
+    # Use expect to automatically answer 'y' to the tune2fs prompt
+    if command -v expect &>/dev/null; then
+        local tune2fs_output
+        if tune2fs_output=$(expect -c "
+            spawn tune2fs -U $new_uuid $device
+            expect {
+                \"Proceed anyway\" { send \"y\r\"; exp_continue }
+                eof
+            }
+        " 2>&1); then
+            print_success "UUID successfully set!"
+        else
+            print_error "Failed to set UUID using expect"
+            echo "$tune2fs_output"
+            return 1
+        fi
+    else
+        # Fallback: manual prompt handling
+        print_warning "tune2fs will ask for confirmation - please type 'y' when prompted"
+        if tune2fs -U "$new_uuid" "$device"; then
+            print_success "UUID successfully set!"
+        else
+            print_error "Failed to set UUID"
+            return 1
+        fi
+    fi
+    
+    # Verify the change
+    local verified_uuid=$(blkid -o value -s UUID "$device" 2>/dev/null)
+    if [[ "$verified_uuid" == "$new_uuid" ]]; then
+        print_success "UUID verified: $verified_uuid"
+    else
+        print_error "UUID verification failed!"
+        print_error "Expected: $new_uuid"
+        print_error "Got: $verified_uuid"
+        return 1
+    fi
+}
+
+# Function to remove UUID
+remove_uuid() {
+    local device="$1"
+    
+    print_status "Removing UUID from $device..."
+    
+    # Run filesystem check first (required by tune2fs)
+    if ! run_filesystem_check "$device"; then
+        return 1
+    fi
+    
+    # Remove the UUID
+    print_status "Attempting to remove UUID..."
+    
+    # Use expect to automatically answer 'y' to the tune2fs prompt
+    if command -v expect &>/dev/null; then
+        local tune2fs_output
+        if tune2fs_output=$(expect -c "
+            spawn tune2fs -U clear $device
+            expect {
+                \"Proceed anyway\" { send \"y\r\"; exp_continue }
+                eof
+            }
+        " 2>&1); then
+            print_success "UUID successfully removed!"
+        else
+            print_error "Failed to remove UUID using expect"
+            echo "$tune2fs_output"
+            return 1
+        fi
+    else
+        # Fallback: manual prompt handling
+        print_warning "tune2fs will ask for confirmation - please type 'y' when prompted"
+        if tune2fs -U clear "$device"; then
+            print_success "UUID successfully removed!"
+        else
+            print_error "Failed to remove UUID"
+            return 1
+        fi
+    fi
+    
+    # Verify the removal
+    local verified_uuid=$(blkid -o value -s UUID "$device" 2>/dev/null || echo "")
+    if [[ -z "$verified_uuid" ]]; then
+        print_success "UUID removal verified - no UUID present"
+    else
+        print_error "UUID removal verification failed!"
+        print_error "UUID still present: $verified_uuid"
+        return 1
+    fi
+}
+show_partition_info() {
+    local device="$1"
+    
+    print_status "Current partition information:"
+    echo "================================"
+    blkid "$device" 2>/dev/null || print_warning "No filesystem information available"
+    echo "================================"
+}
+
+# Main interactive function
+main() {
+    echo "🔧 EXT Filesystem UUID Setter"
+    echo "============================="
+    echo
+    
+    # Check prerequisites
+    check_root
+    check_dependencies
+    
+    # Get device from user
+    while true; do
+        read -p "Enter the partition device path (e.g., /dev/sdb1): " device
+        
+        if validate_partition "$device"; then
+            break
+        fi
+        echo
+        print_error "Please enter a valid ext partition"
+        echo
+    done
+    
+    echo
+    show_partition_info "$device"
+    echo
+    
+    # Check if mounted and handle
+    if ! check_mounted "$device"; then
+        exit 1
+    fi
+    
+    # Backup current UUID
+    print_status "Backing up current UUID..."
+    current_uuid=$(backup_uuid "$device")
+    echo
+    
+    # Get new UUID from user
+    while true; do
+        echo "UUID Options:"
+        echo "1) Enter custom UUID"
+        echo "2) Generate random UUID" 
+        echo "3) Remove UUID completely"
+        echo "4) Exit"
+        echo
+        read -p "Choose option (1-4): " -n 1 -r choice
+        echo
+        echo
+        
+        case $choice in
+            1)
+                read -p "Enter new UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx): " new_uuid
+                if validate_uuid "$new_uuid"; then
+                    # Convert to lowercase for consistency
+                    new_uuid=$(echo "$new_uuid" | tr '[:upper:]' '[:lower:]')
+                    print_status "UUID will be set as: $new_uuid"
+                    operation="set"
+                    break
+                else
+                    print_error "Invalid UUID format!"
+                    print_warning "Note: PARTUUID is different from filesystem UUID"
+                    print_warning "Filesystem UUIDs are typically lowercase and different from partition UUIDs"
+                    echo
+                fi
+                ;;
+            2)
+                new_uuid=$(generate_uuid)
+                print_status "Generated UUID: $new_uuid"
+                read -p "Use this UUID? (Y/n): " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                    operation="set"
+                    break
+                fi
+                ;;
+            3)
+                print_warning "This will completely remove the UUID from the filesystem!"
+                read -p "Are you sure you want to remove the UUID? (y/N): " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    operation="remove"
+                    new_uuid=""
+                    break
+                fi
+                ;;
+            4)
+                print_status "Exiting..."
+                exit 0
+                ;;
+            *)
+                print_error "Invalid option!"
+                echo
+                ;;
+        esac
+    done
+    
+    # Final confirmation
+    echo
+    print_warning "FINAL CONFIRMATION:"
+    echo "Device: $device"
+    echo "Current UUID: $current_uuid"
+    
+    if [[ "$operation" == "remove" ]]; then
+        echo "Operation: REMOVE UUID"
+        echo
+        print_warning "This operation will REMOVE the partition UUID!"
+        print_warning "The filesystem will have NO UUID after this operation!"
+    else
+        echo "New UUID: $new_uuid"
+        echo
+        print_warning "This operation will change the partition UUID!"
+    fi
+    
+    print_warning "Make sure to update /etc/fstab if this partition is auto-mounted!"
+    echo
+    read -p "Proceed with UUID ${operation}? (yes/no): " confirmation
+    
+    if [[ "$confirmation" != "yes" ]]; then
+        print_status "Operation cancelled by user"
+        exit 0
+    fi
+    
+    # Perform the UUID operation
+    echo
+    if [[ "$operation" == "remove" ]]; then
+        if remove_uuid "$device"; then
+            echo
+            print_success "✅ UUID removal completed successfully!"
+            echo
+            print_status "Final partition information:"
+            show_partition_info "$device"
+            echo
+            print_warning "📝 Remember to update /etc/fstab if this partition was referenced by UUID!"
+            print_warning "📝 Also update bootloader config if this is a boot/root partition!"
+        else
+            echo
+            print_error "❌ UUID removal failed!"
+            exit 1
+        fi
+    else
+        if set_uuid "$device" "$new_uuid"; then
+            echo
+            print_success "✅ UUID change completed successfully!"
+            echo
+            print_status "Final partition information:"
+            show_partition_info "$device"
+            echo
+            print_warning "📝 Remember to update /etc/fstab if this partition is referenced there!"
+            print_warning "📝 Also update bootloader config if this is a boot/root partition!"
+        else
+            echo
+            print_error "❌ UUID change failed!"
+            exit 1
+        fi
+    fi
+}
+
+# Run main function
+main "$@"
