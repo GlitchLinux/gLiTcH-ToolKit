@@ -125,6 +125,7 @@ find_app_files() {
     
     print_status "🗂️  Searching system directories..."
     for pattern in "${search_patterns[@]}"; do
+        for file in $pattern 2>/dev/null; do
             if [[ -e "$file" ]]; then
                 if [[ -d "$file" ]]; then
                     # Copy entire directory structure
