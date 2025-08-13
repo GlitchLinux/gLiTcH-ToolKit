@@ -261,18 +261,134 @@ clean_docker() {
     fi
 }
 
-# Find large files
-find_large_files() {
-    print_status "Finding large files (>100MB)..."
-    print_status "Large files in home directory:"
-    find "$HOME" -type f -size +100M -exec ls -lh {} \; 2>/dev/null | \
-    awk '{print $5 " " $9}' | sort -hr | head -10
+# Zero unused disk space (secure deletion)
+zero_unused_space() {
+    print_status "Zeroing unused disk space..."
+    print_warning "This operation will take significant time and write to disk extensively"
+    print_warning "It securely overwrites free space and helps with disk compression"
+    
+    echo -n "Proceed with zeroing unused space? [y/N]: "
+    read -r response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        print_status "Skipping unused space zeroing"
+        return 0
+    fi
+    
+    # Get available space and create zero file
+    print_status "Creating zero file to fill unused space..."
+    
+    # For root filesystem
+    if [ "$IS_ROOT" = true ]; then
+        print_status "Zeroing unused space on root filesystem..."
+        dd if=/dev/zero of=/zero_file bs=1M 2>/dev/null || true
+        sync
+        rm -f /zero_file
+        print_success "Root filesystem unused space zeroed"
+        
+        # Zero /home if it's on a separate partition
+        if mountpoint -q /home; then
+            print_status "Zeroing unused space on /home filesystem..."
+            dd if=/dev/zero of=/home/zero_file bs=1M 2>/dev/null || true
+            sync
+            rm -f /home/zero_file
+            print_success "/home filesystem unused space zeroed"
+        fi
+        
+        # Zero /tmp if it's on a separate partition
+        if mountpoint -q /tmp; then
+            print_status "Zeroing unused space on /tmp filesystem..."
+            dd if=/dev/zero of=/tmp/zero_file bs=1M 2>/dev/null || true
+            sync
+            rm -f /tmp/zero_file
+            print_success "/tmp filesystem unused space zeroed"
+        fi
+        
+        # Zero /var if it's on a separate partition
+        if mountpoint -q /var; then
+            print_status "Zeroing unused space on /var filesystem..."
+            dd if=/dev/zero of=/var/zero_file bs=1M 2>/dev/null || true
+            sync
+            rm -f /var/zero_file
+            print_success "/var filesystem unused space zeroed"
+        fi
+    else
+        # Non-root user - only zero home directory space
+        print_status "Zeroing unused space in home directory (user mode)..."
+        dd if=/dev/zero of="$HOME/zero_file" bs=1M 2>/dev/null || true
+        sync
+        rm -f "$HOME/zero_file"
+        print_success "Home directory unused space zeroed"
+    fi
+    
+    print_success "Unused space zeroing completed"
+}
+
+# Alternative: Zero specific filesystem
+zero_filesystem() {
+    local mount_point="$1"
+    local zero_file="$mount_point/zero_file_$"
+    
+    print_status "Zeroing unused space on $mount_point..."
+    
+    # Check available space first
+    local available_space=$(df "$mount_point" | awk 'NR==2 {print $4}')
+    print_status "Available space: $((available_space / 1024))MB"
+    
+    # Create zero file with progress indication
+    (
+        echo "0"
+        dd if=/dev/zero of="$zero_file" bs=1M 2>&1 | \
+        stdbuf -oL grep -o '[0-9]\+[0-9]* bytes' | \
+        while read bytes; do
+            mb=$((bytes / 1024 / 1024))
+            if [ $mb -gt 0 ]; then
+                echo "# Zeroing: ${mb}MB written..."
+            fi
+        done
+        echo "100"
+    ) 2>/dev/null || true
+    
+    # Ensure data is written to disk
+    sync
+    
+    # Remove zero file
+    rm -f "$zero_file"
+    
+    print_success "Filesystem $mount_point zeroed"
+}
+
+# Advanced zeroing with multiple passes
+secure_zero_space() {
+    print_status "Secure zeroing with multiple passes..."
+    print_warning "This will perform 3 passes: random, zero, random"
+    print_warning "This operation will take VERY long time"
+    
+    echo -n "Proceed with secure multi-pass zeroing? [y/N]: "
+    read -r response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        print_status "Skipping secure zeroing"
+        return 0
+    fi
+    
+    local zero_file="/secure_zero_$"
     
     if [ "$IS_ROOT" = true ]; then
-        print_status "Large files system-wide:"
-        find / -type f -size +100M -not -path "/proc/*" -not -path "/sys/*" \
-        -not -path "/dev/*" -exec ls -lh {} \; 2>/dev/null | \
-        awk '{print $5 " " $9}' | sort -hr | head -10
+        print_status "Pass 1/3: Writing random data..."
+        dd if=/dev/urandom of="$zero_file" bs=1M 2>/dev/null || true
+        sync
+        
+        print_status "Pass 2/3: Writing zeros..."
+        dd if=/dev/zero of="$zero_file" bs=1M 2>/dev/null || true
+        sync
+        
+        print_status "Pass 3/3: Writing random data..."
+        dd if=/dev/urandom of="$zero_file" bs=1M 2>/dev/null || true
+        sync
+        
+        rm -f "$zero_file"
+        print_success "Secure zeroing completed"
+    else
+        print_error "Secure zeroing requires root privileges"
     fi
 }
 
@@ -309,6 +425,19 @@ interactive_cleanup() {
     clean_old_downloads
     remove_duplicates
     clean_docker
+    
+    echo ""
+    echo -n "Zero unused disk space (takes time, helps compression)? [y/N]: "
+    read -r response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        zero_unused_space
+    fi
+    
+    echo -n "Perform secure multi-pass zeroing (VERY slow)? [y/N]: "
+    read -r response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        secure_zero_space
+    fi
 }
 
 # Quick cleanup mode
@@ -337,12 +466,26 @@ OPTIONS:
     -i, --interactive Interactive cleanup
     -f, --find      Find large files only
     -a, --all       Clean everything (quick + extras)
+    -z, --zero      Zero unused space only
+    -s, --secure    Secure multi-pass zeroing only
 
 EXAMPLES:
     $0              # Interactive mode (default)
     $0 --quick      # Quick automated cleanup
     $0 --find       # Find large files
+    $0 --zero       # Zero unused space only
     sudo $0 --all   # Complete cleanup as root
+    sudo $0 --secure # Secure zeroing only
+
+ZEROING OPERATIONS:
+    --zero          Single-pass zeroing (fills free space with zeros)
+    --secure        Multi-pass secure zeroing (random-zero-random)
+
+Note: Zeroing operations help with:
+- Disk image compression
+- Security (prevents data recovery)
+- SSD optimization
+- Virtual machine disk shrinking
 
 EOF
 }
@@ -376,6 +519,14 @@ main() {
             find_large_files
             exit 0
             ;;
+        -z|--zero)
+            zero_unused_space
+            exit 0
+            ;;
+        -s|--secure)
+            secure_zero_space
+            exit 0
+            ;;
         -a|--all)
             quick_cleanup
             clean_old_downloads() {
@@ -400,6 +551,9 @@ main() {
                 fi
             }
             clean_docker
+            echo ""
+            print_status "Performing final zero pass on unused space..."
+            zero_unused_space
             ;;
         *)
             print_error "Unknown option: $1"
