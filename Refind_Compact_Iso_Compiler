@@ -47,6 +47,8 @@ print_direct() {
     echo -e "\033[1;35m[DIRECT]\033[0m $1"
 }
 
+sudo apt update && sudo apt-get install wget genisoimage coreutils mtools mkisofs -y
+
 # Check required tools 🔍
 check_dependencies() {
     local missing_tools=()
