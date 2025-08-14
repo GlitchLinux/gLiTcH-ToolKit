@@ -4,7 +4,7 @@ cd /tmp || exit
 
 # Colors
 G='\033[0;32m'  # Green
-Y='\033[1;35m\'  # Yellow  
+Y='\033[1;35m'  # Yellow  
 C='\033[0;36m'  # Cyan
 N='\033[0m'     # Normal
 
