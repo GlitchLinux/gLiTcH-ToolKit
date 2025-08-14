@@ -386,7 +386,7 @@ menuentry "GRUBFM - UEFI" --class grubfm {
     chainloader /boot/EFI/grubfm/grubfmx64.efi
 }
 
-menuentry "GRUBFM (BIOS)" --class grubfm {
+menuentry "GRUBFM - BIOS" --class grubfm {
     insmod multiboot
     insmod ext2
     search --file --no-floppy --set=root /boot/grubfm/grubfm.elf
