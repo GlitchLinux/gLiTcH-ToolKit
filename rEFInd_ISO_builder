@@ -44,6 +44,10 @@ print_step() {
     echo -e "\033[1;36m[STEP]\033[0m $1"
 }
 
+print_debug() {
+    echo -e "\033[1;35m[DEBUG]\033[0m $1"
+}
+
 # Check required tools 🔍
 check_dependencies() {
     local missing_tools=()
@@ -295,30 +299,156 @@ EOF
     print_success "✅ Enhanced rEFInd configuration created"
 }
 
+# Robust FAT image creation and file copying 💾
+create_fat_image() {
+    print_step "💾 Creating robust FAT filesystem image..."
+    
+    # Calculate optimal image size with generous padding
+    local efi_size_kb=$(du -sk EFI | cut -f 1)
+    print_debug "EFI directory size: ${efi_size_kb}KB"
+    
+    # Use 3x the size for safety, minimum 40MB for FAT compatibility
+    local torito_size=$((efi_size_kb * 3))
+    if [ $torito_size -lt 40960 ]; then
+        torito_size=40960  # 40MB minimum
+    fi
+    
+    # Round up to nearest 4MB boundary for optimal FAT cluster alignment
+    torito_size=$(((torito_size + 4095) / 4096 * 4096))
+    
+    print_info "📏 EFI directory: ${efi_size_kb}KB, Image size: ${torito_size}KB ($(($torito_size/1024))MB)"
+    
+    # Create zero-filled image
+    print_info "🔧 Creating ${torito_size}KB image file..."
+    dd if=/dev/zero of="${OUTPUT_NAME}.img" bs=1024 count="$torito_size" status=none 2>/dev/null
+    
+    # Try different FAT formatting approaches
+    print_info "🎯 Formatting FAT filesystem (trying multiple methods)..."
+    
+    local fat_success=false
+    
+    # Method 1: FAT16 with explicit parameters
+    if mkdosfs -F 16 -n "REFIND_PRO" -S 512 "${OUTPUT_NAME}.img" >/dev/null 2>&1; then
+        print_debug "FAT16 formatting succeeded"
+        fat_success=true
+    # Method 2: Auto-detect FAT type
+    elif mkdosfs -n "REFIND_PRO" "${OUTPUT_NAME}.img" >/dev/null 2>&1; then
+        print_debug "Auto-detect FAT formatting succeeded"
+        fat_success=true
+    # Method 3: Force FAT12 for smaller images
+    elif mkdosfs -F 12 -n "REFIND_PRO" "${OUTPUT_NAME}.img" >/dev/null 2>&1; then
+        print_debug "FAT12 formatting succeeded"
+        fat_success=true
+    else
+        print_error "❌ All FAT formatting methods failed!"
+        return 1
+    fi
+    
+    if [ "$fat_success" = true ]; then
+        print_success "✅ FAT filesystem created successfully"
+    fi
+    
+    # Verify FAT filesystem
+    print_info "🔍 Verifying FAT filesystem integrity..."
+    if mdir -i "${OUTPUT_NAME}.img" ::/ >/dev/null 2>&1; then
+        print_success "✅ FAT filesystem verification passed"
+    else
+        print_error "❌ FAT filesystem verification failed!"
+        return 1
+    fi
+}
+
+# Copy files with multiple fallback methods 📦
+copy_files_to_fat() {
+    print_step "📦 Copying files to FAT image with robust methods..."
+    
+    local copy_success=false
+    
+    # Method 1: Direct recursive copy
+    print_info "🔄 Attempting direct recursive copy..."
+    if mcopy -i "${OUTPUT_NAME}.img" -s EFI/* ::/ 2>/dev/null; then
+        print_success "✅ Direct recursive copy succeeded"
+        copy_success=true
+    else
+        print_warning "⚠️  Direct copy failed, trying structured approach..."
+        
+        # Method 2: Structured directory creation
+        print_info "🏗️  Creating directory structure manually..."
+        
+        # Create main directories
+        mmkdir -i "${OUTPUT_NAME}.img" ::/EFI 2>/dev/null || true
+        
+        # Copy each main directory separately
+        for main_dir in BOOT Clover GRUBFM tools; do
+            if [ -d "EFI/$main_dir" ]; then
+                print_debug "Processing EFI/$main_dir..."
+                mmkdir -i "${OUTPUT_NAME}.img" "::/EFI/$main_dir" 2>/dev/null || true
+                
+                # Copy files in this directory
+                if mcopy -i "${OUTPUT_NAME}.img" -s "EFI/$main_dir"/* "::/EFI/$main_dir/" 2>/dev/null; then
+                    print_debug "✓ Copied EFI/$main_dir"
+                else
+                    print_debug "⚠ Warning: Failed to copy some files in EFI/$main_dir"
+                fi
+            fi
+        done
+        
+        copy_success=true
+    fi
+    
+    # Verify copy operation
+    print_info "🔍 Verifying file copy operation..."
+    local copied_dirs=$(mdir -i "${OUTPUT_NAME}.img" ::/EFI/ 2>/dev/null | grep -c "DIR" || echo "0")
+    local copied_files=$(mdir -i "${OUTPUT_NAME}.img" -/ ::/EFI/ 2>/dev/null | wc -l || echo "0")
+    
+    print_info "📊 Copy verification: $copied_dirs directories, $copied_files total entries"
+    
+    if [ "$copied_files" -gt 20 ]; then
+        print_success "✅ File copy verification passed"
+        copy_success=true
+    else
+        print_warning "⚠️  Low file count detected, attempting loop mount fallback..."
+        
+        # Method 3: Loop mount fallback (requires sudo)
+        local mount_point="/tmp/refind_mount_$$"
+        mkdir -p "$mount_point"
+        
+        if sudo mount -o loop,uid=$(id -u),gid=$(id -g) "${OUTPUT_NAME}.img" "$mount_point" 2>/dev/null; then
+            print_info "🔄 Using loop mount method..."
+            cp -r EFI "$mount_point/"
+            sync
+            sudo umount "$mount_point" 2>/dev/null || umount "$mount_point" 2>/dev/null
+            rmdir "$mount_point"
+            print_success "✅ Loop mount copy completed"
+            copy_success=true
+        else
+            print_error "❌ Loop mount failed (may need sudo privileges)"
+            rmdir "$mount_point" 2>/dev/null || true
+        fi
+    fi
+    
+    if [ "$copy_success" != true ]; then
+        print_error "❌ All file copy methods failed!"
+        return 1
+    fi
+    
+    return 0
+}
+
 # Build ISO image 💿
 build_iso() {
     print_step "💿 Building bootable ISO image..."
     
-    # Calculate optimal image size
-    local efi_size_kb=$(du -sk EFI | cut -f 1)
-    # Add 50% padding for filesystem overhead
-    local torito_size=$((efi_size_kb + efi_size_kb/2))
-    # Round up to nearest 64KB boundary for better performance
-    torito_size=$(((torito_size + 63) / 64 * 64))
+    # Create FAT image and copy files
+    if ! create_fat_image; then
+        print_error "❌ FAT image creation failed"
+        return 1
+    fi
     
-    print_info "📏 EFI directory: ${efi_size_kb}KB, Image size: ${torito_size}KB"
-    
-    # Create FAT32 filesystem image
-    print_info "💾 Creating FAT32 filesystem image..."
-    dd if=/dev/zero of="${OUTPUT_NAME}.img" bs=1024 count="$torito_size" 2>/dev/null
-    
-    # Format as FAT32 with appropriate label
-    mkdosfs -F 32 -n "REFIND_PRO" "${OUTPUT_NAME}.img" >/dev/null 2>&1 || \
-    mkdosfs -n "REFIND_PRO" "${OUTPUT_NAME}.img" >/dev/null
-    
-    # Populate FAT image with all EFI files
-    print_info "📦 Populating filesystem with rEFInd Pro files..."
-    mcopy -i"${OUTPUT_NAME}.img" -s EFI ::/
+    if ! copy_files_to_fat; then
+        print_error "❌ File copying failed"
+        return 1
+    fi
     
     # Create documentation files
     print_info "📄 Creating documentation..."
