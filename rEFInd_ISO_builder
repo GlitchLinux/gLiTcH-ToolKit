@@ -1,0 +1,476 @@
+#!/usr/bin/env bash
+#
+# Automated rEFInd Pro ISO Creator 🔥
+# Downloads, extracts, and creates bootable ISO from glitchlinux.wtf rEFInd Pro
+#
+# Usage: ./create_refind_pro_iso.sh [output_name]
+# Example: ./create_refind_pro_iso.sh refind-pro-2025
+#
+# This script automates everything:
+# 1. 📥 Downloads REFIND-PRO.zip to /tmp
+# 2. 📂 Extracts and organizes files  
+# 3. 🔧 Creates optimized ISO structure
+# 4. 💿 Builds bootable ISO image
+# 5. ✅ Provides checksums and usage instructions
+
+set -e  # Exit on any error
+
+# Configuration 🎯
+REFIND_URL="https://glitchlinux.wtf/FILES/REFIND_CUSTOM_&_THEMES/REFIND-PRO.zip"
+OUTPUT_NAME="${1:-refind-pro-$(date +%Y%m%d)}"
+DOWNLOAD_DIR="/tmp"
+WORK_DIR="/tmp/refind_pro_build_$$"
+CURRENT_DIR="$(pwd)"
+ZIP_FILE="$DOWNLOAD_DIR/REFIND-PRO.zip"
+
+# Color output functions 🎨
+print_info() {
+    echo -e "\033[1;34m[INFO]\033[0m $1"
+}
+
+print_success() {
+    echo -e "\033[1;32m[SUCCESS]\033[0m $1"
+}
+
+print_error() {
+    echo -e "\033[1;31m[ERROR]\033[0m $1"
+}
+
+print_warning() {
+    echo -e "\033[1;33m[WARNING]\033[0m $1"
+}
+
+print_step() {
+    echo -e "\033[1;36m[STEP]\033[0m $1"
+}
+
+# Check required tools 🔍
+check_dependencies() {
+    local missing_tools=()
+    
+    for tool in wget unzip mkisofs mkdosfs mcopy dd sha256sum; do
+        if ! command -v "$tool" &> /dev/null; then
+            missing_tools+=("$tool")
+        fi
+    done
+    
+    if [ ${#missing_tools[@]} -gt 0 ]; then
+        print_error "Missing required tools: ${missing_tools[*]}"
+        print_info "📦 Install with:"
+        print_info "   sudo apt-get update"
+        print_info "   sudo apt-get install wget unzip genisoimage dosfstools mtools coreutils"
+        exit 1
+    fi
+}
+
+# Cleanup function 🧹
+cleanup() {
+    if [ -d "$WORK_DIR" ]; then
+        print_info "🧹 Cleaning up temporary build files..."
+        rm -rf "$WORK_DIR"
+    fi
+}
+
+# Set trap for cleanup
+trap cleanup EXIT
+
+# Download rEFInd Pro ZIP 📥
+download_refind() {
+    print_step "📥 Downloading rEFInd Pro from glitchlinux.wtf..."
+    
+    # Remove old download if exists
+    [ -f "$ZIP_FILE" ] && rm -f "$ZIP_FILE"
+    
+    # Download with progress bar
+    if ! wget --progress=bar:force:noscroll \
+              --timeout=30 \
+              --tries=3 \
+              --user-agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
+              -O "$ZIP_FILE" \
+              "$REFIND_URL"; then
+        print_error "❌ Failed to download rEFInd Pro ZIP"
+        print_info "🌐 URL: $REFIND_URL"
+        exit 1
+    fi
+    
+    # Verify download
+    if [ ! -f "$ZIP_FILE" ] || [ ! -s "$ZIP_FILE" ]; then
+        print_error "❌ Downloaded file is empty or doesn't exist"
+        exit 1
+    fi
+    
+    local file_size=$(du -h "$ZIP_FILE" | cut -f1)
+    print_success "✅ Downloaded REFIND-PRO.zip ($file_size)"
+}
+
+# Extract and organize files 📂
+extract_refind() {
+    print_step "📂 Extracting rEFInd Pro archive..."
+    
+    # Create working directory
+    mkdir -p "$WORK_DIR"
+    cd "$WORK_DIR"
+    
+    # Extract ZIP file
+    if ! unzip -q "$ZIP_FILE"; then
+        print_error "❌ Failed to extract ZIP file"
+        exit 1
+    fi
+    
+    # Find the EFI directory (it might be in a subdirectory)
+    local efi_path=""
+    if [ -d "EFI" ]; then
+        efi_path="EFI"
+    elif [ -d "*/EFI" ]; then
+        efi_path=$(find . -name "EFI" -type d | head -1)
+    else
+        print_error "❌ EFI directory not found in extracted files"
+        exit 1
+    fi
+    
+    print_success "✅ Found EFI directory: $efi_path"
+    
+    # Move EFI to root of work directory if needed
+    if [ "$efi_path" != "EFI" ]; then
+        mv "$efi_path" ./EFI
+    fi
+    
+    # Verify essential components
+    print_info "🔍 Verifying rEFInd Pro components..."
+    
+    local missing_components=()
+    
+    # Check bootloader
+    [ ! -f "EFI/BOOT/bootx64.efi" ] && missing_components+=("bootx64.efi")
+    
+    # Check drivers
+    [ ! -d "EFI/BOOT/drivers_x64" ] && missing_components+=("x64 drivers")
+    
+    # Check theme
+    [ ! -d "EFI/BOOT/themes/glitch-theme" ] && missing_components+=("glitch theme")
+    
+    # Check tools
+    [ ! -d "EFI/tools" ] && missing_components+=("tools directory")
+    
+    if [ ${#missing_components[@]} -gt 0 ]; then
+        print_warning "⚠️  Missing components: ${missing_components[*]}"
+    else
+        print_success "✅ All essential components found"
+    fi
+}
+
+# Optimize structure 🔧
+optimize_structure() {
+    print_step "🔧 Optimizing rEFInd Pro structure..."
+    
+    # Count files before optimization
+    local files_before=$(find EFI -type f | wc -l)
+    
+    # Remove non-x64 EFI files (but keep ia32 tools for compatibility)
+    print_info "🧹 Removing non-x64 EFI binaries (keeping essential compatibility files)..."
+    
+    # Remove aa64 files (ARM64)
+    find EFI -name "*_aa64.efi" -delete 2>/dev/null || true
+    find EFI -name "drivers_aa64" -type d -exec rm -rf {} + 2>/dev/null || true
+    
+    # Remove ia32 drivers but keep essential ia32 tools
+    find EFI/BOOT -name "*_ia32.efi" -delete 2>/dev/null || true
+    find EFI/BOOT -name "drivers_ia32" -type d -exec rm -rf {} + 2>/dev/null || true
+    
+    # Count files after optimization
+    local files_after=$(find EFI -type f | wc -l)
+    local files_removed=$((files_before - files_after))
+    
+    print_success "🗂️  Optimized: removed $files_removed non-essential files"
+    print_info "📊 Final file count: $files_after files"
+    
+    # Display directory structure summary
+    print_info "📁 Directory structure:"
+    echo "EFI/"
+    echo "├── BOOT/ (main rEFInd with glitch theme)"
+    echo "├── Clover/ (Clover boot manager)" 
+    echo "├── GRUBFM/ (GRUB file manager)"
+    echo "└── tools/ (system utilities)"
+}
+
+# Create comprehensive configuration 📝
+create_config() {
+    print_step "📝 Enhancing rEFInd configuration..."
+    
+    # Backup original config if it exists
+    [ -f "EFI/BOOT/refind.conf" ] && cp "EFI/BOOT/refind.conf" "EFI/BOOT/refind.conf.original"
+    
+    # Create enhanced configuration
+    cat > "EFI/BOOT/refind.conf" << 'EOF'
+#
+# rEFInd Pro Configuration
+# Custom build with Glitch Theme
+# Optimized for x64 systems with multi-boot support
+#
+
+# Timeout in seconds for the main menu screen
+timeout 20
+
+# Use graphical mode
+textonly false
+
+# Disable NVRAM writing for broader hardware compatibility  
+use_nvram false
+
+# Screen saver timeout (5 minutes)
+screensaver 300
+
+# Show comprehensive tool menu
+showtools shell,memtest,gdisk,about,shutdown,reboot,firmware,bootorder,install
+
+# CSR values for macOS (System Integrity Protection)
+csr_values 10,77
+
+# Directories to avoid scanning (reduces boot time)
+dont_scan_dirs ESP:/EFI/boot,EFI/Microsoft/Boot,EFI/BOOT,recovery,System,Windows/System32
+
+# Files to skip during scanning
+dont_scan_files shim.efi,MokManager.efi,bootmgfw.efi,winload.efi,winsys.efi
+
+# Enable mouse and touch support
+enable_mouse
+enable_touch
+
+# Hide advanced UI elements for cleaner look
+hideui singleuser,safemode,hwtest,arrows
+
+# Load glitch theme
+include themes/glitch-theme/theme.conf
+
+# Scanning options
+scan_all_linux_kernels true
+also_scan_dirs boot,ESP:/EFI/Linux,ESP:/EFI/ubuntu,ESP:/EFI/fedora
+
+# Default selection (first found OS)
+default_selection 1
+
+# Resolution settings (uncomment as needed)
+# resolution 1920 1080
+# resolution 2560 1440
+# resolution 3840 2160
+
+# Logging for troubleshooting
+log_level 1
+
+# Manual boot entries for tools
+menuentry "EFI Shell" {
+    icon /EFI/BOOT/icons/shell.png
+    loader /EFI/tools/shell_x64.efi
+    options "-nointerrupt -nomap -nostartup"
+    disabled
+}
+
+menuentry "Memory Test" {
+    icon /EFI/BOOT/icons/memtest.png
+    loader /EFI/tools/memtest_x64.efi
+    disabled
+}
+
+menuentry "Disk Utility (gdisk)" {
+    icon /EFI/BOOT/icons/tool_disk.png
+    loader /EFI/tools/gdisk_x64.efi
+    disabled
+}
+
+# Clover alternative bootloader
+menuentry "Clover Boot Manager" {
+    icon /EFI/BOOT/icons/clover.png
+    loader /EFI/Clover/CLOVERX64.efi
+    disabled
+}
+
+# GRUB File Manager
+menuentry "GRUB File Manager" {
+    icon /EFI/BOOT/icons/grubfm.png
+    loader /EFI/GRUBFM/E2B-bootx64.efi
+    disabled
+}
+EOF
+
+    print_success "✅ Enhanced rEFInd configuration created"
+}
+
+# Build ISO image 💿
+build_iso() {
+    print_step "💿 Building bootable ISO image..."
+    
+    # Calculate optimal image size
+    local efi_size_kb=$(du -sk EFI | cut -f 1)
+    # Add 50% padding for filesystem overhead
+    local torito_size=$((efi_size_kb + efi_size_kb/2))
+    # Round up to nearest 64KB boundary for better performance
+    torito_size=$(((torito_size + 63) / 64 * 64))
+    
+    print_info "📏 EFI directory: ${efi_size_kb}KB, Image size: ${torito_size}KB"
+    
+    # Create FAT32 filesystem image
+    print_info "💾 Creating FAT32 filesystem image..."
+    dd if=/dev/zero of="${OUTPUT_NAME}.img" bs=1024 count="$torito_size" 2>/dev/null
+    
+    # Format as FAT32 with appropriate label
+    mkdosfs -F 32 -n "REFIND_PRO" "${OUTPUT_NAME}.img" >/dev/null 2>&1 || \
+    mkdosfs -n "REFIND_PRO" "${OUTPUT_NAME}.img" >/dev/null
+    
+    # Populate FAT image with all EFI files
+    print_info "📦 Populating filesystem with rEFInd Pro files..."
+    mcopy -i"${OUTPUT_NAME}.img" -s EFI ::/
+    
+    # Create documentation files
+    print_info "📄 Creating documentation..."
+    
+    cat > README.txt << EOF
+rEFInd Pro Boot Manager
+======================
+
+Custom rEFInd build with enhanced features and Glitch theme.
+
+🎯 Features:
+- Glitch cyberpunk theme with custom icons
+- Comprehensive OS detection
+- Multiple boot manager support (rEFInd, Clover, GRUB)
+- System utilities (gdisk, memtest, shell)
+- Optimized for x64 UEFI systems
+
+🚀 Usage:
+1. Burn this ISO to optical media or USB drive
+2. Boot from the media in UEFI mode
+3. rEFInd will automatically detect your operating systems
+4. Use arrow keys to navigate, Enter to boot
+
+🔧 Available Tools:
+- EFI Shell for low-level system access
+- Memory tester for hardware validation  
+- Disk partitioning utilities (gdisk)
+- Alternative boot managers (Clover, GRUB FM)
+
+📱 Source: glitchlinux.wtf
+🏗️  Built: $(date)
+🔖 Version: rEFInd Pro Custom Build
+
+For support and updates, visit: https://glitchlinux.wtf
+EOF
+
+    cat > INSTALL.txt << EOF
+Installation Instructions
+========================
+
+💿 Optical Media (CD/DVD):
+   1. Burn ISO to disc using any burning software
+   2. Boot from optical drive in UEFI mode
+   3. rEFInd will load automatically
+
+💾 USB Drive:
+   Linux/macOS:
+   sudo dd if=${OUTPUT_NAME}.iso of=/dev/sdX bs=4M status=progress && sync
+   (Replace /dev/sdX with your USB device)
+   
+   Windows:
+   Use Rufus, balenaEtcher, or similar tool to write ISO to USB
+
+🖥️  Virtual Machine Testing:
+   QEMU: qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -cdrom ${OUTPUT_NAME}.iso -m 2048
+   VirtualBox: Enable EFI in VM settings, attach ISO as optical drive
+   VMware: Enable UEFI boot, mount ISO
+
+⚠️  Important Notes:
+- Ensure UEFI mode is enabled (not Legacy BIOS)
+- Secure Boot may need to be disabled
+- Some older systems may require CSM/Legacy mode
+- First boot may take longer as rEFInd scans for OS installations
+
+🎨 Theme Customization:
+- Edit /EFI/BOOT/themes/glitch-theme/theme.conf
+- Replace background: /EFI/BOOT/themes/glitch-theme/bg.png
+- Custom icons in: /EFI/BOOT/themes/glitch-theme/icons/
+EOF
+
+    # Create the ISO with proper El Torito boot specification
+    print_info "🔥 Creating ISO-9660 image with UEFI boot support..."
+    
+    mkisofs -A "rEFInd Pro Boot Manager" \
+            -V "REFIND_PRO" \
+            -volset "REFIND_PRO_$(date +%Y%m%d)" \
+            -J -R -v \
+            -x ./lost+found \
+            -o "/tmp/${OUTPUT_NAME}.iso" \
+            -eltorito-alt-boot \
+            -efi-boot "${OUTPUT_NAME}.img" \
+            -no-emul-boot \
+            ./ >/dev/null 2>&1
+    
+    # Copy ISO to target directory
+    print_info "📋 Moving ISO to output directory..."
+    cp "/tmp/${OUTPUT_NAME}.iso" "$CURRENT_DIR/"
+    
+    print_success "🎉 ISO image created successfully!"
+}
+
+# Generate checksums and final info 🔐
+finalize_iso() {
+    print_step "🔐 Generating checksums and final verification..."
+    
+    cd "$CURRENT_DIR"
+    
+    # Generate checksums
+    sha256sum "${OUTPUT_NAME}.iso" > "${OUTPUT_NAME}.iso.sha256"
+    md5sum "${OUTPUT_NAME}.iso" > "${OUTPUT_NAME}.iso.md5" 2>/dev/null || true
+    
+    # Get file information
+    local iso_size=$(du -h "${OUTPUT_NAME}.iso" | cut -f1)
+    local iso_size_bytes=$(stat -f%z "${OUTPUT_NAME}.iso" 2>/dev/null || stat -c%s "${OUTPUT_NAME}.iso")
+    
+    print_success "🎊 rEFInd Pro ISO creation completed successfully!"
+    echo
+    print_info "📍 Output Files:"
+    print_info "   📀 ${OUTPUT_NAME}.iso ($iso_size)"
+    print_info "   🔐 ${OUTPUT_NAME}.iso.sha256"
+    [ -f "${OUTPUT_NAME}.iso.md5" ] && print_info "   🔐 ${OUTPUT_NAME}.iso.md5"
+    echo
+    print_info "📊 ISO Statistics:"
+    print_info "   Size: $iso_size ($iso_size_bytes bytes)"
+    print_info "   Contains: rEFInd Pro with Glitch theme"
+    print_info "   Architecture: x64 UEFI optimized"
+    print_info "   Boot modes: El Torito EFI boot"
+    echo
+    print_info "🚀 Quick Usage:"
+    print_info "   USB: sudo dd if=${OUTPUT_NAME}.iso of=/dev/sdX bs=4M status=progress"
+    print_info "   Test: qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -cdrom ${OUTPUT_NAME}.iso -m 2048"
+    echo
+    print_info "🎨 Features included:"
+    print_info "   ✓ Glitch cyberpunk theme with custom icons"
+    print_info "   ✓ Multiple bootloader support (rEFInd/Clover/GRUB)"
+    print_info "   ✓ System utilities (shell, memtest, gdisk)"
+    print_info "   ✓ Comprehensive OS detection"
+    print_info "   ✓ Mouse and touch support"
+    echo
+    print_success "🔥 Ready to boot! Enjoy your custom rEFInd Pro! 🔥"
+}
+
+# Main execution flow 🎯
+main() {
+    echo "🚀🔥 rEFInd Pro Automated ISO Builder 🔥🚀"
+    echo "================================================"
+    print_info "📅 Build started: $(date)"
+    print_info "🏷️  Output name: $OUTPUT_NAME"
+    print_info "🌐 Source URL: $REFIND_URL"
+    echo
+
+    # Step-by-step execution
+    check_dependencies
+    download_refind
+    extract_refind  
+    optimize_structure
+    create_config
+    build_iso
+    finalize_iso
+    
+    print_success "🎉 All done! ISO ready for use! 🎉"
+}
+
+# Execute main function
+main "$@"
