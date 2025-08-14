@@ -109,10 +109,10 @@ setup_colors() {
 
 setup_ansi_colors() {
     c1='\033[0;31m'   # Red
-    c2='\033[0;32m'   # Green
+    c2='\033[1;32m'   # Green
     c3='\033[0;33m'   # Yellow
     c4='\033[0;34m'   # Blue
-    c5='\033[0;35m'   # Magenta
+    c5='\033[1;35m'   # Magenta
     c6='\033[0;36m'   # Cyan
     c7='\033[0;37m'   # White
     bold='\033[1m'
