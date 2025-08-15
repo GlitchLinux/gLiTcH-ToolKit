@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # Custom rEFInd Installer Script
@@ -308,42 +307,13 @@ main() {
     check_root
     check_efi_system
     
-# Verify rEFInd installation
-verify_installation() {
-    print_status "Verifying rEFInd installation..."
-    
-    # Check for rEFInd files in EFI partition
-    if [[ -f "/boot/efi/EFI/refind/bootx64.efi" ]]; then
-        print_success "rEFInd bootloader found: /boot/efi/EFI/refind/bootx64.efi"
-    else
-        print_warning "Primary rEFInd bootloader not found at expected location"
-    fi
-    
-    # Check for alternative rEFInd executables
-    for refind_file in "refind_x64.efi" "refind_ia32.efi" "refind_aa64.efi"; do
-        if [[ -f "/boot/efi/EFI/refind/$refind_file" ]]; then
-            print_success "Alternative rEFInd executable found: /boot/efi/EFI/refind/$refind_file"
-        fi
-    done
-    
-    # Check for rEFInd configuration
-    if [[ -f "/boot/efi/EFI/refind/refind.conf" ]]; then
-        print_success "rEFInd configuration found: /boot/efi/EFI/refind/refind.conf"
-    else
-        print_warning "rEFInd configuration not found"
-    fi
-    
-    # Check for theme
-    if [[ -d "/boot/efi/EFI/refind/themes/glitch-theme" ]]; then
-        print_success "GlitchLinux theme found: /boot/efi/EFI/refind/themes/glitch-theme"
-    fi
-    
-    # List all files in refind directory for debugging
-    print_status "Contents of /boot/efi/EFI/refind/:"
-    ls -la /boot/efi/EFI/refind/ 2>/dev/null || print_warning "Could not list refind directory contents"
-    
-    print_status "Installation verification completed"
-}
+    # Installation steps
+    download_refind
+    mount_refind_image
+    rename_boot_directory
+    copy_refind_files
+    add_grub_entry
+    update_grub_config
     
     # Final cleanup
     cleanup
