@@ -162,26 +162,66 @@ copy_refind_files() {
 add_grub_entry() {
     print_status "Adding rEFInd entry to GRUB configuration..."
     
-    # Create custom GRUB entry for rEFInd
-    cat > /etc/grub.d/30_refind << 'EOF'
+    # Get EFI partition UUID for proper GRUB search
+    EFI_UUID=$(blkid -s UUID -o value $(df /boot/efi | tail -1 | awk '{print $1}'))
+    
+    # Create comprehensive GRUB entry for rEFInd with multiple search paths
+    cat > /etc/grub.d/30_refind << EOF
 #!/bin/sh
-exec tail -n +3 $0
-# This file provides an easy way to add custom menu entries.  Simply type the
-# menu entries you want to add after this comment.  Be careful not to change
-# the 'exec tail' line above.
+exec tail -n +3 \$0
+# Custom rEFInd Boot Manager entry with comprehensive path search
 
 menuentry "rEFInd Boot Manager" {
     insmod part_gpt
     insmod fat
     insmod chain
-    chainloader /boot/EFI/refind/bootx64.efi
+    insmod efifwsetup
+    
+    # Search for EFI partition by UUID
+    search --no-floppy --fs-uuid --set=root ${EFI_UUID}
+    
+    # Try multiple possible rEFInd locations and filenames
+    # First try: /EFI/refind/bootx64.efi (our renamed directory)
+    if [ -f /EFI/refind/bootx64.efi ]; then
+        chainloader /EFI/refind/bootx64.efi
+    # Second try: /EFI/refind/refind_x64.efi (standard rEFInd name)
+    elif [ -f /EFI/refind/refind_x64.efi ]; then
+        chainloader /EFI/refind/refind_x64.efi
+    # Third try: /EFI/BOOT/bootx64.efi (if rename failed)
+    elif [ -f /EFI/BOOT/bootx64.efi ]; then
+        chainloader /EFI/BOOT/bootx64.efi
+    # Fourth try: /EFI/tools/refind_x64.efi
+    elif [ -f /EFI/tools/refind_x64.efi ]; then
+        chainloader /EFI/tools/refind_x64.efi
+    # Fifth try: search for any refind executable
+    elif [ -f /EFI/Microsoft/Boot/bootmgfw.efi ]; then
+        # Fallback to Windows Boot Manager if rEFInd not found
+        chainloader /EFI/Microsoft/Boot/bootmgfw.efi
+    else
+        # Last resort: try to boot from firmware
+        fwsetup
+    fi
+}
+
+# Alternative rEFInd entry with direct file specification
+menuentry "rEFInd Boot Manager (Direct)" {
+    insmod part_gpt
+    insmod fat
+    insmod chain
+    
+    # Search for EFI partition
+    search --no-floppy --fs-uuid --set=root ${EFI_UUID}
+    
+    # Direct path to our installed rEFInd
+    chainloader /EFI/refind/bootx64.efi
 }
 EOF
     
     # Make the script executable
     chmod +x /etc/grub.d/30_refind
     
-    print_success "rEFInd GRUB entry created"
+    print_success "rEFInd GRUB entry created with comprehensive path search"
+    print_status "EFI partition UUID: ${EFI_UUID}"
 }
 
 # Update GRUB configuration
@@ -268,13 +308,42 @@ main() {
     check_root
     check_efi_system
     
-    # Installation steps
-    download_refind
-    mount_refind_image
-    rename_boot_directory
-    copy_refind_files
-    add_grub_entry
-    update_grub_config
+# Verify rEFInd installation
+verify_installation() {
+    print_status "Verifying rEFInd installation..."
+    
+    # Check for rEFInd files in EFI partition
+    if [[ -f "/boot/efi/EFI/refind/bootx64.efi" ]]; then
+        print_success "rEFInd bootloader found: /boot/efi/EFI/refind/bootx64.efi"
+    else
+        print_warning "Primary rEFInd bootloader not found at expected location"
+    fi
+    
+    # Check for alternative rEFInd executables
+    for refind_file in "refind_x64.efi" "refind_ia32.efi" "refind_aa64.efi"; do
+        if [[ -f "/boot/efi/EFI/refind/$refind_file" ]]; then
+            print_success "Alternative rEFInd executable found: /boot/efi/EFI/refind/$refind_file"
+        fi
+    done
+    
+    # Check for rEFInd configuration
+    if [[ -f "/boot/efi/EFI/refind/refind.conf" ]]; then
+        print_success "rEFInd configuration found: /boot/efi/EFI/refind/refind.conf"
+    else
+        print_warning "rEFInd configuration not found"
+    fi
+    
+    # Check for theme
+    if [[ -d "/boot/efi/EFI/refind/themes/glitch-theme" ]]; then
+        print_success "GlitchLinux theme found: /boot/efi/EFI/refind/themes/glitch-theme"
+    fi
+    
+    # List all files in refind directory for debugging
+    print_status "Contents of /boot/efi/EFI/refind/:"
+    ls -la /boot/efi/EFI/refind/ 2>/dev/null || print_warning "Could not list refind directory contents"
+    
+    print_status "Installation verification completed"
+}
     
     # Final cleanup
     cleanup
