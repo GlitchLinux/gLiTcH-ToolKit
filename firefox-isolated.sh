@@ -228,7 +228,7 @@ cleanup_problematic_dirs() {
             rm -rf "$dir"
         fi
     done
-    
+    sudo rm -f /tmp/start-firefox.html
     print_success "Cleanup completed"
 }
 
@@ -247,7 +247,7 @@ cleanup_all_files() {
     local appimage_base="${appimage_name%.*}"
     local portable_home="${appimage_dir}/${appimage_base}.home"
     local portable_config="${appimage_dir}/${appimage_base}.config"
-    
+    sudo rm -f /tmp/start-firefox.html
     if [[ -d "$portable_home" ]]; then
         print_status "Cleaning up AppImage portable home directory..."
         rm -rf "$portable_home"
