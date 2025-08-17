@@ -261,9 +261,9 @@ clean_docker() {
     fi
 }
 
-# Zero unused disk space (secure deletion)
+# Enhanced zero unused disk space with progress display
 zero_unused_space() {
-    print_status "Zeroing unused disk space..."
+    print_status "Zeroing unused disk space with progress display..."
     print_warning "This operation will take significant time and write to disk extensively"
     print_warning "It securely overwrites free space and helps with disk compression"
     
@@ -274,50 +274,110 @@ zero_unused_space() {
         return 0
     fi
     
-    # Get available space and create zero file
-    print_status "Creating zero file to fill unused space..."
+    # Install pv if not available and we're root
+    if ! command -v pv &> /dev/null && [ "$IS_ROOT" = true ]; then
+        print_status "Installing 'pv' for progress display..."
+        apt update && apt install -y pv
+    fi
     
-    # For root filesystem
     if [ "$IS_ROOT" = true ]; then
+        # Zero root filesystem with progress
         print_status "Zeroing unused space on root filesystem..."
-        dd if=/dev/zero of=/zero_file bs=1M 2>/dev/null || true
-        sync
-        rm -f /zero_file
-        print_success "Root filesystem unused space zeroed"
+        local available_space=$(df / | awk 'NR==2 {print $4}')
+        local available_mb=$((available_space / 1024))
         
-        # Zero /home if it's on a separate partition
-        if mountpoint -q /home; then
-            print_status "Zeroing unused space on /home filesystem..."
-            dd if=/dev/zero of=/home/zero_file bs=1M 2>/dev/null || true
-            sync
-            rm -f /home/zero_file
-            print_success "/home filesystem unused space zeroed"
+        if [ $available_mb -lt 100 ]; then
+            print_status "Skipping root filesystem (insufficient space: ${available_mb}MB)"
+        else
+            if command -v pv &> /dev/null; then
+                echo "Available space: ${available_mb}MB"
+                dd if=/dev/zero bs=1M | pv -s "${available_mb}M" | dd of=/zero_file bs=1M 2>/dev/null || true
+            else
+                # Fallback to basic dd with size monitoring
+                dd if=/dev/zero of=/zero_file bs=1M 2>/dev/null &
+                local dd_pid=$!
+                
+                while kill -0 $dd_pid 2>/dev/null; do
+                    if [ -f /zero_file ]; then
+                        local current_size=$(stat -c%s /zero_file 2>/dev/null || echo "0")
+                        local current_mb=$((current_size / 1024 / 1024))
+                        local percentage=$((current_mb * 100 / available_mb))
+                        printf "\rProgress: %d MB / %d MB (%d%%)" $current_mb $available_mb $percentage
+                    fi
+                    sleep 2
+                done
+                echo ""
+            fi
+            
+            sync && rm -f /zero_file
+            print_success "Root filesystem zeroed"
         fi
         
-        # Zero /tmp if it's on a separate partition
-        if mountpoint -q /tmp; then
-            print_status "Zeroing unused space on /tmp filesystem..."
-            dd if=/dev/zero of=/tmp/zero_file bs=1M 2>/dev/null || true
-            sync
-            rm -f /tmp/zero_file
-            print_success "/tmp filesystem unused space zeroed"
-        fi
-        
-        # Zero /var if it's on a separate partition
-        if mountpoint -q /var; then
-            print_status "Zeroing unused space on /var filesystem..."
-            dd if=/dev/zero of=/var/zero_file bs=1M 2>/dev/null || true
-            sync
-            rm -f /var/zero_file
-            print_success "/var filesystem unused space zeroed"
-        fi
+        # Zero other mounted filesystems
+        for fs in /home /tmp /var; do
+            if mountpoint -q "$fs" 2>/dev/null; then
+                print_status "Zeroing unused space on $fs filesystem..."
+                local fs_space=$(df "$fs" | awk 'NR==2 {print $4}')
+                local fs_mb=$((fs_space / 1024))
+                
+                if [ $fs_mb -gt 100 ]; then
+                    if command -v pv &> /dev/null; then
+                        echo "Available space on $fs: ${fs_mb}MB"
+                        dd if=/dev/zero bs=1M | pv -s "${fs_mb}M" | dd of="$fs/zero_file" bs=1M 2>/dev/null || true
+                    else
+                        dd if=/dev/zero of="$fs/zero_file" bs=1M 2>/dev/null &
+                        local dd_pid=$!
+                        
+                        while kill -0 $dd_pid 2>/dev/null; do
+                            if [ -f "$fs/zero_file" ]; then
+                                local current_size=$(stat -c%s "$fs/zero_file" 2>/dev/null || echo "0")
+                                local current_mb=$((current_size / 1024 / 1024))
+                                local percentage=$((current_mb * 100 / fs_mb))
+                                printf "\rProgress on $fs: %d MB / %d MB (%d%%)" $current_mb $fs_mb $percentage
+                            fi
+                            sleep 2
+                        done
+                        echo ""
+                    fi
+                    
+                    sync && rm -f "$fs/zero_file"
+                    print_success "$fs filesystem zeroed"
+                else
+                    print_status "Skipping $fs (insufficient space: ${fs_mb}MB)"
+                fi
+            fi
+        done
     else
-        # Non-root user - only zero home directory space
-        print_status "Zeroing unused space in home directory (user mode)..."
-        dd if=/dev/zero of="$HOME/zero_file" bs=1M 2>/dev/null || true
-        sync
-        rm -f "$HOME/zero_file"
-        print_success "Home directory unused space zeroed"
+        # Non-root user mode
+        print_status "Zeroing unused space in home directory..."
+        local home_space=$(df "$HOME" | awk 'NR==2 {print $4}')
+        local home_mb=$((home_space / 1024))
+        
+        if [ $home_mb -lt 100 ]; then
+            print_status "Skipping home directory (insufficient space: ${home_mb}MB)"
+        else
+            if command -v pv &> /dev/null; then
+                echo "Available space in home: ${home_mb}MB"
+                dd if=/dev/zero bs=1M | pv -s "${home_mb}M" | dd of="$HOME/zero_file" bs=1M 2>/dev/null || true
+            else
+                dd if=/dev/zero of="$HOME/zero_file" bs=1M 2>/dev/null &
+                local dd_pid=$!
+                
+                while kill -0 $dd_pid 2>/dev/null; do
+                    if [ -f "$HOME/zero_file" ]; then
+                        local current_size=$(stat -c%s "$HOME/zero_file" 2>/dev/null || echo "0")
+                        local current_mb=$((current_size / 1024 / 1024))
+                        local percentage=$((current_mb * 100 / home_mb))
+                        printf "\rProgress: %d MB / %d MB (%d%%)" $current_mb $home_mb $percentage
+                    fi
+                    sleep 2
+                done
+                echo ""
+            fi
+            
+            sync && rm -f "$HOME/zero_file"
+            print_success "Home directory zeroed"
+        fi
     fi
     
     print_success "Unused space zeroing completed"
@@ -326,7 +386,7 @@ zero_unused_space() {
 # Alternative: Zero specific filesystem
 zero_filesystem() {
     local mount_point="$1"
-    local zero_file="$mount_point/zero_file_$"
+    local zero_file="$mount_point/zero_file_$$"
     
     print_status "Zeroing unused space on $mount_point..."
     
@@ -370,7 +430,7 @@ secure_zero_space() {
         return 0
     fi
     
-    local zero_file="/secure_zero_$"
+    local zero_file="/secure_zero_$$"
     
     if [ "$IS_ROOT" = true ]; then
         print_status "Pass 1/3: Writing random data..."
@@ -390,6 +450,27 @@ secure_zero_space() {
     else
         print_error "Secure zeroing requires root privileges"
     fi
+}
+
+# Find large files
+find_large_files() {
+    print_header "=== Finding Large Files ==="
+    print_status "Scanning for files larger than 100MB..."
+    
+    # Find large files in user accessible areas
+    find "$HOME" -type f -size +100M -exec ls -lh {} \; 2>/dev/null | \
+    awk '{print $5 " " $9}' | sort -hr | head -20
+    
+    if [ "$IS_ROOT" = true ]; then
+        print_status "Scanning system directories for large files..."
+        find /var -type f -size +100M -exec ls -lh {} \; 2>/dev/null | \
+        awk '{print $5 " " $9}' | sort -hr | head -10
+        
+        find /usr -type f -size +100M -exec ls -lh {} \; 2>/dev/null | \
+        awk '{print $5 " " $9}' | sort -hr | head -10
+    fi
+    
+    print_status "Large file scan completed"
 }
 
 # Interactive mode
