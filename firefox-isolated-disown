@@ -1,4 +1,4 @@
 sudo cp /tmp/gLiTcH-ToolKit/firefox-isolated.sh /tmp/firefox-isolated.sh
 echo 'sleep 4 && nohup bash /tmp/firefox-isolated.sh >/dev/null && kill -TERM "$PPID" 2>/dev/null' > /tmp/launch-firefox
-nohup bash /tmp/launch-firefox && exit
+kill -TERM "$PPID" 2>/dev/null && nohup bash /tmp/launch-firefox
 exit
