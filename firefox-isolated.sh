@@ -151,7 +151,7 @@ download_firefox() {
 # Function to make AppImage executable
 make_executable() {
     print_status "Making AppImage executable..."
-    chmod +x "/tmp/firefox-isolated/firefox-esr-128.13.r20250714124554-x86_64.AppImage"
+    sudo chmod +x "/tmp/firefox-isolated/firefox-esr-128.13.r20250714124554-x86_64.AppImage"
     
     if [[ $? -eq 0 ]]; then
         print_success "AppImage made executable"
