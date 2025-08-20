@@ -53,44 +53,22 @@ apt install -y \
     curl \
     wget
 
-# Configure D-Bus properly
-echo "Step 3: Configuring D-Bus system..."
+apt install -y ifupdown iproute2 dhcpcd5 -y
+
 systemctl enable dbus
 systemctl enable dbus-user-session
 
-systemctl enable polkit
+# Enable networking service (handles /etc/network/interfaces)
+systemctl enable networking
 
-# Configure Network Manager instead of systemd-networkd for live system
-echo "Step 5: Configuring Network Manager..."
-systemctl disable systemd-networkd || true
-systemctl disable systemd-resolved || true
-systemctl enable NetworkManager
-systemctl enable NetworkManager-wait-online
+# Enable systemd-networkd (alternative network manager)
+systemctl enable systemd-networkd
 
-# Fix systemd-timesyncd configuration
-echo "Step 6: Configuring time synchronization..."
-mkdir -p /etc/systemd/timesyncd.conf.d
-cat > /etc/systemd/timesyncd.conf.d/local.conf << 'EOF'
-[Time]
-NTP=pool.ntp.org
-FallbackNTP=time.cloudflare.com time.google.com
-EOF
+# Enable systemd-resolved for DNS resolution
+systemctl enable systemd-resolved
 
-systemctl enable systemd-timesyncd
+# If using dhcpcd5
+systemctl enable dhcpcd
 
-# Configure systemd for live system
-echo "Step 7: Configuring systemd for live boot..."
-
-# Enable essential services
-systemctl enable systemd-tmpfiles-setup
-systemctl enable systemd-tmpfiles-clean.timer
-systemctl enable systemd-journal-flush
-
-# Fix file permissions for systemd
-echo "Step 8: Fixing systemd permissions..."
-chmod 755 /var/lib/systemd
-mkdir -p /var/lib/systemd/catalog
-mkdir -p /var/lib/polkit-1
-chown polkitd:root /var/lib/polkit-1
-
-
+# OR if using ISC dhclient (choose one)
+systemctl enable isc-dhcp-client
