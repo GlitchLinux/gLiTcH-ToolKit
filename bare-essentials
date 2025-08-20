@@ -1,0 +1,96 @@
+#!/bin/bash
+
+# Script to fix systemd service failures in minimal Debian live system
+# Run this in your container/chroot before creating the squashfs
+
+#set -e
+
+echo "=== Fixing Systemd Service Boot Issues ==="
+
+# Update package lists
+echo "Step 1: Updating package lists..."
+apt update
+
+# Install missing essential services and dependencies
+echo "Step 2: Installing missing service dependencies..."
+apt install -y \
+    dbus \
+    dbus-user-session \
+    systemd \
+    systemd-timesyncd \
+    polkitd \
+    network-manager \
+    avahi-daemon \
+    udisks2 \
+    libpam-systemd \
+    squashfs-tools \
+    initramfs-tools \
+    live-boot \
+    systemd \
+    udev \
+    kmod \
+    busybox \
+    util-linux \
+    mount \
+    e2fsprogs \
+    dosfstools \
+    firmware-linux-free \
+    wireless-tools \
+    net-tools \
+    iproute2 \
+    dhcpcd5 \
+    linux-image-amd64 \
+    console-setup \
+    keyboard-configuration \
+    locales \
+    systemd-resolved \
+    live-tools \
+    sudo \
+    nano \
+    less \
+    bash-completion \
+    ca-certificates \
+    curl \
+    wget
+
+# Configure D-Bus properly
+echo "Step 3: Configuring D-Bus system..."
+systemctl enable dbus
+systemctl enable dbus-user-session
+
+systemctl enable polkit
+
+# Configure Network Manager instead of systemd-networkd for live system
+echo "Step 5: Configuring Network Manager..."
+systemctl disable systemd-networkd || true
+systemctl disable systemd-resolved || true
+systemctl enable NetworkManager
+systemctl enable NetworkManager-wait-online
+
+# Fix systemd-timesyncd configuration
+echo "Step 6: Configuring time synchronization..."
+mkdir -p /etc/systemd/timesyncd.conf.d
+cat > /etc/systemd/timesyncd.conf.d/local.conf << 'EOF'
+[Time]
+NTP=pool.ntp.org
+FallbackNTP=time.cloudflare.com time.google.com
+EOF
+
+systemctl enable systemd-timesyncd
+
+# Configure systemd for live system
+echo "Step 7: Configuring systemd for live boot..."
+
+# Enable essential services
+systemctl enable systemd-tmpfiles-setup
+systemctl enable systemd-tmpfiles-clean.timer
+systemctl enable systemd-journal-flush
+
+# Fix file permissions for systemd
+echo "Step 8: Fixing systemd permissions..."
+chmod 755 /var/lib/systemd
+mkdir -p /var/lib/systemd/catalog
+mkdir -p /var/lib/polkit-1
+chown polkitd:root /var/lib/polkit-1
+
+
