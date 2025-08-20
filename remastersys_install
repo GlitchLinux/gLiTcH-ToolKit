@@ -1,3 +1,5 @@
 wget https://github.com/GlitchLinux/remastersys/raw/refs/heads/main/remastersys_4.9-1_all.deb
-sudo dpkg -i remastersys_4.9-1_all.deb && sudo apt install -f
+sudo dpkg --force-all -i remastersys_4.9-1_all.deb && sudo apt install -f -y
+sudo dpkg -i remastersys_4.9-1_all.deb
+sudo apt install -f -y
 sudo rm -f remastersys_4.9-1_all.deb
