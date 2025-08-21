@@ -167,7 +167,7 @@ gather_configuration() {
     done
     
     # Set up full paths
-    WORK_PATH="$WORK_PATH/$ISO_NAME"
+    WORK_PATH="$WORK_PATH/${ISO_NAME}_work"
     PARENT_DIR="$WORK_PATH/$ISO_NAME"
     
     # Get hostname
@@ -188,6 +188,7 @@ gather_configuration() {
     echo "  ISO Name: ${ISO_NAME}.iso"
     echo "  Distribution: $DISTRO_TYPE (/$LIVE_DIR)"
     echo "  Working Path: $WORK_PATH"
+    echo "  ISO Output: $(dirname "$WORK_PATH")/${ISO_NAME}.iso"
     echo "  Hostname: $HOSTNAME"
     echo ""
     echo -n "Proceed with this configuration? (y/N): "
@@ -494,8 +495,8 @@ EOF
     echo ""
     read -p "Press ENTER to continue..."
     
-    # Create the ISO
-    local output_file="$(dirname "$PARENT_DIR")/${ISO_NAME}.iso"
+    # Create the ISO in the parent directory of WORK_PATH (safe location)
+    local output_file="$(dirname "$WORK_PATH")/${ISO_NAME}.iso"
     local volume_label=$(echo "$ISO_NAME" | tr '[:lower:]' '[:upper:]' | tr -cd '[:alnum:]_-' | cut -c1-32)
     
     print_info "Building ISO image..."
