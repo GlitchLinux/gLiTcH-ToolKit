@@ -1,0 +1,148 @@
+#!/bin/bash
+
+# TTY Font Changer for Debian
+# This script helps change the console font used in TTY terminals
+
+set -e  # Exit on any error
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}TTY Font Changer for Debian${NC}"
+echo "================================="
+
+# Check if running as root
+if [[ $EUID -ne 0 ]]; then
+   echo -e "${RED}This script must be run as root${NC}"
+   exit 1
+fi
+
+# Function to list available fonts
+list_fonts() {
+    echo -e "${YELLOW}Available console fonts:${NC}"
+    ls /usr/share/consolefonts/ | grep -E '\.(psf|psfu)\.gz$' | head -20
+    echo ""
+    echo "To see all fonts: ls /usr/share/consolefonts/"
+}
+
+# Function to backup current configuration
+backup_config() {
+    if [ -f /etc/default/console-setup ]; then
+        cp /etc/default/console-setup /etc/default/console-setup.backup.$(date +%Y%m%d_%H%M%S)
+        echo -e "${GREEN}Backed up current configuration${NC}"
+    fi
+}
+
+# Function to set font
+set_font() {
+    local font_name="$1"
+    
+    # Check if font exists
+    if [ ! -f "/usr/share/consolefonts/${font_name}" ]; then
+        echo -e "${RED}Font ${font_name} not found in /usr/share/consolefonts/${NC}"
+        return 1
+    fi
+    
+    # Create or update console-setup configuration
+    cat > /etc/default/console-setup << EOF
+# CONFIGURATION FILE FOR SETUPCON
+# Consult the console-setup(5) manual page.
+
+ACTIVE_CONSOLES="/dev/tty[1-6]"
+CHARMAP="UTF-8"
+CODESET="guess"
+FONTFACE="${font_name%.*.*}"  # Remove .psf.gz extension
+FONTSIZE=""
+VIDEOMODE=""
+EOF
+
+    echo -e "${GREEN}Updated /etc/default/console-setup${NC}"
+}
+
+# Function to apply font immediately
+apply_font() {
+    local font_name="$1"
+    
+    echo "Applying font to current session..."
+    setfont "/usr/share/consolefonts/${font_name}"
+    
+    echo "Updating console configuration..."
+    setupcon
+    
+    echo -e "${GREEN}Font applied successfully!${NC}"
+}
+
+# Main menu
+echo "What would you like to do?"
+echo "1) List available fonts"
+echo "2) Set a specific font"
+echo "3) Reset to default font"
+echo "4) Show current font info"
+
+read -p "Enter your choice (1-4): " choice
+
+case $choice in
+    1)
+        list_fonts
+        ;;
+    2)
+        list_fonts
+        echo ""
+        read -p "Enter the font filename (e.g., Lat15-TerminusBold18x10.psf.gz): " font_file
+        
+        if [ -n "$font_file" ]; then
+            backup_config
+            set_font "$font_file"
+            apply_font "$font_file"
+            
+            echo ""
+            echo -e "${GREEN}Font changed successfully!${NC}"
+            echo "The change is now active and will persist after reboot."
+            echo "You can switch to a TTY (Ctrl+Alt+F1-F6) to see the new font."
+        else
+            echo -e "${RED}No font specified${NC}"
+        fi
+        ;;
+    3)
+        echo "Resetting to default font..."
+        backup_config
+        
+        # Reset console-setup to defaults
+        cat > /etc/default/console-setup << EOF
+# CONFIGURATION FILE FOR SETUPCON
+# Consult the console-setup(5) manual page.
+
+ACTIVE_CONSOLES="/dev/tty[1-6]"
+CHARMAP="UTF-8"
+CODESET="guess"
+FONTFACE=""
+FONTSIZE=""
+VIDEOMODE=""
+EOF
+        setupcon
+        echo -e "${GREEN}Reset to default font${NC}"
+        ;;
+    4)
+        echo "Current console setup configuration:"
+        if [ -f /etc/default/console-setup ]; then
+            cat /etc/default/console-setup
+        else
+            echo "No console-setup configuration found"
+        fi
+        
+        echo ""
+        echo "Currently loaded font info:"
+        showconsolefont 2>/dev/null || echo "Font info not available"
+        ;;
+    *)
+        echo -e "${RED}Invalid choice${NC}"
+        exit 1
+        ;;
+esac
+
+echo ""
+echo -e "${YELLOW}Note: Changes will persist after reboot.${NC}"
+echo -e "${YELLOW}To test immediately, switch to a TTY with Ctrl+Alt+F1-F6${NC}"
