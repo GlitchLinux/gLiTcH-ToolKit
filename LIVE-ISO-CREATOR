@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # Nano ISO Creator - Minimal Live System ISO Builder
@@ -6,9 +5,9 @@
 
 # Color codes
 RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
+GREEN='\033[1;32m'
+YELLOW='\033[1;35m'
+BLUE='\033[1;35m'
 NC='\033[0m'
 
 # Install minimal dependencies
@@ -38,25 +37,24 @@ install_dependencies() {
 # Download hybrid bootfiles
 download_bootfiles() {
     local target_dir="$1"
-    local temp_dir="/tmp/nano_bootfiles"
+    local temp_dir="/tmp/nano_bootfiles_$$"
     
-    echo -e "${BLUE}Downloading bootfiles...${NC}"
+    echo -e "${NC}   ->${GREEN} Downloading Bootfiles${NC}"
     mkdir -p "$temp_dir"
     
-    if ! wget -q --progress=bar:force \
-        "https://github.com/GlitchLinux/gLiTcH-ISO-Creator/raw/refs/heads/main/HYBRID-BASE-grub2-tux-splash.tar.lzma" \
-        -O "$temp_dir/bootfiles.tar.lzma"; then
+    if ! wget --quiet \
+        "https://github.com/GlitchLinux/gLiTcH-ISO-Creator/raw/refs/heads/main/ISO-Hybrid-Base.tar.lzma" \
+        -O "$temp_dir/bootfiles.tar.lzma" 2>/dev/null; then
         echo -e "${RED}Error: Failed to download bootfiles${NC}"
         rm -rf "$temp_dir"
         exit 1
     fi
     
-    echo -e "${BLUE}Extracting bootfiles to: $target_dir${NC}"
-    unlzma "$temp_dir/bootfiles.tar.lzma"
-    tar -xf "$temp_dir/bootfiles.tar" -C "$target_dir" --strip-components=1
+    echo -e "${NC}   ->${GREEN} Extracting bootfiles${NC}"
+    unlzma "$temp_dir/bootfiles.tar.lzma" 2>/dev/null
+    tar -xf "$temp_dir/bootfiles.tar" -C "$target_dir" --strip-components=1 2>/dev/null
     rm -rf "$temp_dir"
-    
-    echo -e "${GREEN}✅ Bootfiles installed in: $target_dir${NC}"
+    chmod -R 755 "$target_dir" 2>/dev/null
 }
 
 # Create minimal GRUB config with proven theme approach
@@ -71,9 +69,9 @@ create_grub_config() {
     
     # Copy splash.png to boot/grub directory
     if [ -f "$iso_dir/isolinux/splash.png" ]; then
-        echo -e "${BLUE}Copying splash screen for GRUB...${NC}"
-        cp "$iso_dir/isolinux/splash.png" "$iso_dir/boot/grub/splash.png" 2>/dev/null
-        cp "$iso_dir/isolinux/splash.png" "$iso_dir/splash.png" 2>/dev/null
+        echo -e "${NC}   ->${GREEN}Copying splash screen for GRUB ${NC}"
+        cp "/boot/grub/splash.png" "$iso_dir/boot/grub/splash.png" 2>/dev/null
+        cp "$iso_dir/isolinux/splash.png" "$iso_dir/isolinux/grub.png" 2>/dev/null
     fi
     
     # Create theme configuration
@@ -162,9 +160,8 @@ menuentry "$name - Boot to RAM" {
 }
 
 menuentry "$name - Encrypted Persistence" {
-    linux /live/$vmlinuz boot=live components quiet splash persistent=cryptsetup persistence-encryption=luks persistence
-    initrd /live/$initrd
-
+    linux /casper/$vmlinuz boot=casper components quiet splash persistent=cryptsetup persistence-encryption=luks persistence
+    initrd /casper/$initrd
 }
 
 if [ -f /boot/grub/custom.cfg ]; then
@@ -205,7 +202,7 @@ EOF
 
 EOF
 
-    echo -e "${GREEN}Created GRUB configuration with proven theme approach${NC}"
+    #echo -e "${GREEN}Created GRUB configuration with proven theme approach${NC}"
 }
 
 # Create auto-chainloading ISOLINUX config
@@ -230,7 +227,7 @@ create_autorun() {
     
     cat > "$iso_dir/autorun.inf" <<EOF
 [Autorun]
-icon=glitch.ico
+icon=iso.ico
 label=$name
 EOF
 }
@@ -240,13 +237,15 @@ create_iso() {
     local source_dir="$1"
     local output_file="$2"
     local volume_label="$3"
-    
-    echo -e "${BLUE}Creating ISO: $output_file${NC}"
-
-    echo "You can now add custom files that you wish to include in the iso"
-    echo "Add your files to: $target_dir"
-    read -p "Press Enter when ready to continue with ISO creation: "
-    
+    #clear
+    echo ""
+    echo -e "${GREEN}   ╭─────────────────────────────────────────────╮${NC}"
+    echo -e "${GREEN}   │${NC} You can now add custom files include in ISO ${GREEN}│${NC}"
+    echo -e "${GREEN}   │${NC}    press ENTER to complete the ISO build    ${GREEN}│${NC}" 
+    echo -e "${GREEN}   ╰─────────────────────────────────────────────╯${NC}"
+    echo ""
+    read -p "    "
+    #echo -e "${NC}   -> ${NC}${GREEN} Output File:${NC} $output_file${NC}"
     # Use isohdpfx.bin from bootfiles if available
     local mbr_file="$source_dir/isolinux/isohdpfx.bin"
     if [ ! -f "$mbr_file" ]; then
@@ -274,9 +273,11 @@ create_iso() {
     
     if [ $? -eq 0 ]; then
         local size=$(du -h "$output_file" | cut -f1)
-        echo -e "${GREEN}✅ ISO created successfully!${NC}"
-        echo -e "${YELLOW}📁 Location: $output_file${NC}"
-        echo -e "${YELLOW}📏 Size: $size${NC}"
+        echo -e "${NC}     ${GREEN} ISO Created Successfully!${NC}${GREEN} ✅ ${NC}"
+        echo ""
+	echo -e "${NC}     ${YELLOW} Path: ${NC}$output_file${NC}"
+        echo -e "${NC}     ${YELLOW} Size: ${NC}$size${NC}"
+	#sleep 2
         return 0
     else
         echo -e "${RED}❌ ISO creation failed${NC}"
@@ -299,110 +300,109 @@ create_live_iso() {
     local live_path=""
     local system_type=""
     
+    # First determine which live system type we have
     if [ -d "$parent_dir/live" ]; then
         live_dir="live"
         live_path="$parent_dir/live"
         system_type="Debian Live"
-        echo -e "${GREEN}Detected: Debian Live system${NC}"
     elif [ -d "$parent_dir/casper" ]; then
         live_dir="casper"
         live_path="$parent_dir/casper"
         system_type="Ubuntu/Casper"
-        echo -e "${GREEN}Detected: Ubuntu/Casper system${NC}"
     else
         echo -e "${RED}Error: No live system found in $parent_dir${NC}"
-        echo -e "${YELLOW}Expected: $parent_dir/live or $parent_dir/casper${NC}"
+        echo -e "${NC}Expected: $parent_dir/live or $parent_dir/casper${NC}"
         return 1
     fi
     
-    # Find kernel and initrd
+    # Now find kernel and initrd files in the correct live path
     local vmlinuz=""
     local initrd=""
     
+    # Find vmlinuz (kernel) file
     for file in "$live_path"/vmlinuz*; do
-        [ -f "$file" ] && vmlinuz=$(basename "$file") && break
+        if [ -f "$file" ]; then
+            vmlinuz=$(basename "$file")
+            break
+        fi
     done
     
+    # Find initrd file - handle different naming conventions
     if [ "$live_dir" = "casper" ]; then
-        # Ubuntu uses different naming
-        for file in "$live_path"/initrd*; do
-            [ -f "$file" ] && initrd=$(basename "$file") && break
+        # Ubuntu/Casper: Look for initrd files
+        for file in "$live_path"/initrd* "$live_path"/initrd.img* "$live_path"/initramfs*; do
+            if [ -f "$file" ]; then
+                initrd=$(basename "$file")
+                break
+            fi
         done
     else
-        # Debian Live naming
-        for file in "$live_path"/initrd*; do
-            [ -f "$file" ] && initrd=$(basename "$file") && break
+        # Debian Live: Look for initrd files
+        for file in "$live_path"/initrd* "$live_path"/initramfs*; do
+            if [ -f "$file" ]; then
+                initrd=$(basename "$file")
+                break
+            fi
         done
     fi
     
+    # Verify we found both files
     if [ -z "$vmlinuz" ] || [ -z "$initrd" ]; then
         echo -e "${RED}Error: Missing kernel or initrd in $live_path${NC}"
-        echo -e "${YELLOW}Expected: vmlinuz* and initrd* files${NC}"
+        echo -e "${YELLOW}Found files in $live_path:${NC}"
+        ls -la "$live_path"/ | grep -E 'vmlinuz|initrd|initramfs'
+        echo -e "${YELLOW}Expected: vmlinuz* and initrd*/initramfs* files${NC}"
         return 1
     fi
     
-    echo -e "${GREEN}Found: $vmlinuz, $initrd${NC}"
-    
+    echo -e "${GREEN}   Identified Bootfiles & Distro ${NC}"
+    echo ""   
+    echo -e "${NC}   $vmlinuz ${GREEN}✅${NC}"
+    echo -e "${NC}   $initrd ${GREEN}✅${NC}"
+    echo -e "${NC}   Distro: $system_type ${NC}${GREEN}✅${NC}"
+
     # Get grandparent directory for output and customization
     local grandparent_dir=$(dirname "$parent_dir")
     local dir_name=$(basename "$parent_dir")
     local customize_dir="$grandparent_dir/ISO_CUSTOMIZE"
     
-    # Create customization directory
-    echo -e "\n${BLUE}Creating customization directory: $customize_dir${NC}"
-    mkdir -p "$customize_dir"
-    
-    echo -e "\n${YELLOW}=== Custom File Overlay ===${NC}"
-    echo -e "${BLUE}You can add custom files to: ${YELLOW}$customize_dir${NC}"
-    echo -e "${BLUE}These files will be copied to the ISO root (overwrites existing files)${NC}"
-    echo -e "${BLUE}Examples:${NC}"
-    echo -e "  • splash.png (custom splash screen)"
-    echo -e "  • autorun.inf (Windows autorun)"
-    echo -e "  • Any other files you want in the ISO"
-    echo -e "${YELLOW}Press ENTER when ready to continue...${NC}"
-    read -r
-    
     # Get filenames from user
-    echo -e "\n${YELLOW}=== File Naming ===${NC}"
-    read -p "Hit ENTER to use \"${dir_name}.iso\" as filename or enter new name: " iso_name
+    echo ""
+    echo -e "${GREEN}   ISO Naming:${NC}"
+    echo ""
+    echo -e "${GREEN}   ENTER${NC} to use ${YELLOW}\"${dir_name}.iso\"${NC} as iso name${NC}"
+    read -p "   -> Or enter new name: " iso_name
+    echo ""
     iso_name=${iso_name:-"${dir_name}.iso"}
     [[ "$iso_name" != *.iso ]] && iso_name="${iso_name}.iso"
-    
-    read -p "Hit ENTER to use \"${dir_name}\" as system name or enter new name: " system_name
+    echo -e "${GREEN}   ENTER${NC} to use ${YELLOW}\"${dir_name}\"${NC} as system name${NC}" 
+    read -p "   -> Or enter new name: " system_name 
+    echo ""
     system_name=${system_name:-"$dir_name"}
-    
     local volume_default=$(echo "$dir_name" | tr '[:lower:]' '[:upper:]' | tr -cd '[:alnum:]_-' | cut -c1-32)
-    read -p "Hit ENTER to use \"${volume_default}\" as ISO volume name or enter new name: " volume_name
+    echo -e "${GREEN}   ENTER${NC} to use ${YELLOW}\"${volume_default}\"${NC} as volume name${NC}"
+    read -p "   -> Or enter new name: " volume_name   
+    echo "" 
     volume_name=${volume_name:-"$volume_default"}
     volume_name=$(echo "$volume_name" | tr '[:lower:]' '[:upper:]' | tr -cd '[:alnum:]_-' | cut -c1-32)
-    
+    echo ""
+
     # Set output path in grandparent directory
     local output_file="$grandparent_dir/$iso_name"
     
     # Create working directory
-    local work_dir="/tmp/nano_iso_$"
+    rm -r -f /tmp/nano_iso/
+    local work_dir="/tmp/nano_iso"
     mkdir -p "$work_dir"
     
-    echo -e "\n${BLUE}=== Building ISO ===${NC}"
-    echo -e "System Type: $system_type"
-    echo -e "Source: $parent_dir"
-    echo -e "Live Dir: $live_path"
-    echo -e "Output: $output_file"
-    echo -e "System: $system_name"
-    echo -e "Volume: $volume_name"
+    clear
+    echo ""
+    echo -e "${NC}     ${YELLOW} Starting ISO Build! ${NC}"
+    echo -e "${NC}   ->${GREEN} Output File:${NC}${NC} $output_file${NC}"
     
     # Copy entire parent directory structure
-    echo -e "${BLUE}Copying system files...${NC}"
+    echo -e "${NC}   ->${GREEN} Copying system files ${NC}"
     cp -r "$parent_dir"/* "$work_dir/"
-    
-    # Apply custom file overlay if files exist
-    if [ "$(ls -A "$customize_dir" 2>/dev/null)" ]; then
-        echo -e "${BLUE}Applying custom file overlay...${NC}"
-        cp -r "$customize_dir"/* "$work_dir/" 2>/dev/null
-        echo -e "${GREEN}Custom files applied from: $customize_dir${NC}"
-    else
-        echo -e "${YELLOW}No custom files found in: $customize_dir${NC}"
-    fi
     
     # Download and setup bootfiles
     download_bootfiles "$work_dir"
@@ -415,7 +415,6 @@ create_live_iso() {
     # Create ISO
     if create_iso "$work_dir" "$output_file" "$volume_name"; then
         rm -rf "$work_dir"
-        echo -e "${GREEN}📁 ISO saved to: $output_file${NC}"
         return 0
     else
         rm -rf "$work_dir"
@@ -425,18 +424,29 @@ create_live_iso() {
 
 # Main loop
 main() {
-    echo -e "${YELLOW}=== Nano ISO Creator - Live System Builder ===${NC}"
-    echo -e "${BLUE}Creates minimal live system ISOs with auto-chainloading${NC}"
-    echo -e "${BLUE}Supports both Debian Live (/live) and Ubuntu (/casper) systems${NC}"
-    echo -e "${GREEN}Features: Iterative building, directory preservation, custom overlays${NC}\n"
-    
+    echo ""
+    echo -e "${YELLOW} ╭──── gLiTcH ISO Compiler ────╮${NC}"
+    echo -e "${YELLOW} │${NC} BY: https://glitchlinux.wtf ${YELLOW}│${NC}"
+    echo -e "${YELLOW} │${NC} BIOS & EFI live ISO builder ${YELLOW}│${NC}"
+    echo -e "${YELLOW} │${NC} grub2 syslinux chainloading ${YELLOW}│${NC}"
+    echo -e "${YELLOW} │${NC} For Debian & Ubuntu distros ${YELLOW}│${NC}"
+    echo -e "${YELLOW} ╰─────────────────────────────╯${NC}"
+    #echo ""
     # Check dependencies
     install_dependencies
     
     while true; do
-        echo -e "\n${YELLOW}=== Create New ISO Project ===${NC}"
-        read -p "Enter parent directory path (e.g., /home/user/MyDistro): " parent_dir
-        
+        echo -e "${GREEN}  ╭──────────────────────────╮ ${NC}"
+	echo -e "${GREEN}  │${NC} Prepare: /mydistro/live/ ${GREEN}│${NC}"
+	echo -e "${GREEN}  │${NC} live dir must contain -> ${GREEN}│${NC}"
+	echo -e "${GREEN}  │${NC} initrd vmlinuz .squashfs ${GREEN}│${NC}"
+        echo -e "${GREEN}  ╰──────────────────────────╯${NC}"
+	echo ""
+        echo -e "${GREEN}   Enter parent dir to ${NC}live${NC}"
+        echo ""        
+	read -p "   -> " parent_dir
+	echo ""        
+
         if [ -z "$parent_dir" ]; then
             echo -e "${YELLOW}Empty path. Exiting.${NC}"
             break
@@ -447,13 +457,12 @@ main() {
         parent_dir=$(realpath "$parent_dir" 2>/dev/null)
         
         if create_live_iso "$parent_dir"; then
-            echo -e "\n${GREEN}🎉 ISO project completed!${NC}"
+            echo ""
         else
-            echo -e "\n${RED}💥 ISO project failed!${NC}"
+            echo -e "\n${RED} ISO project failed!${NC}"
         fi
         
-        echo -e "\n${YELLOW}=== Start New Project? ===${NC}"
-        read -p "Create another ISO project? (y/n): " continue_choice
+        read -p "      Create another ISO? (y/n): " continue_choice
         
         if [[ ! "$continue_choice" =~ ^[Yy]$ ]]; then
             echo -e "${GREEN}Thanks for using Nano ISO Creator!${NC}"
