@@ -1,0 +1,605 @@
+#!/bin/bash
+
+# Unified Squashfs and Live ISO Creator
+# Seamlessly combines filesystem squashing and ISO creation
+# Downloads required components from GitHub and orchestrates the entire process
+
+# Color codes for consistent output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;35m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Global variables for configuration flow
+ISO_NAME=""
+DISTRO_TYPE=""
+WORK_PATH=""
+PARENT_DIR=""
+LIVE_DIR="live"
+HOSTNAME="live-system"
+
+# Utility functions
+print_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check if running as root
+check_root() {
+    if [ "$(whoami)" != "root" ]; then
+        echo -e "${RED}This script must be run as root.${NC}"
+        echo "Re-running with sudo..."
+        exec sudo "$0" "$@"
+    fi
+}
+
+# Install dependencies for both operations
+install_dependencies() {
+    local missing_deps=()
+    for cmd in rsync mksquashfs xorriso wget lzma tar; do
+        if ! command -v "$cmd" &>/dev/null; then
+            missing_deps+=("$cmd")
+        fi
+    done
+    
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        print_info "Installing required packages: ${missing_deps[*]}"
+        if [ -x "$(command -v apt-get)" ]; then
+            apt-get update && apt-get install -y rsync squashfs-tools xorriso wget lzma tar
+        elif [ -x "$(command -v dnf)" ]; then
+            dnf install -y rsync squashfs-tools xorriso wget lzma tar
+        elif [ -x "$(command -v pacman)" ]; then
+            pacman -S --noconfirm rsync squashfs-tools xorriso wget lzma tar
+        else
+            print_error "Cannot install dependencies automatically"
+            exit 1
+        fi
+    fi
+}
+
+# Initial configuration gathering
+gather_configuration() {
+    clear
+    echo ""
+    echo -e "${GREEN}╭─────────────────────────────────────────────╮${NC}"
+    echo -e "${GREEN}│${NC} Unified Squashfs & Live ISO Creator        ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC} Seamless remastering and ISO generation    ${GREEN}│${NC}"
+    echo -e "${GREEN}╰─────────────────────────────────────────────╯${NC}"
+    echo ""
+    
+    # Get ISO name
+    while true; do
+        echo -n "Enter name for the ISO file (without .iso): "
+        read ISO_NAME
+        if [ -z "$ISO_NAME" ]; then
+            print_error "ISO name cannot be empty"
+            continue
+        fi
+        if [[ "$ISO_NAME" =~ [^a-zA-Z0-9_-] ]]; then
+            print_error "ISO name can only contain letters, numbers, hyphens, and underscores"
+            continue
+        fi
+        break
+    done
+    
+    # Get distro type
+    echo ""
+    echo "Select base distribution type:"
+    echo "  1) Debian-based (uses /live)"
+    echo "  2) Ubuntu-based (uses /casper)"
+    echo ""
+    while true; do
+        echo -n "Enter choice (1 or 2): "
+        read choice
+        case $choice in
+            1)
+                DISTRO_TYPE="debian"
+                LIVE_DIR="live"
+                print_success "Selected Debian-based distribution"
+                break
+                ;;
+            2)
+                DISTRO_TYPE="ubuntu"
+                LIVE_DIR="casper"
+                print_success "Selected Ubuntu-based distribution"
+                break
+                ;;
+            *)
+                print_error "Invalid choice. Please enter 1 or 2"
+                ;;
+        esac
+    done
+    
+    # Get working directory
+    echo ""
+    echo "Available locations for working directory:"
+    echo "  /tmp     - Temporary storage (fastest, cleared on reboot)"
+    echo "  /home    - Home directory"
+    echo "  /mnt     - Mount points"
+    lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT | grep -E "^[sd|nvme|hd]" | while read line; do
+        echo -e "  ${GREEN}$line${NC}"
+    done
+    echo ""
+    
+    while true; do
+        echo -n "Enter path for working directory (e.g., /tmp, /mnt/storage): "
+        read WORK_PATH
+        
+        if [ -z "$WORK_PATH" ]; then
+            print_error "Path cannot be empty"
+            continue
+        fi
+        
+        if [ ! -d "$WORK_PATH" ]; then
+            print_error "Directory $WORK_PATH does not exist"
+            continue
+        fi
+        
+        if [ ! -w "$WORK_PATH" ]; then
+            print_error "Directory $WORK_PATH is not writable"
+            continue
+        fi
+        
+        # Check available space (need at least 10GB)
+        available_space=$(df -BG "$WORK_PATH" | awk 'NR==2 {print $4}' | sed 's/G//')
+        if [ "$available_space" -lt 10 ]; then
+            print_warning "Less than 10GB available in $WORK_PATH (${available_space}GB free)"
+            echo -n "Continue anyway? (y/N): "
+            read confirm
+            if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+                continue
+            fi
+        fi
+        
+        break
+    done
+    
+    # Set up full paths
+    WORK_PATH="$WORK_PATH/$ISO_NAME"
+    PARENT_DIR="$WORK_PATH/$ISO_NAME"
+    
+    # Get hostname
+    echo ""
+    echo -n "Enter hostname for the live system [$HOSTNAME]: "
+    read input_hostname
+    if [ ! -z "$input_hostname" ]; then
+        if [[ "$input_hostname" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$ ]]; then
+            HOSTNAME="$input_hostname"
+        else
+            print_warning "Invalid hostname format. Using default: $HOSTNAME"
+        fi
+    fi
+    
+    # Summary
+    echo ""
+    print_info "Configuration Summary:"
+    echo "  ISO Name: ${ISO_NAME}.iso"
+    echo "  Distribution: $DISTRO_TYPE (/$LIVE_DIR)"
+    echo "  Working Path: $WORK_PATH"
+    echo "  Hostname: $HOSTNAME"
+    echo ""
+    echo -n "Proceed with this configuration? (y/N): "
+    read confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        print_error "Aborted by user"
+        exit 1
+    fi
+}
+
+# Phase 1: Create squashfs
+create_squashfs() {
+    print_info "Phase 1: Creating filesystem squashfs"
+    
+    local WORK_DIR="$WORK_PATH/remastered"
+    local SQFS_FILE="$WORK_PATH/filesystem.squashfs"
+    
+    # Check if paths already exist
+    if [ -d "$WORK_DIR" ]; then
+        print_warning "Removing existing working directory"
+        rm -rf "$WORK_DIR"
+    fi
+    
+    if [ -f "$SQFS_FILE" ]; then
+        print_warning "Removing existing squashfs file"
+        rm -f "$SQFS_FILE"
+    fi
+    
+    # Create working directory
+    mkdir -p "$WORK_DIR"
+    
+    # Copy system files
+    print_info "Copying system files (this may take several minutes)..."
+    rsync -aHAXS --numeric-ids --info=progress2 / "$WORK_DIR" \
+        --exclude=/dev/* \
+        --exclude=/proc/* \
+        --exclude=/sys/* \
+        --exclude=/tmp/* \
+        --exclude=/run/* \
+        --exclude=/mnt/* \
+        --exclude=/media/* \
+        --exclude=/live/* \
+        --exclude=/lib/live/mount/* \
+        --exclude=/cdrom/* \
+        --exclude="$WORK_PATH" \
+        --exclude="$WORK_PATH/*" \
+        --exclude=/var/cache/apt/archives/* \
+        --exclude=/var/lib/apt/lists/* \
+        --exclude=/var/log/* \
+        --exclude=/swap.file \
+        --exclude=/swapfile
+    
+    # Create essential directories
+    mkdir -p "$WORK_DIR"/{dev,proc,sys,tmp,run,mnt,media}
+    
+    # Fix systemd configuration
+    print_info "Configuring live system environment"
+    
+    # Create essential device nodes
+    mknod "$WORK_DIR/dev/null" c 1 3 2>/dev/null || true
+    mknod "$WORK_DIR/dev/zero" c 1 5 2>/dev/null || true
+    mknod "$WORK_DIR/dev/random" c 1 8 2>/dev/null || true
+    mknod "$WORK_DIR/dev/urandom" c 1 9 2>/dev/null || true
+    chmod 666 "$WORK_DIR/dev/null" "$WORK_DIR/dev/zero"
+    
+    # Set hostname
+    echo "$HOSTNAME" > "$WORK_DIR/etc/hostname"
+    cat > "$WORK_DIR/etc/hosts" << EOF
+127.0.0.1	localhost
+127.0.1.1	$HOSTNAME
+::1		localhost ip6-localhost ip6-loopback
+EOF
+    
+    # Create machine-id
+    if [ ! -f "$WORK_DIR/etc/machine-id" ]; then
+        echo "$(cat /proc/sys/kernel/random/uuid | tr -d '-')" > "$WORK_DIR/etc/machine-id"
+    fi
+    
+    # Clean up
+    rm -rf "$WORK_DIR"/var/tmp/*
+    rm -rf "$WORK_DIR"/tmp/*
+    chmod 1777 "$WORK_DIR/tmp"
+    
+    # Create squashfs
+    print_info "Compressing filesystem (this may take several minutes)..."
+    if mksquashfs "$WORK_DIR" "$SQFS_FILE" -comp xz -b 512k -Xbcj x86; then
+        print_success "Squashfs created successfully"
+        SIZE=$(du -h "$SQFS_FILE" | cut -f1)
+        print_info "Squashfs size: $SIZE"
+        return 0
+    else
+        print_error "Failed to create squashfs"
+        return 1
+    fi
+}
+
+# Phase 2: Prepare ISO structure
+prepare_iso_structure() {
+    print_info "Phase 2: Preparing ISO structure"
+    
+    # Create ISO directory structure
+    mkdir -p "$PARENT_DIR/$LIVE_DIR"
+    
+    # Move squashfs to live directory
+    if [ -f "$WORK_PATH/filesystem.squashfs" ]; then
+        print_info "Moving squashfs to $LIVE_DIR directory"
+        mv "$WORK_PATH/filesystem.squashfs" "$PARENT_DIR/$LIVE_DIR/filesystem.squashfs"
+        
+        # Clean up remastered directory to save space
+        if [ -d "$WORK_PATH/remastered" ]; then
+            print_info "Removing temporary remastered directory to save space"
+            rm -rf "$WORK_PATH/remastered"
+        fi
+    else
+        print_error "Squashfs file not found!"
+        return 1
+    fi
+    
+    # Copy kernel and initrd
+    print_info "Copying kernel and initrd files"
+    
+    # Find and copy vmlinuz
+    local vmlinuz_copied=false
+    for vmlinuz in /boot/vmlinuz-*; do
+        if [ -f "$vmlinuz" ]; then
+            cp "$vmlinuz" "$PARENT_DIR/$LIVE_DIR/$(basename $vmlinuz)"
+            print_success "Copied $(basename $vmlinuz)"
+            vmlinuz_copied=true
+            break
+        fi
+    done
+    
+    if [ "$vmlinuz_copied" = false ]; then
+        print_error "No vmlinuz kernel found in /boot"
+        return 1
+    fi
+    
+    # Find and copy initrd
+    local initrd_copied=false
+    for initrd in /boot/initrd.img-* /boot/initramfs-*; do
+        if [ -f "$initrd" ]; then
+            cp "$initrd" "$PARENT_DIR/$LIVE_DIR/$(basename $initrd)"
+            print_success "Copied $(basename $initrd)"
+            initrd_copied=true
+            break
+        fi
+    done
+    
+    if [ "$initrd_copied" = false ]; then
+        print_error "No initrd found in /boot"
+        return 1
+    fi
+    
+    # Rename files for live system if needed
+    if [ "$DISTRO_TYPE" = "ubuntu" ]; then
+        # Ubuntu expects specific names in casper
+        cd "$PARENT_DIR/$LIVE_DIR"
+        if ls vmlinuz-* >/dev/null 2>&1; then
+            mv vmlinuz-* vmlinuz 2>/dev/null || true
+        fi
+        if ls initrd.img-* >/dev/null 2>&1; then
+            mv initrd.img-* initrd 2>/dev/null || true
+        elif ls initramfs-* >/dev/null 2>&1; then
+            mv initramfs-* initrd 2>/dev/null || true
+        fi
+        cd - >/dev/null
+    else
+        # Debian can use full names but we'll symlink for compatibility
+        cd "$PARENT_DIR/$LIVE_DIR"
+        ln -sf vmlinuz-* vmlinuz 2>/dev/null || true
+        ln -sf initrd.img-* initrd.img 2>/dev/null || true
+        cd - >/dev/null
+    fi
+    
+    # Verify structure
+    print_info "Verifying ISO structure..."
+    if [ -f "$PARENT_DIR/$LIVE_DIR/filesystem.squashfs" ] && \
+       ls "$PARENT_DIR/$LIVE_DIR"/vmlinuz* >/dev/null 2>&1 && \
+       ls "$PARENT_DIR/$LIVE_DIR"/initrd* >/dev/null 2>&1; then
+        print_success "ISO structure prepared successfully"
+        echo ""
+        echo "Structure created:"
+        ls -lh "$PARENT_DIR/$LIVE_DIR"/ | grep -E 'filesystem|vmlinuz|initrd'
+        return 0
+    else
+        print_error "ISO structure verification failed"
+        return 1
+    fi
+}
+
+# Phase 3: Download bootfiles and create ISO
+create_iso() {
+    print_info "Phase 3: Creating bootable ISO"
+    
+    # Download bootfiles
+    local temp_dir="/tmp/unified_bootfiles_$$"
+    mkdir -p "$temp_dir"
+    
+    print_info "Downloading hybrid boot files..."
+    if ! wget --quiet \
+        "https://github.com/GlitchLinux/gLiTcH-ISO-Creator/raw/refs/heads/main/ISO-Hybrid-Base.tar.lzma" \
+        -O "$temp_dir/bootfiles.tar.lzma" 2>/dev/null; then
+        print_error "Failed to download bootfiles"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    print_info "Extracting bootfiles..."
+    unlzma "$temp_dir/bootfiles.tar.lzma" 2>/dev/null
+    tar -xf "$temp_dir/bootfiles.tar" -C "$PARENT_DIR" --strip-components=1 2>/dev/null
+    rm -rf "$temp_dir"
+    chmod -R 755 "$PARENT_DIR"
+    
+    # Find kernel and initrd names for GRUB config
+    cd "$PARENT_DIR/$LIVE_DIR"
+    local vmlinuz_name=$(ls vmlinuz* | head -1)
+    local initrd_name=$(ls initrd* | head -1)
+    cd - >/dev/null
+    
+    # Create GRUB configuration
+    mkdir -p "$PARENT_DIR/boot/grub"
+    
+    cat > "$PARENT_DIR/boot/grub/grub.cfg" <<EOF
+# GRUB2 Configuration for $ISO_NAME
+
+set default=0
+set timeout=10
+
+insmod efi_gop
+insmod efi_uga
+insmod video_bochs
+insmod video_cirrus
+insmod gfxterm
+insmod png
+
+if loadfont /boot/grub/fonts/unicode.pf2; then
+    terminal_output gfxterm
+fi
+
+if background_image /boot/grub/splash.png; then
+    set color_normal=light-gray/black
+    set color_highlight=white/black
+else
+    set menu_color_normal=cyan/blue
+    set menu_color_highlight=white/blue
+fi
+
+EOF
+
+    if [ "$DISTRO_TYPE" = "ubuntu" ]; then
+        cat >> "$PARENT_DIR/boot/grub/grub.cfg" <<EOF
+menuentry "$ISO_NAME - Live System" {
+    linux /$LIVE_DIR/$vmlinuz_name boot=casper quiet splash
+    initrd /$LIVE_DIR/$initrd_name
+}
+
+menuentry "$ISO_NAME - Live System (Safe Mode)" {
+    linux /$LIVE_DIR/$vmlinuz_name boot=casper xforcevesa nomodeset quiet
+    initrd /$LIVE_DIR/$initrd_name
+}
+
+menuentry "$ISO_NAME - Live System (RAM Mode)" {
+    linux /$LIVE_DIR/$vmlinuz_name boot=casper toram quiet splash
+    initrd /$LIVE_DIR/$initrd_name
+}
+EOF
+    else
+        cat >> "$PARENT_DIR/boot/grub/grub.cfg" <<EOF
+menuentry "$ISO_NAME - Live System" {
+    linux /$LIVE_DIR/$vmlinuz_name boot=live config quiet splash
+    initrd /$LIVE_DIR/$initrd_name
+}
+
+menuentry "$ISO_NAME - Live System (Safe Mode)" {
+    linux /$LIVE_DIR/$vmlinuz_name boot=live config xforcevesa nomodeset quiet
+    initrd /$LIVE_DIR/$initrd_name
+}
+
+menuentry "$ISO_NAME - Live System (RAM Mode)" {
+    linux /$LIVE_DIR/$vmlinuz_name boot=live config toram quiet splash
+    initrd /$LIVE_DIR/$initrd_name
+}
+EOF
+    fi
+    
+    # Create ISOLINUX config for chainloading
+    cat > "$PARENT_DIR/isolinux/isolinux.cfg" <<'EOF'
+default grub2_chainload
+timeout 1
+prompt 0
+
+label grub2_chainload
+  linux /boot/grub/lnxboot.img
+  initrd /boot/grub/core.img
+EOF
+    
+    # Allow user to add custom files
+    echo ""
+    echo -e "${GREEN}╭─────────────────────────────────────────────────╮${NC}"
+    echo -e "${GREEN}│${NC} You can now add custom files to include in ISO ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC} Directory: $PARENT_DIR                         ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC} Press ENTER to complete the ISO build          ${GREEN}│${NC}"
+    echo -e "${GREEN}╰─────────────────────────────────────────────────╯${NC}"
+    echo ""
+    read -p "Press ENTER to continue..."
+    
+    # Create the ISO
+    local output_file="$(dirname "$PARENT_DIR")/${ISO_NAME}.iso"
+    local volume_label=$(echo "$ISO_NAME" | tr '[:lower:]' '[:upper:]' | tr -cd '[:alnum:]_-' | cut -c1-32)
+    
+    print_info "Building ISO image..."
+    
+    # Find MBR file
+    local mbr_file="$PARENT_DIR/isolinux/isohdpfx.bin"
+    if [ ! -f "$mbr_file" ]; then
+        mbr_file="/usr/lib/ISOLINUX/isohdpfx.bin"
+    fi
+    
+    xorriso -as mkisofs \
+        -iso-level 3 \
+        -volid "$volume_label" \
+        -full-iso9660-filenames \
+        -R -J -joliet-long \
+        -isohybrid-mbr "$mbr_file" \
+        -b isolinux/isolinux.bin \
+        -c isolinux/boot.cat \
+        -no-emul-boot \
+        -boot-load-size 4 \
+        -boot-info-table \
+        -eltorito-alt-boot \
+        -e boot/grub/efi.img \
+        -no-emul-boot \
+        -isohybrid-gpt-basdat \
+        -append_partition 2 0xEF "$PARENT_DIR/boot/grub/efi.img" \
+        -o "$output_file" \
+        "$PARENT_DIR" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        local size=$(du -h "$output_file" | cut -f1)
+        print_success "ISO created successfully!"
+        echo ""
+        echo -e "${GREEN}════════════════════════════════════════════════${NC}"
+        echo -e "${GREEN} ISO Creation Complete!${NC}"
+        echo -e "${GREEN}────────────────────────────────────────────────${NC}"
+        echo -e "  Path: ${YELLOW}$output_file${NC}"
+        echo -e "  Size: ${YELLOW}$size${NC}"
+        echo -e "  Type: ${YELLOW}Hybrid (BIOS/UEFI)${NC}"
+        echo -e "${GREEN}════════════════════════════════════════════════${NC}"
+        return 0
+    else
+        print_error "ISO creation failed"
+        return 1
+    fi
+}
+
+# Cleanup function
+cleanup() {
+    echo ""
+    echo -n "Remove working directory to save space? (Y/n): "
+    read response
+    if [[ ! "$response" =~ ^[Nn]$ ]]; then
+        print_info "Cleaning up working directory..."
+        rm -rf "$WORK_PATH"
+        print_success "Cleanup complete"
+    else
+        print_info "Working directory preserved at: $WORK_PATH"
+    fi
+}
+
+# Main execution
+main() {
+    # Check root and install dependencies
+    check_root
+    install_dependencies
+    
+    # Gather all configuration upfront
+    gather_configuration
+    
+    # Execute phases
+    echo ""
+    print_info "Starting automated remastering process..."
+    echo ""
+    
+    # Phase 1: Create squashfs
+    if ! create_squashfs; then
+        print_error "Failed to create squashfs. Aborting."
+        exit 1
+    fi
+    
+    echo ""
+    
+    # Phase 2: Prepare ISO structure
+    if ! prepare_iso_structure; then
+        print_error "Failed to prepare ISO structure. Aborting."
+        exit 1
+    fi
+    
+    echo ""
+    
+    # Phase 3: Create ISO
+    if ! create_iso; then
+        print_error "Failed to create ISO. Aborting."
+        exit 1
+    fi
+    
+    # Cleanup
+    cleanup
+    
+    echo ""
+    print_success "All operations completed successfully!"
+    echo "Your live ISO is ready for use."
+}
+
+# Run main function
+main "$@"
