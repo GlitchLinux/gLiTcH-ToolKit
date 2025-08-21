@@ -1,0 +1,128 @@
+#!/bin/bash
+
+# Combined script to create squashfs and live ISO automatically
+# Must be run as root
+
+# Color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;35m'
+NC='\033[0m'
+
+# Function to print messages
+print_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check if run as root
+if [ "$(id -u)" -ne 0 ]; then
+    print_error "This script must be run as root. Please run with sudo."
+    exit 1
+fi
+
+# Prompt for ISO name
+echo -e "${GREEN}Enter the ISO name:${NC}"
+read iso_name
+if [ -z "$iso_name" ]; then
+    print_error "ISO name cannot be empty."
+    exit 1
+fi
+
+# Prompt for distro type
+echo -e "${GREEN}Is the remaster from a Debian or Ubuntu based distro?${NC}"
+echo "1. Debian"
+echo "2. Ubuntu"
+read distro_type
+if [ "$distro_type" != "1" ] && [ "$distro_type" != "2" ]; then
+    print_error "Invalid choice. Please enter 1 or 2."
+    exit 1
+fi
+
+# Prompt for drive path where squasher will work
+echo -e "${GREEN}Enter the drive path where the squashfs will be created (e.g., /tmp):${NC}"
+read drive_path
+if [ -z "$drive_path" ] || [ ! -d "$drive_path" ] || [ ! -w "$drive_path" ]; then
+    print_error "Drive path is invalid or not writable."
+    exit 1
+fi
+
+# Download SQUASH-FILESYSTEM.sh
+print_info "Downloading SQUASH-FILESYSTEM.sh..."
+squasher_script="/tmp/SQUASH-FILESYSTEM.sh"
+if ! wget -q "https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/SQUASH-FILESYSTEM.sh" -O "$squasher_script"; then
+    print_error "Failed to download SQUASH-FILESYSTEM.sh."
+    exit 1
+fi
+chmod +x "$squasher_script"
+
+# Run squasher with automated inputs
+print_info "Running squasher..."
+hostname="$iso_name"  # Use ISO name as hostname
+if ! echo -e "$drive_path\nremastered\n$hostname\ny" | "$squasher_script"; then
+    print_error "Squasher failed. Check the output for errors."
+    exit 1
+fi
+
+# Check if squashfs file was created
+squashfs_file="$drive_path/filesystem.squashfs"
+if [ ! -f "$squashfs_file" ]; then
+    print_error "Squashfs file not found at $squashfs_file."
+    exit 1
+fi
+
+# Create ISO directory structure
+iso_dir="$drive_path/$iso_name"
+live_dir="$iso_dir/live"
+if [ "$distro_type" = "2" ]; then
+    # Ubuntu-based: use casper
+    live_dir="$iso_dir/casper"
+fi
+mkdir -p "$live_dir"
+
+# Move squashfs to live directory
+mv "$squashfs_file" "$live_dir/filesystem.squashfs"
+if [ ! -f "$live_dir/filesystem.squashfs" ]; then
+    print_error "Failed to move squashfs file."
+    exit 1
+fi
+
+# Copy kernel and initrd files
+print_info "Copying kernel and initrd files..."
+if ! cp /boot/vmlin* "$live_dir/"; then
+    print_error "Failed to copy vmlinuz files."
+    exit 1
+fi
+if ! cp /boot/initrd* "$live_dir/"; then
+    print_error "Failed to copy initrd files."
+    exit 1
+fi
+
+# Remove remastered directory if it exists
+remastered_dir="$drive_path/remastered"
+if [ -d "$remastered_dir" ]; then
+    rm -rf "$remastered_dir"
+fi
+
+# Download LIVE-ISO-CREATOR.sh
+print_info "Downloading LIVE-ISO-CREATOR.sh..."
+iso_creator_script="/tmp/LIVE-ISO-CREATOR.sh"
+if ! wget -q "https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/LIVE-ISO-CREATOR" -O "$iso_creator_script"; then
+    print_error "Failed to download LIVE-ISO-CREATOR.sh."
+    exit 1
+fi
+chmod +x "$iso_creator_script"
+
+# Run live-iso creator with automated inputs
+print_info "Running live-iso creator..."
+# Provide inputs: parent_dir, then empty lines for defaults, then empty line for "press Enter", then 'n' for no another ISO
+if ! echo -e "$iso_dir\n\n\n\n\nn" | "$iso_creator_script"; then
+    print_error "Live-ISO creator failed. Check the output for errors."
+    exit 1
+fi
+
+print_info "ISO creation completed successfully!"
+exit 0
