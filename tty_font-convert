@@ -66,7 +66,7 @@ convert_to_psf() {
         "ttf"|"otf")
             echo "Converting TTF/OTF to PSF via BDF..."
             
-            # Create FontForge script
+            # Create FontForge script with compatibility fixes
             cat > "$temp_dir/convert.py" << 'EOF'
 import fontforge
 import sys
@@ -89,8 +89,27 @@ try:
     for s in sizes:
         output_file = f"{output_base}_{s}.bdf"
         print(f"Generating size {s}px -> {output_file}")
-        font.generate(output_file, bitmap_type=fontforge.bitmapType.BDF, 
-                     bitmap_resolution=75, pixelsize=s)
+        
+        # Try different methods for BDF generation based on FontForge version
+        try:
+            # Method 1: Modern FontForge API
+            font.generate(output_file, bitmap_type="bdf", pixelsize=s)
+        except:
+            try:
+                # Method 2: Alternative API
+                font.generate(output_file, flags=("bitmap",), bitmap_resolution=75, pixelsize=s)
+            except:
+                try:
+                    # Method 3: Legacy API with bitmapType enum
+                    if hasattr(fontforge, 'bitmapType'):
+                        font.generate(output_file, bitmap_type=fontforge.bitmapType.BDF, 
+                                     bitmap_resolution=75, pixelsize=s)
+                    else:
+                        # Method 4: Basic generation without bitmap-specific parameters
+                        font.generate(output_file)
+                except Exception as inner_e:
+                    print(f"Failed to generate {output_file}: {inner_e}")
+                    continue
     
     font.close()
     print("Conversion completed successfully")
