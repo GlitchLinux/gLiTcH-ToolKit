@@ -1,30 +1,29 @@
 #!/bin/bash
 
-# Seamless Squashfs and Live ISO Creator - Surgical Fusion Approach
-# Downloads original scripts and surgically connects them while preserving all functionality
-# Especially preserves ALL boot configurations and ISO creation logic
+# Seamless Squashfs and Live ISO Creator - Environment Variable Injection
+# Downloads original scripts and runs them with automated input via environment variables
 
 set -e
 
-# Color codes for consistent output
+# Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;35m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Script URLs
+# Correct URLs - NO .sh extension for LIVE-ISO-CREATOR
 SQUASH_URL="https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/SQUASH-FILESYSTEM.sh"
 ISO_URL="https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/LIVE-ISO-CREATOR"
 
-# Working directory for downloaded scripts
+# Working directory for scripts
 SCRIPT_DIR="/tmp/seamless_iso_$$"
 mkdir -p "$SCRIPT_DIR"
 
 # Cleanup on exit
 trap "rm -rf $SCRIPT_DIR" EXIT
 
-# Function to print messages
+# Print functions
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
@@ -37,50 +36,78 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Download original scripts
+# Check root
+if [ "$(whoami)" != "root" ]; then
+    echo -e "${RED}This script must be run as root.${NC}"
+    exec sudo "$0" "$@"
+fi
+
+# Download and verify scripts
 download_scripts() {
     print_info "Downloading original scripts from GitHub..."
     
+    # Download SQUASH-FILESYSTEM.sh
     if ! wget -q "$SQUASH_URL" -O "$SCRIPT_DIR/squash_original.sh"; then
         print_error "Failed to download SQUASH-FILESYSTEM.sh"
+        print_error "URL attempted: $SQUASH_URL"
         exit 1
     fi
     
+    # Download LIVE-ISO-CREATOR (no .sh extension!)
     if ! wget -q "$ISO_URL" -O "$SCRIPT_DIR/iso_original.sh"; then
-        print_error "Failed to download LIVE-ISO-CREATOR.sh"
+        print_error "Failed to download LIVE-ISO-CREATOR"
+        print_error "URL attempted: $ISO_URL"
+        exit 1
+    fi
+    
+    # Verify downloads
+    if [ ! -s "$SCRIPT_DIR/squash_original.sh" ] || [ ! -s "$SCRIPT_DIR/iso_original.sh" ]; then
+        print_error "Downloaded files are empty"
         exit 1
     fi
     
     chmod +x "$SCRIPT_DIR"/*.sh
-    print_success "Scripts downloaded successfully"
+    
+    # Syntax check
+    if ! bash -n "$SCRIPT_DIR/squash_original.sh" 2>/dev/null; then
+        print_error "Syntax error in downloaded SQUASH-FILESYSTEM.sh"
+        exit 1
+    fi
+    
+    if ! bash -n "$SCRIPT_DIR/iso_original.sh" 2>/dev/null; then
+        print_error "Syntax error in downloaded LIVE-ISO-CREATOR"
+        exit 1
+    fi
+    
+    print_success "Scripts downloaded and verified successfully"
 }
 
-# Gather all configuration upfront
-gather_configuration() {
+# Gather all user input upfront
+gather_input() {
     clear
     echo ""
     echo -e "${GREEN}╭─────────────────────────────────────────────╮${NC}"
     echo -e "${GREEN}│${NC} Seamless Squashfs & Live ISO Creator       ${GREEN}│${NC}"
-    echo -e "${GREEN}│${NC} Automated remastering and ISO generation   ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC} Environment Variable Automation v3         ${GREEN}│${NC}"
     echo -e "${GREEN}╰─────────────────────────────────────────────╯${NC}"
     echo ""
     
-    # 1. Get ISO name
+    # 1. ISO name
     while true; do
         echo -n "Enter name for the ISO (without .iso extension): "
-        read ISO_NAME
-        if [ -z "$ISO_NAME" ]; then
+        read ISO_NAME_INPUT
+        if [ -z "$ISO_NAME_INPUT" ]; then
             print_error "ISO name cannot be empty"
             continue
         fi
-        if [[ "$ISO_NAME" =~ [^a-zA-Z0-9_-] ]]; then
+        if [[ "$ISO_NAME_INPUT" =~ [^a-zA-Z0-9_-] ]]; then
             print_error "ISO name can only contain letters, numbers, hyphens, and underscores"
             continue
         fi
         break
     done
     
-    # 2. Get distro type
+    # 2. Distribution type
     echo ""
     echo "Select base distribution type:"
     echo "  1) Debian-based (uses /live)"
@@ -90,14 +117,12 @@ gather_configuration() {
         read choice
         case $choice in
             1)
-                DISTRO_TYPE="debian"
-                LIVE_DIR="live"
+                LIVE_DIR_TYPE="live"
                 print_success "Selected Debian-based distribution"
                 break
                 ;;
             2)
-                DISTRO_TYPE="ubuntu"
-                LIVE_DIR="casper"
+                LIVE_DIR_TYPE="casper"
                 print_success "Selected Ubuntu-based distribution"
                 break
                 ;;
@@ -107,7 +132,7 @@ gather_configuration() {
         esac
     done
     
-    # 3. Get working directory path
+    # 3. Working directory path - as per instructions, user enters this
     echo ""
     echo "Available locations for working directory:"
     echo "  /tmp     - Temporary storage (fastest)"
@@ -116,106 +141,76 @@ gather_configuration() {
     echo ""
     while true; do
         echo -n "Enter path where to create the working directory: "
-        read WORK_PATH
-        if [ -z "$WORK_PATH" ]; then
+        read WORK_PATH_INPUT
+        if [ -z "$WORK_PATH_INPUT" ]; then
             print_error "Path cannot be empty"
             continue
         fi
-        if [ ! -d "$WORK_PATH" ]; then
-            print_error "Directory $WORK_PATH does not exist"
+        if [ ! -d "$WORK_PATH_INPUT" ]; then
+            print_error "Directory $WORK_PATH_INPUT does not exist"
             continue
         fi
-        if [ ! -w "$WORK_PATH" ]; then
-            print_error "Directory $WORK_PATH is not writable"
+        if [ ! -w "$WORK_PATH_INPUT" ]; then
+            print_error "Directory $WORK_PATH_INPUT is not writable"
             continue
         fi
         break
     done
     
-    # Additional configuration
+    # 4. Hostname (optional)
     echo ""
     echo -n "Enter hostname for the live system [live-system]: "
-    read HOSTNAME
-    HOSTNAME=${HOSTNAME:-live-system}
+    read HOSTNAME_INPUT
+    HOSTNAME_INPUT=${HOSTNAME_INPUT:-live-system}
     
-    # Export variables for use in modified scripts
-    export ISO_NAME
-    export DISTRO_TYPE
-    export LIVE_DIR
-    export WORK_PATH
-    export HOSTNAME
-    export PARENT_DIR="$WORK_PATH/$ISO_NAME"
+    # Export all variables for child scripts
+    export DRIVE_PATH="$WORK_PATH_INPUT"
+    export WRKDIR="remastered"
+    export HOSTNAME="$HOSTNAME_INPUT"
+    export ISO_NAME="$ISO_NAME_INPUT"
+    export LIVE_DIR="$LIVE_DIR_TYPE"
+    export PARENT_DIR="$WORK_PATH_INPUT/$ISO_NAME_INPUT"
+    
+    # Summary
+    echo ""
+    print_info "Configuration Summary:"
+    echo "  ISO Name: $ISO_NAME_INPUT"
+    echo "  Distribution: $LIVE_DIR_TYPE"
+    echo "  Working Path: $WORK_PATH_INPUT"
+    echo "  Hostname: $HOSTNAME_INPUT"
+    echo ""
+    echo -n "Proceed with this configuration? (y/N): "
+    read confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        print_error "Aborted by user"
+        exit 1
+    fi
 }
 
-# Create modified squash script
-create_modified_squash() {
-    cat > "$SCRIPT_DIR/squash_modified.sh" << 'SQUASH_HEADER'
+# Create modified squash script that uses environment variables
+prepare_squash_script() {
+    print_info "Preparing squashfs creation script..."
+    
+    # Create a wrapper that bypasses input gathering
+    cat > "$SCRIPT_DIR/squash_automated.sh" << 'SQUASH_WRAPPER'
 #!/bin/bash
 
-# Modified SQUASH-FILESYSTEM.sh - Automated version
-# Preserves ALL original functionality, only modifies input/output
-
-# Import configuration from environment
-ISO_NAME="$ISO_NAME"
-WORK_PATH="$WORK_PATH"
-HOSTNAME="$HOSTNAME"
-
-# Set paths automatically
-DRIVE_PATH="$WORK_PATH"
-WRKDIR="remastered"
+# Use environment variables set by parent
+DRIVE_PATH="${DRIVE_PATH}"
+WRKDIR="${WRKDIR:-remastered}"
+HOSTNAME="${HOSTNAME:-live-system}"
 WORK="$DRIVE_PATH/$WRKDIR"
 SQFS="$DRIVE_PATH/filesystem.squashfs"
 
-# Original script content follows with input sections removed
-SQUASH_HEADER
+# Source color codes and functions from original
+source <(grep -E '^(RED|GREEN|YELLOW|BLUE|NC)=' "$SCRIPT_DIR/squash_original.sh")
+source <(sed -n '/^print_info()/,/^}/p' "$SCRIPT_DIR/squash_original.sh")
+source <(sed -n '/^print_success()/,/^}/p' "$SCRIPT_DIR/squash_original.sh")
+source <(sed -n '/^print_warning()/,/^}/p' "$SCRIPT_DIR/squash_original.sh")
+source <(sed -n '/^print_error()/,/^}/p' "$SCRIPT_DIR/squash_original.sh")
+source <(sed -n '/^fix_systemd_issues()/,/^}$/p' "$SCRIPT_DIR/squash_original.sh")
+source <(sed -n '/^create_live_boot_config()/,/^}$/p' "$SCRIPT_DIR/squash_original.sh")
 
-    # Extract everything after the input gathering section from the original script
-    # Preserve ALL functions and execution logic
-    sed -n '/^# Function to fix systemd issues/,$ p' "$SCRIPT_DIR/squash_original.sh" | \
-    sed '/^# Main script starts here/,/^# Set up paths/ {
-        /^# Main script starts here/r /dev/stdin
-        d
-    }' << 'INPUT_REPLACEMENT' >> "$SCRIPT_DIR/squash_modified.sh"
-
-# Main script starts here
-# Skip all the interactive input - we already have our values
-
-# Color codes preserved from original
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;35m'
-BLUE='\033[0;32m'
-NC='\033[0m'
-
-# Check if running as root
-if [ "$(whoami)" != "root" ]; then
-    echo -e "${RED}This script must be run as root.${NC}"
-    echo "Re-running with sudo..."
-    exec sudo "$0" "$@"
-fi
-
-# Functions preserved from original
-print_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-INPUT_REPLACEMENT
-
-    # Ensure the script continues with the original logic
-    echo '
-# Use our pre-configured paths
 echo
 print_info "Configuration (automated):"
 echo "  Working directory: $WORK"
@@ -223,82 +218,123 @@ echo "  Output file: $SQFS"
 echo "  Hostname: $HOSTNAME"
 echo
 
-# Continue with original script logic from path checking onwards
-' >> "$SCRIPT_DIR/squash_modified.sh"
+# Check if paths already exist
+if [ -d "$WORK" ]; then
+    rm -rf "$WORK"
+    print_warning "Removed existing directory $WORK"
+fi
 
-    chmod +x "$SCRIPT_DIR/squash_modified.sh"
+if [ -e "$SQFS" ]; then
+    rm -f "$SQFS"
+    print_warning "Removed existing file $SQFS"
+fi
+
+# Execute main squashfs creation logic from original script
+print_info "Starting remaster process..."
+mkdir -p "$WORK"
+
+print_info "Copying system files (this may take several minutes)..."
+rsync -aHAXS --numeric-ids --info=progress2 / "$WORK" \
+    --exclude=/dev/* \
+    --exclude=/proc/* \
+    --exclude=/sys/* \
+    --exclude=/tmp/* \
+    --exclude=/run/* \
+    --exclude=/mnt/* \
+    --exclude=/media/* \
+    --exclude=/live/* \
+    --exclude=/lib/live/mount/* \
+    --exclude=/cdrom/* \
+    --exclude=/initrd/* \
+    --exclude="/$WRKDIR" \
+    --exclude=/var/cache/apt/archives/* \
+    --exclude=/var/lib/apt/lists/* \
+    --exclude=/var/log/* \
+    --exclude=/root/.cache \
+    --exclude=/root/.thumbnails \
+    --exclude=/home/*/.cache \
+    --exclude=/home/*/.thumbnails \
+    --exclude=/swap.file \
+    --exclude=/swapfile \
+    --exclude=/usr/lib/live/mount/rootfs/* \
+    --exclude=/usr/lib/live/mount/medium/* \
+    --exclude=/usr/lib/live/mount/overlay/*
+
+mkdir -p "$WORK"/{dev,proc,sys,tmp,run,mnt,media}
+
+fix_systemd_issues "$WORK" "$HOSTNAME"
+create_live_boot_config "$WORK" "$HOSTNAME"
+
+print_info "Cleaning up system..."
+rm -f "$WORK"/var/lib/alsa/asound.state
+rm -f "$WORK"/root/.bash_history
+rm -f "$WORK"/root/.xsession-errors*
+rm -f "$WORK"/etc/blkid-cache
+rm -rf "$WORK"/etc/udev/rules.d/70-persistent*
+rm -f "$WORK"/var/lib/dhcp/dhclient.*.leases
+rm -f "$WORK"/var/lib/dhcpcd/*.lease
+rm -rf "$WORK"/var/tmp/*
+rm -rf "$WORK"/tmp/*
+
+chmod 1777 "$WORK/tmp"
+chmod 755 "$WORK/run"
+
+print_info "Creating squashfs filesystem (this may take several minutes)..."
+if mksquashfs "$WORK" "$SQFS" -comp xz -b 512k -Xbcj x86 -progress; then
+    print_success "Successfully created: $SQFS"
+    SIZE=$(du -h "$SQFS" | cut -f1)
+    print_info "File size: $SIZE"
+    
+    # Always remove working directory to save space (as per instructions)
+    rm -rf "$WORK"
+    print_success "Working directory cleaned up"
+    
+    print_success "Live system creation completed successfully!"
+    print_info "Your live system squashfs is ready at: $SQFS"
+else
+    print_error "Failed to create squashfs filesystem"
+    exit 1
+fi
+SQUASH_WRAPPER
+    
+    chmod +x "$SCRIPT_DIR/squash_automated.sh"
 }
 
-# Create modified ISO script
-create_modified_iso() {
-    # Create a wrapper that feeds the parent_dir automatically
-    cat > "$SCRIPT_DIR/iso_modified.sh" << 'ISO_SCRIPT'
-#!/bin/bash
-
-# Modified LIVE-ISO-CREATOR.sh - Automated version
-# Preserves ALL original functionality, especially boot configurations
-
-# Import configuration
-PARENT_DIR="$PARENT_DIR"
-ISO_NAME="$ISO_NAME"
-
-# Create a response file for the ISO creator
-RESPONSE_FILE="/tmp/iso_responses_$$"
-cat > "$RESPONSE_FILE" << EOF
-$PARENT_DIR
-$ISO_NAME
-
-
-EOF
-
-# Run the original ISO creator with automated input
-# Preserving ALL original boot configurations and xorriso commands
-ISO_SCRIPT
-
-    cat "$SCRIPT_DIR/iso_original.sh" >> "$SCRIPT_DIR/iso_modified.sh"
-    
-    # Modify only the input reading part to use our parent_dir
-    sed -i 's/read -p "   -> " parent_dir/parent_dir="$PARENT_DIR"/' "$SCRIPT_DIR/iso_modified.sh"
-    
-    chmod +x "$SCRIPT_DIR/iso_modified.sh"
-}
-
-# Execute the complete workflow
-execute_workflow() {
-    print_info "Starting automated remastering and ISO creation process..."
-    
-    # Phase 1: Create squashfs using modified script
+# Execute squashfs creation
+run_squash() {
     print_info "Phase 1: Creating filesystem squashfs..."
-    if ! (cd "$SCRIPT_DIR" && sudo -E ./squash_modified.sh); then
+    
+    # Set script directory in environment for the wrapper
+    export SCRIPT_DIR
+    
+    if ! bash "$SCRIPT_DIR/squash_automated.sh"; then
         print_error "Squashfs creation failed"
         exit 1
     fi
     
-    # Phase 2: Prepare ISO structure
+    print_success "Squashfs created successfully"
+}
+
+# Prepare ISO structure
+prepare_iso_structure() {
     print_info "Phase 2: Preparing ISO structure..."
     
-    # Create the ISO directory structure
+    # Create directory structure as per instructions
     mkdir -p "$PARENT_DIR/$LIVE_DIR"
     
     # Move squashfs to live/casper directory
-    if [ -f "$WORK_PATH/filesystem.squashfs" ]; then
-        mv "$WORK_PATH/filesystem.squashfs" "$PARENT_DIR/$LIVE_DIR/filesystem.squashfs"
+    if [ -f "$DRIVE_PATH/filesystem.squashfs" ]; then
+        mv "$DRIVE_PATH/filesystem.squashfs" "$PARENT_DIR/$LIVE_DIR/filesystem.squashfs"
         print_success "Moved squashfs to $LIVE_DIR directory"
-        
-        # Remove remastered directory to save space
-        if [ -d "$WORK_PATH/remastered" ]; then
-            rm -rf "$WORK_PATH/remastered"
-            print_info "Removed temporary remastered directory"
-        fi
     else
-        print_error "filesystem.squashfs not found!"
+        print_error "filesystem.squashfs not found at $DRIVE_PATH"
         exit 1
     fi
     
     # Copy kernel and initrd with full filenames
     print_info "Copying kernel and initrd files..."
     
-    # Find and copy vmlinuz
+    # Copy vmlinuz
     for vmlinuz in /boot/vmlinuz-*; do
         if [ -f "$vmlinuz" ]; then
             cp "$vmlinuz" "$PARENT_DIR/$LIVE_DIR/$(basename $vmlinuz)"
@@ -307,7 +343,7 @@ execute_workflow() {
         fi
     done
     
-    # Find and copy initrd
+    # Copy initrd
     for initrd in /boot/initrd.img-* /boot/initramfs-*; do
         if [ -f "$initrd" ]; then
             cp "$initrd" "$PARENT_DIR/$LIVE_DIR/$(basename $initrd)"
@@ -316,82 +352,59 @@ execute_workflow() {
         fi
     done
     
-    # Create appropriate symlinks for live system
-    cd "$PARENT_DIR/$LIVE_DIR"
-    if [ "$DISTRO_TYPE" = "ubuntu" ]; then
-        # Ubuntu/casper expects specific names
-        ln -sf vmlinuz-* vmlinuz 2>/dev/null || true
-        ln -sf initrd.img-* initrd 2>/dev/null || true
-    else
-        # Debian live can use symlinks
-        ln -sf vmlinuz-* vmlinuz 2>/dev/null || true
-        ln -sf initrd.img-* initrd.img 2>/dev/null || true
-    fi
-    cd - >/dev/null
-    
-    # Verify structure
-    print_info "Verifying ISO structure..."
+    # Verify structure exists
     if [ -f "$PARENT_DIR/$LIVE_DIR/filesystem.squashfs" ] && \
        ls "$PARENT_DIR/$LIVE_DIR"/vmlinuz* >/dev/null 2>&1 && \
        ls "$PARENT_DIR/$LIVE_DIR"/initrd* >/dev/null 2>&1; then
-        print_success "ISO structure ready"
-        echo ""
+        print_success "ISO structure prepared successfully"
         echo "Structure created:"
         ls -lh "$PARENT_DIR/$LIVE_DIR/" | grep -E 'filesystem|vmlinuz|initrd'
-        echo ""
     else
         print_error "ISO structure incomplete"
         exit 1
     fi
-    
-    # Phase 3: Create ISO using the original script's logic
+}
+
+# Run ISO creator with automated parent_dir
+run_iso_creator() {
     print_info "Phase 3: Creating bootable ISO..."
-    print_info "The ISO creator will now run with all original boot configurations preserved"
-    echo ""
     
-    # Run the modified ISO creator that uses our parent_dir
-    if ! (cd "$SCRIPT_DIR" && sudo -E ./iso_modified.sh); then
+    # The ISO creator expects parent_dir as input
+    # We'll provide it via here-document for the first prompt only
+    echo "$PARENT_DIR" | bash "$SCRIPT_DIR/iso_original.sh"
+    
+    if [ $? -eq 0 ]; then
+        print_success "ISO creation completed successfully"
+    else
         print_error "ISO creation failed"
         exit 1
-    fi
-    
-    print_success "Complete! Your bootable ISO has been created"
-    echo ""
-    
-    # Final cleanup option
-    echo -n "Remove working directory $WORK_PATH (except the ISO)? (Y/n): "
-    read cleanup
-    if [[ ! "$cleanup" =~ ^[Nn]$ ]]; then
-        # Be very careful to only remove the working files, not the ISO
-        if [ -d "$PARENT_DIR" ]; then
-            rm -rf "$PARENT_DIR"
-        fi
-        print_success "Working directory cleaned"
     fi
 }
 
 # Main execution
 main() {
-    # Check for root early
-    if [ "$(whoami)" != "root" ]; then
-        echo -e "${RED}This script must be run as root.${NC}"
-        echo "Re-running with sudo..."
-        exec sudo "$0" "$@"
-    fi
+    print_info "Starting Seamless ISO Creator v3"
     
-    # Download scripts
+    # Download and verify scripts
     download_scripts
     
-    # Gather all configuration
-    gather_configuration
+    # Gather all user input
+    gather_input
     
-    # Create modified versions
-    create_modified_squash
-    create_modified_iso
+    # Prepare and run squashfs creation
+    prepare_squash_script
+    run_squash
     
-    # Execute the workflow
-    execute_workflow
+    # Prepare ISO structure
+    prepare_iso_structure
+    
+    # Run ISO creator
+    run_iso_creator
+    
+    print_success "All operations completed successfully!"
+    echo ""
+    echo "Your bootable ISO should be ready at: $WORK_PATH_INPUT/${ISO_NAME_INPUT}.iso"
 }
 
-# Run main
+# Execute main
 main "$@"
