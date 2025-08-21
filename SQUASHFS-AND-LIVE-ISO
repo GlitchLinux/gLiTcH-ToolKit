@@ -1,0 +1,311 @@
+#!/bin/bash
+
+# Combined ISO Builder - Wrapper for SQUASH-FILESYSTEM.sh and LIVE-ISO-CREATOR.sh
+# Downloads and executes both scripts in sequence with proper file management
+
+# Color codes
+RED='\033[0;31m'
+GREEN='\033[1;32m'
+YELLOW='\033[1;35m'
+BLUE='\033[1;35m'
+NC='\033[0m'
+
+# Function to print colored messages
+print_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Function to download scripts
+download_scripts() {
+    local temp_dir="$1"
+    
+    print_info "Downloading required scripts..."
+    
+    # Download SQUASH-FILESYSTEM.sh
+    if ! wget --quiet "https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/SQUASH-FILESYSTEM.sh" \
+        -O "$temp_dir/SQUASH-FILESYSTEM.sh"; then
+        print_error "Failed to download SQUASH-FILESYSTEM.sh"
+        return 1
+    fi
+    
+    # Download LIVE-ISO-CREATOR.sh
+    if ! wget --quiet "https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/LIVE-ISO-CREATOR" \
+        -O "$temp_dir/LIVE-ISO-CREATOR.sh"; then
+        print_error "Failed to download LIVE-ISO-CREATOR.sh"
+        return 1
+    fi
+    
+    # Make scripts executable
+    chmod +x "$temp_dir/SQUASH-FILESYSTEM.sh"
+    chmod +x "$temp_dir/LIVE-ISO-CREATOR.sh"
+    
+    print_success "Scripts downloaded successfully"
+    return 0
+}
+
+# Function to find kernel and initrd files
+find_boot_files() {
+    local search_dir="$1"
+    local vmlinuz=""
+    local initrd=""
+    
+    # Find vmlinuz
+    for file in "$search_dir"/boot/vmlinuz* "$search_dir"/vmlinuz*; do
+        if [ -f "$file" ]; then
+            vmlinuz="$file"
+            break
+        fi
+    done
+    
+    # Find initrd
+    for file in "$search_dir"/boot/initrd* "$search_dir"/boot/initramfs* "$search_dir"/initrd* "$search_dir"/initramfs*; do
+        if [ -f "$file" ]; then
+            initrd="$file"
+            break
+        fi
+    done
+    
+    echo "$vmlinuz|$initrd"
+}
+
+# Function to setup live directory structure
+setup_live_structure() {
+    local work_dir="$1"
+    local squashfs_file="$2"
+    local iso_name="$3"
+    
+    print_info "Setting up live directory structure..."
+    
+    # Create the ISO parent directory
+    local iso_parent_dir="$work_dir/$iso_name"
+    mkdir -p "$iso_parent_dir/live"
+    
+    # Copy the squashfs file
+    print_info "Copying filesystem.squashfs to live directory..."
+    cp "$squashfs_file" "$iso_parent_dir/live/filesystem.squashfs"
+    
+    # Find and copy kernel and initrd files from the current system
+    local boot_files=$(find_boot_files "/")
+    local vmlinuz=$(echo "$boot_files" | cut -d'|' -f1)
+    local initrd=$(echo "$boot_files" | cut -d'|' -f2)
+    
+    if [ -z "$vmlinuz" ] || [ -z "$initrd" ]; then
+        print_error "Could not find kernel or initrd files"
+        return 1
+    fi
+    
+    print_info "Copying kernel files..."
+    cp "$vmlinuz" "$iso_parent_dir/live/vmlinuz"
+    cp "$initrd" "$iso_parent_dir/live/initrd.img"
+    
+    print_success "Live directory structure created at: $iso_parent_dir"
+    echo "$iso_parent_dir"
+    return 0
+}
+
+# Function to modify LIVE-ISO-CREATOR.sh for automated execution
+create_automated_iso_creator() {
+    local temp_dir="$1"
+    local iso_parent_dir="$2"
+    
+    # Create a modified version that auto-answers the prompts
+    cat > "$temp_dir/automated_iso_creator.sh" << EOF
+#!/bin/bash
+
+# Source the original ISO creator script but override the main function
+source "$temp_dir/LIVE-ISO-CREATOR.sh"
+
+# Override the main function to provide automated input
+automated_main() {
+    echo ""
+    echo -e "\${YELLOW} ╭──── gLiTcH ISO Compiler ────╮\${NC}"
+    echo -e "\${YELLOW} │\${NC} BY: https://glitchlinux.wtf \${YELLOW}│\${NC}"
+    echo -e "\${YELLOW} │\${NC} BIOS & EFI live ISO builder \${YELLOW}│\${NC}"
+    echo -e "\${YELLOW} │\${NC} grub2 syslinux chainloading \${YELLOW}│\${NC}"
+    echo -e "\${YELLOW} │\${NC} For Debian & Ubuntu distros \${YELLOW}│\${NC}"
+    echo -e "\${YELLOW} ╰─────────────────────────────╯\${NC}"
+    
+    # Check dependencies
+    install_dependencies
+    
+    # Use the provided parent directory
+    local parent_dir="$iso_parent_dir"
+    
+    if create_live_iso "\$parent_dir"; then
+        echo ""
+        echo -e "\${GREEN}ISO creation completed successfully!\${NC}"
+    else
+        echo -e "\n\${RED} ISO project failed!\${NC}"
+        exit 1
+    fi
+}
+
+# Run the automated main function
+automated_main "\$@"
+EOF
+    
+    chmod +x "$temp_dir/automated_iso_creator.sh"
+}
+
+# Main function
+main() {
+    clear
+    echo ""
+    echo -e "${GREEN}╭────────────────────────────────────────────╮${NC}"
+    echo -e "${GREEN}│${NC} Combined ISO Builder - Complete Workflow ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC} 1. Creates filesystem.squashfs            ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC} 2. Sets up live directory structure       ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC} 3. Creates bootable ISO                   ${GREEN}│${NC}"
+    echo -e "${GREEN}│${NC} https://glitchlinux.com                   ${GREEN}│${NC}"
+    echo -e "${GREEN}╰────────────────────────────────────────────╯${NC}"
+    echo ""
+    
+    # Check if running as root
+    if [ "$(whoami)" != "root" ]; then
+        print_error "This script must be run as root for the squashfs creation."
+        echo "Re-running with sudo..."
+        exec sudo "$0" "$@"
+    fi
+    
+    # Create temporary directory for scripts
+    local temp_dir="/tmp/combined_iso_builder_$$"
+    mkdir -p "$temp_dir"
+    
+    # Download required scripts
+    if ! download_scripts "$temp_dir"; then
+        rm -rf "$temp_dir"
+        exit 1
+    fi
+    
+    print_info "Starting Phase 1: Squashfs Creation"
+    echo ""
+    
+    # Execute the squashfs creation script
+    if ! "$temp_dir/SQUASH-FILESYSTEM.sh"; then
+        print_error "Squashfs creation failed"
+        rm -rf "$temp_dir"
+        exit 1
+    fi
+    
+    echo ""
+    print_success "Phase 1 completed - Squashfs created"
+    echo ""
+    
+    # Get the working directory and squashfs file from user
+    echo -e "${YELLOW}Phase 2: Setting up ISO structure${NC}"
+    echo ""
+    
+    # Prompt for the work directory where squashfs was created
+    while true; do
+        echo -n "Enter the path where filesystem.squashfs was created: "
+        read squashfs_path
+        
+        if [ -z "$squashfs_path" ]; then
+            print_error "Path cannot be empty"
+            continue
+        fi
+        
+        # Expand tilde and resolve path
+        squashfs_path="${squashfs_path/#\~/$HOME}"
+        squashfs_path=$(realpath "$squashfs_path" 2>/dev/null)
+        
+        if [ ! -f "$squashfs_path/filesystem.squashfs" ]; then
+            print_error "filesystem.squashfs not found in $squashfs_path"
+            continue
+        fi
+        
+        break
+    done
+    
+    # Prompt for ISO name
+    while true; do
+        echo -n "Enter the ISO name (without .iso extension): "
+        read iso_name
+        
+        if [ -z "$iso_name" ]; then
+            print_error "ISO name cannot be empty"
+            continue
+        fi
+        
+        # Validate ISO name
+        if [[ ! "$iso_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            print_error "ISO name can only contain letters, numbers, hyphens, and underscores"
+            continue
+        fi
+        
+        break
+    done
+    
+    # Get the parent directory of the squashfs location
+    local work_dir=$(dirname "$squashfs_path")
+    
+    # Setup live directory structure
+    print_info "Setting up live directory structure..."
+    local iso_parent_dir=$(setup_live_structure "$work_dir" "$squashfs_path/filesystem.squashfs" "$iso_name")
+    
+    if [ $? -ne 0 ]; then
+        print_error "Failed to setup live directory structure"
+        rm -rf "$temp_dir"
+        exit 1
+    fi
+    
+    echo ""
+    print_success "Phase 2 completed - Live directory structure ready"
+    echo ""
+    
+    print_info "Starting Phase 3: ISO Creation"
+    echo ""
+    
+    # Create automated ISO creator
+    create_automated_iso_creator "$temp_dir" "$iso_parent_dir"
+    
+    # Execute the ISO creation script
+    if ! "$temp_dir/automated_iso_creator.sh"; then
+        print_error "ISO creation failed"
+        rm -rf "$temp_dir"
+        exit 1
+    fi
+    
+    echo ""
+    print_success "All phases completed successfully!"
+    print_info "Your bootable ISO has been created"
+    
+    # Cleanup
+    echo ""
+    echo -n "Do you want to clean up temporary files? (Y/n): "
+    read cleanup
+    if [[ ! "$cleanup" =~ ^[Nn]$ ]]; then
+        rm -rf "$temp_dir"
+        print_success "Temporary files cleaned up"
+    else
+        print_info "Temporary files preserved at: $temp_dir"
+    fi
+    
+    echo ""
+    print_success "Combined ISO Builder completed successfully!"
+}
+
+# Cleanup function for script termination
+cleanup() {
+    if [ -n "$temp_dir" ] && [ -d "$temp_dir" ]; then
+        rm -rf "$temp_dir"
+    fi
+}
+
+# Set trap for cleanup
+trap cleanup EXIT
+
+# Run main function
+main "$@"
