@@ -1,3 +1,0 @@
-cd /tmp 
-wget https://github.com/microsoft/cascadia-code/releases/download/v2407.24/CascadiaCode-2407.24.zip
-mkdir CascadiaCode && mv CascadiaCode-2407.24.zip CascadiaCode/ && cd CascadiaCode && unzip CascadiaCode-2407.24.zip
