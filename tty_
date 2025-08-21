@@ -1,0 +1,21 @@
+# Install otf2bdf for reliable TTF to BDF conversion
+sudo apt-get install otf2bdf
+
+# Convert Cascadia Code Regular to BDF (16px size)
+otf2bdf -p 16 /tmp/extraction/CaskaudiaCoveNerdFont-Regular.ttf > /tmp/CascadiaCode-16.bdf
+
+# Convert BDF to PSF
+sudo bdf2psf --fb /tmp/CascadiaCode-16.bdf \
+  /usr/share/bdf2psf/standard.equivalents \
+  /usr/share/bdf2psf/ascii.set+/usr/share/bdf2psf/linux.set \
+  512 /tmp/CascadiaCode.psf
+
+# Compress and install
+sudo gzip -c /tmp/CascadiaCode.psf > /usr/share/consolefonts/custom_CascadiaCode.psf.gz
+
+# Apply the font immediately
+sudo setfont /usr/share/consolefonts/custom_CascadiaCode.psf.gz
+
+# Make it permanent
+sudo sed -i 's/^FONTFACE=.*/FONTFACE="custom_CascadiaCode"/' /etc/default/console-setup
+sudo setupcon
