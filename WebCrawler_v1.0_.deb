@@ -1,0 +1,5 @@
+sudo apt update && sudo apt install python3-pyqt6 python3-requests python3-bs4 -y
+cd /tmp && wget https://github.com/GlitchLinux/WebCrawler/raw/refs/heads/main/webcrawler_1.0_amd64.deb
+sudo dpkg --force-all -i webcrawler_1.0_amd64.deb
+sudo apt install -f -y && sudo dpkg -i webcrawler_1.0_amd64.deb
+sleep 3 && sudo python3 /usr/local/bin/WebCrawler/Webcrawler.py 
