@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Color codes
+RED='\033[0;31m'
+GREEN='\033[1;32m'
+YELLOW='\033[1;35m'
+BLUE='\033[1;35m'
+NC='\033[0m'
+
 #---------------#
 # Rapid IPXE VM #
 #---------------#
@@ -22,10 +29,11 @@ curl -L --silent --show-error "$ISO_URL" -o "$ISO_PATH" || {
 # Main Loop
 #---------------------------------------
 while true; do
-    echo -e "\n=============="
-    echo "   VM Configuration"
-    echo "==================="
-
+    echo ""
+    echo -e "${GREEN}   ╭─────────────────────────────────────╮${NC}"
+    echo -e "${GREEN}   │${NC} Rapid IPXE VM LAUNCHER ${GREEN}│${NC}" 
+    echo -e "${GREEN}   ╰─────────────────────────────────────╯${NC}"
+    echo ""
     # Boot Mode Selection
     echo -e "\nChoose Boot Mode:"
     echo ""
