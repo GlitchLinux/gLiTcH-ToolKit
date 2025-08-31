@@ -107,9 +107,6 @@ while true; do
 
     disown
 
-    echo -e "[*] VM started in background (output hidden)."
-    echo "    Please use your window manager to interact with the VM window."
-
     echo -e "\n[*] Waiting for VM to shut down. Press ENTER when VM is closed to continue..."
     read -rp ""
 
