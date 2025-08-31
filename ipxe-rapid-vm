@@ -30,10 +30,9 @@ curl -L --silent --show-error "$ISO_URL" -o "$ISO_PATH" || {
 #---------------------------------------
 while true; do
     echo ""
-    echo -e "${GREEN}   ╭─────────────────────────────────────╮${NC}"
-    echo -e "${GREEN}   │${NC} Rapid IPXE VM LAUNCHER ${GREEN}│${NC}" 
-    echo -e "${GREEN}   ╰─────────────────────────────────────╯${NC}"
-    echo ""
+    echo -e "${GREEN}╭─────────────────────────────────────╮${NC}"
+    echo -e "${GREEN}│${NC} Rapid IPXE VM LAUNCHER ${GREEN}│${NC}" 
+    echo -e "${GREEN}╰─────────────────────────────────────╯${NC}"
     # Boot Mode Selection
     echo -e "\nChoose Boot Mode:"
     echo ""
