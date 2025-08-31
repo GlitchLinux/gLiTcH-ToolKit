@@ -19,7 +19,7 @@ ISO_PATH="$ISO_DIR/glitchNET-ipxe-hybrid.iso"
 #-------#
 mkdir -p "$ISO_DIR"
 echo ""
-echo -e "\n[*] Downloading iPXE ISO to $ISO_PATH..."
+#echo -e "\n[*] Downloading iPXE ISO to $ISO_PATH..."
 curl -L --silent --show-error "$ISO_URL" -o "$ISO_PATH" || {
     echo "[!] Download failed!"
     exit 1
@@ -30,9 +30,9 @@ curl -L --silent --show-error "$ISO_URL" -o "$ISO_PATH" || {
 #---------------------------------------
 while true; do
     echo ""
-    echo -e "${GREEN}╭─────────────────────────────────────╮${NC}"
+    echo -e "${GREEN}╭─────────────────────────────╮${NC}"
     echo -e "${GREEN}│${NC} Rapid IPXE VM LAUNCHER ${GREEN}│${NC}" 
-    echo -e "${GREEN}╰─────────────────────────────────────╯${NC}"
+    echo -e "${GREEN}╰─────────────────────────────╯${NC}"
     # Boot Mode Selection
     echo -e "\nChoose Boot Mode:"
     echo ""
