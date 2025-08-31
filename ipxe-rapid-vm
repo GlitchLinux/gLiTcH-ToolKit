@@ -1,17 +1,17 @@
 #!/bin/bash
 
-#---------------------------------------
-# Configuration
-#---------------------------------------
+#---------------#
+# Rapid IPXE VM #
+#---------------#
 ISO_URL="https://github.com/GlitchLinux/IPXE-MultiBoot/raw/refs/heads/main/glitchNET-ipxe-hybrid.iso"
 ISO_DIR="/tmp/ipxe"
 ISO_PATH="$ISO_DIR/glitchNET-ipxe-hybrid.iso"
 
-#---------------------------------------
-# Setup
-#---------------------------------------
+#-------#
+# Setup #
+#-------#
 mkdir -p "$ISO_DIR"
-
+echo ""
 echo -e "\n[*] Downloading iPXE ISO to $ISO_PATH..."
 curl -L --silent --show-error "$ISO_URL" -o "$ISO_PATH" || {
     echo "[!] Download failed!"
@@ -28,8 +28,10 @@ while true; do
 
     # Boot Mode Selection
     echo -e "\nChoose Boot Mode:"
+    echo ""
     echo "1) BIOS"
     echo "2) UEFI"
+    echo ""
     read -rp "Enter 1 or 2: " BOOT_MODE
 
     if [[ "$BOOT_MODE" != "1" && "$BOOT_MODE" != "2" ]]; then
@@ -38,11 +40,11 @@ while true; do
     fi
 
     # RAM Configuration
-    read -rp "Hit Enter to use 5000MB RAM or input new value (in MB): " RAM_MB
+    read -rp "Enter to use 5000MB RAM or input new value (in MB): " RAM_MB
     RAM_MB=${RAM_MB:-5000}
 
     # Extra Disk Option
-    read -rp "Add extra disk to VM? Press Enter for no, or 'y' to add one: " ADD_DISK
+    read -rp "Add disk to VM? Enter for no, Y to add: " ADD_DISK
     EXTRA_DISK=""
 
     if [[ "$ADD_DISK" =~ ^[Yy]$ ]]; then
@@ -59,9 +61,10 @@ while true; do
         fi
     fi
 
-    #---------------------------------------
-    # Launch QEMU VM
-    #---------------------------------------
+    #----------------#
+    # Launch QEMU VM #
+    #----------------#-
+    echo ""
     echo -e "\n[*] Launching QEMU VM...\n"
 
     if [[ "$BOOT_MODE" == "1" ]]; then
@@ -103,15 +106,13 @@ while true; do
     echo -e "\n[*] Waiting for VM to shut down. Press ENTER when VM is closed to continue..."
     read -rp ""
 
-    #---------------------------------------
-    # Prompt to Loop or Exit
-    #---------------------------------------
     echo
     read -rp "Boot another VM? (y/n): " AGAIN
     [[ "$AGAIN" != "y" && "$AGAIN" != "Y" ]] && break
 done
 
-#---------------------------------------
-# Exit Message
-#---------------------------------------
+#---------#
+# See ya! #
+#---------#
+echo ""
 echo -e "\n[*] All done. Exiting.\n"
