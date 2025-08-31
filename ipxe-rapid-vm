@@ -1,0 +1,81 @@
+#!/bin/bash
+
+ISO_URL="https://github.com/GlitchLinux/IPXE-MultiBoot/raw/refs/heads/main/glitchNET-ipxe-hybrid.iso"
+ISO_PATH="/tmp/ipxe/glitchNET-ipxe-hybrid.iso"
+ISO_DIR="/tmp/ipxe"
+
+mkdir -p "$ISO_DIR"
+
+echo "[*] Downloading iPXE ISO to $ISO_PATH..."
+curl -L "$ISO_URL" -o "$ISO_PATH" || { echo "Download failed!"; exit 1; }
+
+while true; do
+    echo -e "\nChoose Boot Mode:"
+    echo "1) BIOS"
+    echo "2) UEFI"
+    read -rp "Enter 1 or 2: " BOOT_MODE
+
+    if [[ "$BOOT_MODE" != "1" && "$BOOT_MODE" != "2" ]]; then
+        echo "Invalid option. Please enter 1 or 2."
+        continue
+    fi
+
+    read -rp "Hit Enter to use 5000MB RAM or input new value (in MB): " RAM_MB
+    RAM_MB=${RAM_MB:-5000}
+
+    read -rp "Add extra disk to VM? Press Enter for no, or 'y' to add one: " ADD_DISK
+
+    EXTRA_DISK=""
+    if [[ "$ADD_DISK" == "y" || "$ADD_DISK" == "Y" ]]; then
+        echo -e "\nAvailable Disks:"
+        lsblk
+        echo
+        fdisk -l 2>/dev/null | grep '^Disk /dev/' || true
+        read -rp "Enter full device path (e.g., /dev/sdx): " DISK_PATH
+
+        if [[ ! -b "$DISK_PATH" ]]; then
+            echo "Invalid disk path. Skipping extra disk."
+        else
+            EXTRA_DISK="-drive file=$DISK_PATH,format=raw,if=virtio"
+        fi
+    fi
+
+    echo -e "\n[*] Launching QEMU VM..."
+
+    if [[ "$BOOT_MODE" == "1" ]]; then
+        # BIOS mode
+        qemu-system-x86_64 \
+            -enable-kvm \
+            -m "$RAM_MB" \
+            -boot d \
+            -cdrom "$ISO_PATH" \
+            $EXTRA_DISK \
+            -net nic -net user
+    else
+        # UEFI mode
+        if [[ ! -f /usr/share/OVMF/OVMF_CODE.fd && ! -f /usr/share/OVMF/OVMF_CODE.bin ]]; then
+            echo "UEFI firmware not found. Install OVMF package (e.g. ovmf or edk2-ovmf)."
+            exit 1
+        fi
+
+        # Use common paths for UEFI firmware
+        OVMF_PATH="/usr/share/OVMF/OVMF_CODE.fd"
+        [[ -f "$OVMF_PATH" ]] || OVMF_PATH="/usr/share/OVMF/OVMF_CODE.bin"
+
+        qemu-system-x86_64 \
+            -enable-kvm \
+            -m "$RAM_MB" \
+            -bios "$OVMF_PATH" \
+            -boot d \
+            -cdrom "$ISO_PATH" \
+            $EXTRA_DISK \
+            -net nic -net user
+    fi
+
+    echo -e "\n[*] VM shut down or rebooted."
+
+    read -rp "Boot another VM? (y/n): " AGAIN
+    [[ "$AGAIN" != "y" && "$AGAIN" != "Y" ]] && break
+done
+
+echo "[*] Exiting. Goodbye!"
