@@ -18,13 +18,13 @@ curl -L --silent --show-error "$ISO_URL" -o "$ISO_PATH" || {
     exit 1
 }
 
-#---------------------------------------
+#-----------
 # Main Loop
 #---------------------------------------
 while true; do
-    echo -e "\n==============================="
-    echo "        VM Configuration"
-    echo "==============================="
+    echo -e "\n=============="
+    echo "   VM Configuration"
+    echo "==================="
 
     # Boot Mode Selection
     echo -e "\nChoose Boot Mode:"
