@@ -1,4 +1,4 @@
-sudo rm /MiniDeb.tar && sudo tar --numeric-owner --one-file-system \
+sudo rm /MiniDeb.tar -f && sudo tar --numeric-owner --one-file-system \
   --exclude=/proc \
   --exclude=/sys \
   --exclude=/dev \
