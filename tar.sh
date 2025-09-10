@@ -1,1 +1,13 @@
-sudo tar --exclude=/tmp --exclude=/mnt --exclude=/media --exclude=/proc/* --exclude=/lost+found --exclude=/swapfile --exclude=/var/cache/apt/archives --exclude=/MiniDeb.tar -C / -c . > /MiniDeb.tar
+sudo tar --numeric-owner \
+  --exclude=/proc \
+  --exclude=/sys \
+  --exclude=/dev \
+  --exclude=/run \
+  --exclude=/tmp \
+  --exclude=/mnt \
+  --exclude=/media \
+  --exclude=/lost+found \
+  --exclude=/swapfile \
+  --exclude=/var/cache/apt/archives \
+  --exclude=/MiniDeb.tar \
+  -C / -c . > ~/MiniDeb.tar
