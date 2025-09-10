@@ -3,7 +3,8 @@
 # Script to create WSL distribution package from running Debian system
 # Creates: distro.tar, install.ps1, and distro-WSL-installer.zip
 
-set -e  # Exit on any error
+set -e  # Exit on any error - disabled for tar operations
+set -o pipefail  # Make pipes fail if any command in pipe fails
 
 # Colors for output
 RED='\033[0;31m'
