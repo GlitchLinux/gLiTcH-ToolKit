@@ -1,4 +1,4 @@
-sudo tar --numeric-owner \
+sudo tar --numeric-owner --one-file-system \
   --exclude=/proc \
   --exclude=/sys \
   --exclude=/dev \
@@ -9,5 +9,4 @@ sudo tar --numeric-owner \
   --exclude=/lost+found \
   --exclude=/swapfile \
   --exclude=/var/cache/apt/archives \
-  --exclude=/MiniDeb.tar \
   -C / -c . > ~/MiniDeb.tar
