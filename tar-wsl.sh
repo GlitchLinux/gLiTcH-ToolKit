@@ -72,18 +72,18 @@ fi
 
 # Create tar (ignore all errors)
 log_step "Creating tar archive..."
-tar --create \
+timeout 3600 tar --create \
     --file="$TAR_FILE" \
-    --exclude='/dev/*' \
-    --exclude='/proc/*' \
-    --exclude='/sys/*' \
-    --exclude='/run/*' \
-    --exclude='/mnt/*' \
-    --exclude='/media/*' \
-    --exclude='/tmp/*' \
-    --exclude='/var/tmp/*' \
-    --exclude='/var/cache/*' \
-    --exclude='/var/log/*' \
+    --exclude='/dev' \
+    --exclude='/proc' \
+    --exclude='/sys' \
+    --exclude='/run' \
+    --exclude='/mnt' \
+    --exclude='/media' \
+    --exclude='/tmp' \
+    --exclude='/var/tmp' \
+    --exclude='/var/cache' \
+    --exclude='/var/log' \
     --exclude='/home/*/.cache' \
     --exclude='/root/.cache' \
     --exclude='/swapfile' \
@@ -91,14 +91,25 @@ tar --create \
     --exclude='lost+found' \
     --exclude='/boot/efi' \
     --exclude='/boot/grub' \
-    --exclude='*.log' \
-    --exclude='*.tmp' \
     --numeric-owner \
     --preserve-permissions \
     --ignore-failed-read \
-    --warning=no-file-ignored \
-    --warning=no-file-removed \
-    -C / . 2>/dev/null
+    --one-file-system \
+    -C / . &
+
+TAR_PID=$!
+echo "Tar running (PID: $TAR_PID)..."
+
+# Monitor progress
+while kill -0 $TAR_PID 2>/dev/null; do
+    if [[ -f "$TAR_FILE" ]]; then
+        SIZE=$(du -m "$TAR_FILE" 2>/dev/null | cut -f1 || echo "0")
+        echo -ne "\rProgress: ${SIZE}MB..."
+    fi
+    sleep 5
+done
+
+wait $TAR_PID
 
 if [[ ! -f "$TAR_FILE" ]]; then
     log_error "Tar creation failed"
