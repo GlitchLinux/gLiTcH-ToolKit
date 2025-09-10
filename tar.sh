@@ -1,1 +1,1 @@
-sudo tar --numeric-owner --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run --exclude=/tmp --exclude=/mnt --exclude=/media --exclude=/lost+found --exclude=/swapfile --exclude=/var/cache/apt/archives --exclude=/root/debian.tar -C / -c . > ~/debian.tar
+sudo tar --numeric-owner --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run --exclude=/tmp --exclude=/mnt --exclude=/media --exclude=/lost+found --exclude=/swapfile --exclude=/var/cache/apt/archives --exclude=/root/MiniDeb.tar -C / -c . > ~/MiniDeb.tar
