@@ -1,0 +1,7 @@
+cd /tmp
+sudo wget http://launchpadlibrarian.net/715529444/update-motd_3.12_all.deb
+sudo apt update
+sudo dpkg -i update-motd_3.12_all.deb
+sudo update-motd
+sleep 1
+exit
