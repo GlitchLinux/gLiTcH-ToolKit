@@ -1,0 +1,196 @@
+#!/bin/bash
+
+# Aggressive QEMU Cleanup - Maximum Space Recovery
+# Removes everything except essential AMD64 virtualization
+
+set -e
+
+echo "=== AGGRESSIVE QEMU CLEANUP ==="
+echo "This will remove maximum QEMU files to save disk space"
+echo "Only AMD64 virtualization will remain functional"
+echo "Press Ctrl+C to cancel, or Enter to continue..."
+read
+
+echo ""
+echo "=== Starting aggressive cleanup ==="
+
+# Function to remove and report
+remove_and_report() {
+    local target="$1"
+    local description="$2"
+    
+    if [ -e "$target" ]; then
+        local size=""
+        if [ -d "$target" ]; then
+            size=$(du -sh "$target" 2>/dev/null | cut -f1 || echo "?")
+            rm -rf "$target"
+        else
+            size=$(ls -lh "$target" 2>/dev/null | awk '{print $5}' || echo "?")
+            rm -f "$target"
+        fi
+        echo "  ✓ Removed ($size): $description"
+        return 0
+    else
+        echo "  - Not found: $description"
+        return 1
+    fi
+}
+
+# Remove ALL non-x86_64 system emulators
+echo "Removing non-AMD64 system emulators..."
+for arch in aarch64 alpha arm armeb avr cris hppa i386 loongarch64 m68k \
+            microblaze microblazeel mips mips64 mips64el mipsel nios2 \
+            or1k ppc ppc64 riscv32 riscv64 rx s390x sh4 sh4eb sparc \
+            sparc64 tricore xtensa xtensaeb; do
+    remove_and_report "/usr/bin/qemu-system-$arch" "QEMU system $arch"
+done
+
+# Remove ALL user-mode emulators (completely unnecessary for VM host)
+echo "Removing ALL user-mode emulators..."
+for arch in aarch64 alpha arm armeb cris hexagon hppa i386 loongarch64 \
+            m68k microblaze microblazeel mips mips64 mips64el mipsel \
+            nios2 or1k ppc ppc64 ppc64le riscv32 riscv64 s390x sh4 sh4eb \
+            sparc sparc32plus sparc64 xtensa xtensaeb; do
+    remove_and_report "/usr/bin/qemu-$arch" "QEMU user-mode $arch"
+    remove_and_report "/usr/bin/qemu-$arch-static" "QEMU user-mode static $arch"
+done
+
+# Remove binfmt support files (user-mode emulation)
+echo "Removing binfmt support files..."
+remove_and_report "/usr/share/binfmts" "binfmt support directory"
+remove_and_report "/var/lib/binfmts" "binfmt state directory"
+
+# Aggressively clean firmware directory
+echo "Removing non-AMD64 firmware and BIOS files..."
+QEMU_SHARE="/usr/share/qemu"
+if [ -d "$QEMU_SHARE" ]; then
+    # Remove ALL non-x86 firmware
+    remove_and_report "$QEMU_SHARE/openbios-ppc" "PowerPC OpenBIOS"
+    remove_and_report "$QEMU_SHARE/openbios-sparc32" "SPARC32 OpenBIOS" 
+    remove_and_report "$QEMU_SHARE/openbios-sparc64" "SPARC64 OpenBIOS"
+    remove_and_report "$QEMU_SHARE/palcode-clipper" "Alpha PALcode"
+    remove_and_report "$QEMU_SHARE/QEMU,tcx.bin" "SPARC graphics ROM"
+    remove_and_report "$QEMU_SHARE/QEMU,cgthree.bin" "SPARC CG3 ROM"
+    
+    # Remove S390 files
+    remove_and_report "$QEMU_SHARE/s390-ccw.img" "S390 CCW boot"
+    remove_and_report "$QEMU_SHARE/s390-netboot.img" "S390 network boot"
+    
+    # Remove PowerPC files
+    remove_and_report "$QEMU_SHARE/u-boot.e500" "PowerPC U-Boot"
+    remove_and_report "$QEMU_SHARE/qemu_vga.ndrv" "Mac VGA driver"
+    remove_and_report "$QEMU_SHARE/slof.bin" "PowerPC SLOF firmware"
+    remove_and_report "$QEMU_SHARE/spapr-rtas.bin" "PowerPC RTAS"
+    
+    # Remove ARM files
+    remove_and_report "$QEMU_SHARE/npcm7xx_bootrom.bin" "ARM NPCM7xx bootrom"
+    remove_and_report "$QEMU_SHARE/bl1.bin" "ARM trusted firmware"
+    remove_and_report "$QEMU_SHARE/bl2.bin" "ARM trusted firmware"
+    remove_and_report "$QEMU_SHARE/bl31.bin" "ARM trusted firmware"
+    
+    # Remove RISC-V files
+    remove_and_report "$QEMU_SHARE/opensbi-riscv32-generic-fw_dynamic.bin" "RISC-V OpenSBI 32-bit"
+    remove_and_report "$QEMU_SHARE/opensbi-riscv64-generic-fw_dynamic.bin" "RISC-V OpenSBI 64-bit"
+    
+    # Remove exotic keymaps (keep only essential ones)
+    KEYMAP_DIR="$QEMU_SHARE/keymaps"
+    if [ -d "$KEYMAP_DIR" ]; then
+        echo "Removing exotic keyboard layouts..."
+        # Keep only: en-us, de, fr, maybe es - remove everything else
+        for keymap in ar bepo cz da et fi fo hr hu is it ja lt lv mk nl no pl pt pt-br \
+                      ru sl sv th tr; do
+            remove_and_report "$KEYMAP_DIR/$keymap" "Keymap: $keymap"
+        done
+    fi
+    
+    # Use find to catch any remaining architecture-specific files
+    echo "Removing remaining architecture-specific files..."
+    find "$QEMU_SHARE" -name "*ppc*" -exec rm -rf {} + 2>/dev/null || true
+    find "$QEMU_SHARE" -name "*arm*" -exec rm -rf {} + 2>/dev/null || true  
+    find "$QEMU_SHARE" -name "*sparc*" -exec rm -rf {} + 2>/dev/null || true
+    find "$QEMU_SHARE" -name "*mips*" -exec rm -rf {} + 2>/dev/null || true
+    find "$QEMU_SHARE" -name "*s390*" -exec rm -rf {} + 2>/dev/null || true
+    find "$QEMU_SHARE" -name "*alpha*" -exec rm -rf {} + 2>/dev/null || true
+    find "$QEMU_SHARE" -name "*riscv*" -exec rm -rf {} + 2>/dev/null || true
+    find "$QEMU_SHARE" -name "*aarch64*" -exec rm -rf {} + 2>/dev/null || true
+fi
+
+# Remove guest agent if present (not needed on host)
+echo "Removing guest agent..."
+remove_and_report "/usr/bin/qemu-ga" "QEMU guest agent"
+remove_and_report "/usr/sbin/qemu-ga" "QEMU guest agent (sbin)"
+
+# Remove unused QEMU utilities (keep only essential ones)
+echo "Removing non-essential QEMU utilities..."
+remove_and_report "/usr/bin/qemu-edid" "QEMU EDID utility"
+remove_and_report "/usr/bin/qemu-keymap" "QEMU keymap utility" 
+remove_and_report "/usr/bin/qemu-pr-helper" "QEMU persistent reservation helper"
+remove_and_report "/usr/bin/qemu-storage-daemon" "QEMU storage daemon"
+
+# Remove documentation for removed architectures
+echo "Removing architecture-specific documentation..."
+DOC_DIRS="/usr/share/doc /usr/share/man"
+for doc_dir in $DOC_DIRS; do
+    if [ -d "$doc_dir" ]; then
+        find "$doc_dir" -name "*qemu*" -path "*/man*/*arm*" -exec rm -f {} + 2>/dev/null || true
+        find "$doc_dir" -name "*qemu*" -path "*/man*/*ppc*" -exec rm -f {} + 2>/dev/null || true
+        find "$doc_dir" -name "*qemu*" -path "*/man*/*sparc*" -exec rm -f {} + 2>/dev/null || true
+        find "$doc_dir" -name "*qemu*" -path "*/man*/*mips*" -exec rm -f {} + 2>/dev/null || true
+        find "$doc_dir" -name "*qemu*" -path "*/man*/*s390*" -exec rm -f {} + 2>/dev/null || true
+    fi
+done
+
+# Clean up any leftover files in /var
+echo "Cleaning /var for QEMU remnants..."
+remove_and_report "/var/log/qemu-ga" "QEMU guest agent logs"
+
+echo ""
+echo "=== Final Results ==="
+
+# Show what remains
+echo "Remaining QEMU binaries:"
+ls -la /usr/bin/qemu* 2>/dev/null || echo "None found"
+
+echo ""
+echo "Remaining QEMU files in /usr/share/qemu:"
+if [ -d "/usr/share/qemu" ]; then
+    ls -la /usr/share/qemu/ | head -20
+    file_count=$(find /usr/share/qemu -type f | wc -l)
+    total_size=$(du -sh /usr/share/qemu 2>/dev/null | cut -f1)
+    echo "Total files remaining: $file_count"
+    echo "Total size: $total_size"
+else
+    echo "Directory not found or empty"
+fi
+
+echo ""
+echo "=== Verification ==="
+
+# Verify essential functionality
+if [ -e /dev/kvm ]; then
+    echo "✓ KVM device available"
+else
+    echo "✗ KVM device not available"
+fi
+
+if command -v qemu-system-x86_64 >/dev/null 2>&1; then
+    echo "✓ qemu-system-x86_64 available"
+    if qemu-system-x86_64 -version >/dev/null 2>&1; then
+        echo "✓ qemu-system-x86_64 functional"
+    else
+        echo "✗ qemu-system-x86_64 not working"
+    fi
+else
+    echo "✗ qemu-system-x86_64 not found"
+fi
+
+# Check for libvirt compatibility
+if command -v virsh >/dev/null 2>&1; then
+    echo "✓ virsh available for VM management"
+else
+    echo "- virsh not found (install libvirt-clients if needed)"
+fi
+
+echo ""
+echo "=== Cleanup Complete ==="
+echo "Maximum space has been recovered while preserving AMD64 VM functionality"
