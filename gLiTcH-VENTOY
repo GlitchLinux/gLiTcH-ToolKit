@@ -8,7 +8,7 @@ cd "$TMP_DIR" || exit 1
 # Download files
 echo "Downloading files..."
 wget -q "https://github.com/GlitchLinux/gLiTcH-Ventoy/raw/refs/heads/main/ventoy-1.1.05-linux.tar.gz"
-wget -q "https://github.com/GlitchLinux/gLiTcH-Ventoy/raw/refs/heads/main/GLITCH-VENTOY-v1.0.tar.lzma"
+wget -q "https://github.com/GlitchLinux/gLiTcH-Ventoy/raw/refs/heads/main/GLITCH-VENTOY-v2.0.tar.lzma"
 
 # Extract Ventoy
 echo "Extracting Ventoy..."
@@ -157,13 +157,13 @@ fi
 
 # Copy and extract Glitch files
 echo "Copying GLITCH-VENTOY files..."
-cp "$TMP_DIR/GLITCH-VENTOY-v1.0.tar.lzma" "$MOUNT_POINT/"
+cp "$TMP_DIR/GLITCH-VENTOY-v2.0.tar.lzma" "$MOUNT_POINT/"
 cd "$MOUNT_POINT" || exit 1
 echo "Extracting GLITCH-VENTOY files..."
-sudo tar --xattrs --xattrs-include='*' -xf "GLITCH-VENTOY-v1.0.tar.lzma" 2>/dev/null || \
-sudo tar -xf "GLITCH-VENTOY-v1.0.tar.lzma"  # Fallback without xattrs if first attempt fails
+sudo tar --xattrs --xattrs-include='*' -xf "GLITCH-VENTOY-v2.0.tar.lzma" 2>/dev/null || \
+sudo tar -xf "GLITCH-VENTOY-v2.0.tar.lzma"  # Fallback without xattrs if first attempt fails
 
-sudo rm "GLITCH-VENTOY-v1.0.tar.lzma"
+sudo rm "GLITCH-VENTOY-v2.0.tar.lzma"
 
 # Clean up
 echo "Cleaning up..."
