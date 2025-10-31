@@ -1,0 +1,5 @@
+#!/bin/bash
+
+sudo systemctl enable sddm
+
+sudo systemctl restart sddm
