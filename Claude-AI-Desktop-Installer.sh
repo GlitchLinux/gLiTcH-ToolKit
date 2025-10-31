@@ -8,5 +8,6 @@ echo ""
 echo "**************************************"
 echo " CLAUDE DESKTOP INSTALLED SUCESSFULLY "
 echo "**************************************"
+sleep 5
 echo ""
 bash
