@@ -9,7 +9,7 @@ set -e
 
 IMG_URL="https://glitchlinux.wtf/claude-cloud/MCP-container.img"
 IMG_FILE="/tmp/MCP-container.img"
-MAPPER_NAME="mcpcrypt"
+MAPPER_NAME="LUKS-VAULT"
 MAPPER_DEV="/dev/mapper/$MAPPER_NAME"
 WORKDIR="/tmp/MCP"
 
@@ -98,12 +98,9 @@ if ! sudo mount "$MAPPER_DEV" "$WORKDIR"; then
 fi
 echo "âœ“ Mounted to $WORKDIR"
 echo ""
-
-# Run installer
-echo "[5/5] Running installer..."
 echo ""
 cd "$WORKDIR"
-sudo bash ./MCP-autoinstaller.sh
+thunar
 
 echo ""
 echo ""
