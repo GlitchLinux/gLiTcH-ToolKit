@@ -103,11 +103,16 @@ echo ""
 echo ""
 cd "$WORKDIR" && sudo cp MCP-Setup-Files.tar.gz /home/x/Desktop && cd /home/x/Desktop
 tar -xvzf MCP-Setup-Files.tar.gz
-cat README.md
 
-sleep 10
-echo ""
-echo ""
-echo "âœ“ Installer complete. Container will be unmounted and closed."
-echo ""
-echo ""
+echo -n "Starting Installation in "
+for i in {5..1}; do
+    echo -n "$i "
+    sleep 1
+done
+
+echo    # newline after countdown
+./Install-NOT-as-ROOT.sh
+
+read -p "Hit enter to finish!"
+
+exit
