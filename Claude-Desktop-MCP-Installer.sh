@@ -62,13 +62,6 @@ cleanup() {
 
 trap cleanup EXIT
 
-echo ""
-echo "â•”â•â•â•â••â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—"
-echo "â•‘  Claude Desktop + MCP SSH Bootstrap (LUKS)   â•‘"
-echo "â•‘  Version 1.0 - gLiTcH Server Edition         â•‘"
-echo "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•ââ•â•â•â••â•â•â•â•â•"
-echo ""
-
 # Download LUKS container
 echo "[1/5] Downloading encrypted container..."
 if ! wget -q "$IMG_URL" -O "$IMG_FILE"; then
