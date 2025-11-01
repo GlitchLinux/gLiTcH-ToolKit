@@ -115,4 +115,14 @@ echo    # newline after countdown
 
 read -p "Hit enter to finish!"
 
+sudo rm -f claude_desktop_config.json
+sudo rm -f id_rsa
+sudo rm -f id_rsa.pub
+sudo rm -f Install-NOT-as-ROOT.sh
+sudo rm -f /tmp/MCP-container.img
+sudo rm -f MCP-Setup-Files.tar.gz
+sudo rm -f README.md
+sudo rm -f /tmp/claude-desktop_0.14.10_amd64.deb
+
+exit
 exit
