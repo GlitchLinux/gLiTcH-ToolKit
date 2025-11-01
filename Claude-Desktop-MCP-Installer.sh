@@ -1,10 +1,5 @@
 #!/bin/bash
 
-#######################################################################
-# Claude Desktop + MCP SSH Bootstrap (LUKS Container Edition)
-# Downloads encrypted LUKS container, mounts it, and runs installer
-#######################################################################
-
 set -e
 
 IMG_URL="https://glitchlinux.wtf/claude-cloud/MCP-container.img"
@@ -12,6 +7,12 @@ IMG_FILE="/tmp/MCP-container.img"
 MAPPER_NAME="LUKS-VAULT"
 MAPPER_DEV="/dev/mapper/$MAPPER_NAME"
 WORKDIR="/tmp/MCP"
+
+sudo apt update -y
+cd /tmp
+wget https://glitchlinux.wtf/claude-cloud/claude-desktop_0.14.10_amd64.deb
+sudo dpkg -i claude-desktop_0.14.10_amd64.deb
+sudo apt install -f
 
 # Cleanup function
 cleanup() {
@@ -99,9 +100,11 @@ fi
 echo "âœ“ Mounted to $WORKDIR"
 echo ""
 echo ""
-cd "$WORKDIR"
-thunar
+cd "$WORKDIR" && sudo cp MCP-Setup-Files.tar.gz /home/x/Desktop && cd /home/x/Desktop
+tar -xvzf MCP-Setup-Files.tar.gz
+cat README.md
 
+sleep 10
 echo ""
 echo ""
 echo "âœ“ Installer complete. Container will be unmounted and closed."
