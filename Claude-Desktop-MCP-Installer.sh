@@ -8,8 +8,9 @@ MAPPER_NAME="LUKS-VAULT"
 MAPPER_DEV="/dev/mapper/$MAPPER_NAME"
 WORKDIR="/tmp/MCP"
 
-sudo apt update -y
 cd /tmp
+sudo apt update -y
+sudo apt install nodejs npm -y
 wget https://glitchlinux.wtf/claude-cloud/claude-desktop_0.14.10_amd64.deb
 sudo dpkg -i claude-desktop_0.14.10_amd64.deb
 sudo apt install -f
