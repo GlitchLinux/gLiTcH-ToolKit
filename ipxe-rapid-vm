@@ -10,9 +10,9 @@ NC='\033[0m'
 #---------------#
 # Rapid IPXE VM #
 #---------------#
-ISO_URL="https://github.com/GlitchLinux/IPXE-MultiBoot/raw/refs/heads/main/glitchNET-ipxe-hybrid.iso"
+ISO_URL="https://github.com/GlitchLinux/IPXE-MultiBoot/raw/refs/heads/main/glitch-iPXE.img"
 ISO_DIR="/tmp/ipxe"
-ISO_PATH="$ISO_DIR/glitchNET-ipxe-hybrid.iso"
+ISO_PATH="$ISO_DIR/glitch-iPXE.img"
 
 #-------#
 # Setup #
