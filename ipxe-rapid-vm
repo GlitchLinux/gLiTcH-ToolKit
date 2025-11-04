@@ -10,17 +10,17 @@ NC='\033[0m'
 #---------------#
 # Rapid IPXE VM #
 #---------------#
-ISO_URL="https://github.com/GlitchLinux/IPXE-MultiBoot/raw/refs/heads/main/glitch-iPXE.iso"
-ISO_DIR="/tmp/ipxe"
-ISO_PATH="$ISO_DIR/glitch-iPXE.iso"
+IMG_URL="https://github.com/GlitchLinux/IPXE-MultiBoot/raw/refs/heads/main/glitch-iPXE.img"
+IMG_DIR="/tmp/ipxe"
+IMG_PATH="$IMG_DIR/glitch-iPXE.img"
 
 #-------#
 # Setup #
 #-------#
-mkdir -p "$ISO_DIR"
+mkdir -p "$IMG_DIR"
 echo ""
-#echo -e "\n[*] Downloading iPXE ISO to $ISO_PATH..."
-curl -L --silent --show-error "$ISO_URL" -o "$ISO_PATH" || {
+#echo -e "\n[*] Downloading iPXE IMG to $IMG_PATH..."
+curl -L --silent --show-error "$IMG_URL" -o "$IMG_PATH" || {
     echo "[!] Download failed!"
     exit 1
 }
@@ -80,7 +80,7 @@ while true; do
         qemu-system-x86_64 \
             -enable-kvm \
             -m "$RAM_SIZE" \
-            -drive file="$ISO_PATH",format=raw \
+            -drive file="$IMG_PATH",format=raw \
             $EXTRA_DISK \
             -boot order=d \
             -nic user,hostfwd=tcp::2222-:22 \
@@ -99,7 +99,7 @@ while true; do
             -enable-kvm \
             -m "$RAM_SIZE" \
             -bios "$OVMF_PATH" \
-            -drive file="$ISO_PATH",format=raw \
+            -drive file="$IMG_PATH",format=raw \
             $EXTRA_DISK \
             -boot order=d \
             -nic user,hostfwd=tcp::2222-:22 \
