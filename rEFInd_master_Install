@@ -59,7 +59,7 @@ download_refind() {
     print_status "Downloading custom rEFInd image..."
     
     cd /tmp
-    if wget -O "REFIND_MASTER.img" "https://github.com/GlitchLinux/REFIND_CUSTOM/raw/refs/heads/main/rEFInd_x64-18MB.img"; then
+    if wget -O "REFIND_MASTER.img" "https://github.com/GlitchLinux/REFIND_CUSTOM/raw/refs/heads/main/REFIND%C2%A4MASTER.img"; then
         print_success "rEFInd image downloaded successfully"
     else
         print_error "Failed to download rEFInd image"
