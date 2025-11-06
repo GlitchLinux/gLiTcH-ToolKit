@@ -80,11 +80,12 @@ while true; do
         qemu-system-x86_64 \
             -enable-kvm \
             -m "$RAM_SIZE" \
-            -drive file="$IMG_PATH",format=raw \
+            -cdrom "$IMG_PATH" \
             $EXTRA_DISK \
             -boot order=d \
             -nic user,hostfwd=tcp::2222-:22 \
             > /dev/null 2>&1 &
+
     else
         # UEFI Boot
         if [[ ! -f /usr/share/OVMF/OVMF_CODE.fd && ! -f /usr/share/OVMF/OVMF_CODE.bin ]]; then
@@ -99,7 +100,7 @@ while true; do
             -enable-kvm \
             -m "$RAM_SIZE" \
             -bios "$OVMF_PATH" \
-            -drive file="$IMG_PATH",format=raw \
+            -cdrom "$IMG_PATH" \
             $EXTRA_DISK \
             -boot order=d \
             -nic user,hostfwd=tcp::2222-:22 \
