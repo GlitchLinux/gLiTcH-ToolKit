@@ -98,16 +98,16 @@ mount_refind_image() {
     EFI_PARTITION="${LOOP_DEVICE}p1"
     
     # Check if partition exists
-    if [[ ! -e "$EFI_PARTITION" ]]; then
-        print_warning "Partition ${LOOP_DEVICE}p1 not found, trying alternative naming..."
-        EFI_PARTITION="${LOOP_DEVICE}1"
-    fi
-    
-    if [[ ! -e "$EFI_PARTITION" ]]; then
-        print_error "Could not find EFI partition on loop device"
-        cleanup_on_error
-        exit 1
-    fi
+    #if [[ ! -e "$EFI_PARTITION" ]]; then
+    #    print_warning "Partition ${LOOP_DEVICE}p1 not found, trying alternative naming..."
+    #    EFI_PARTITION="${LOOP_DEVICE}1"
+    #fi
+    # 
+    #if [[ ! -e "$EFI_PARTITION" ]]; then
+    #    print_error "Could not find EFI partition on loop device"
+    #    cleanup_on_error
+    #    exit 1
+    #fi
     
     # Mount the EFI partition
     if mount $EFI_PARTITION /tmp/refind; then
