@@ -59,7 +59,7 @@ download_refind() {
     print_status "Downloading custom rEFInd image..."
     
     cd /tmp
-    if wget -O "REFIND_MASTER.img" "https://github.com/GlitchLinux/REFIND_CUSTOM/raw/refs/heads/main/REFIND%C2%A4MASTER.img"; then
+    if wget -O "REFIND_MASTER.img" "https://github.com/GlitchLinux/REFIND_CUSTOM/raw/refs/heads/main/rEFInd_x64-18MB.img"; then
         print_success "rEFInd image downloaded successfully"
     else
         print_error "Failed to download rEFInd image"
@@ -200,19 +200,6 @@ menuentry "rEFInd Boot Manager" {
         # Last resort: try to boot from firmware
         fwsetup
     fi
-}
-
-# Alternative rEFInd entry with direct file specification
-menuentry "rEFInd Boot Manager (Direct)" {
-    insmod part_gpt
-    insmod fat
-    insmod chain
-    
-    # Search for EFI partition
-    search --no-floppy --fs-uuid --set=root ${EFI_UUID}
-    
-    # Direct path to our installed rEFInd
-    chainloader /EFI/refind/bootx64.efi
 }
 EOF
     
