@@ -10,9 +10,9 @@ NC='\033[0m'
 #---------------#
 # Rapid IPXE VM #
 #---------------#
-IMG_URL="https://github.com/GlitchLinux/IPXE-MultiBoot/raw/refs/heads/main/glitch-iPXE.img"
+IMG_URL="https://github.com/GlitchLinux/IPXE-MultiBoot/raw/refs/heads/main/GLITCH-IPXE.iso"
 IMG_DIR="/tmp/ipxe"
-IMG_PATH="$IMG_DIR/glitch-iPXE.img"
+IMG_PATH="$IMG_DIR/GLITCH-IPXE.iso"
 
 #-------#
 # Setup #
