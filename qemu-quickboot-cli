@@ -5,12 +5,13 @@ sudo wget https://raw.githubusercontent.com/GlitchLinux/QEMU-QuickBoot/refs/head
 sudo mv qemu-quickboot-cli /usr/local/bin/qboot
 sudo chmod +x /usr/local/bin/qboot
 sudo chmod 777 /usr/local/bin/qboot
-sudo ocho "sudo bash /usr/local/bin/qboot" > /usr/local/bin/qboot-cli
+sudo echo "sudo bash /usr/local/bin/qboot" > /usr/local/bin/qboot-cli
 sudo chmod +x /usr/local/bin/qboot-cli
 sudo chmod 777 /usr/local/bin/qboot-cli
 echo ""
-echo "Qemu Quickboot-CLI have been installed!"
-echo "run 'qboot-cli to start'"
+echo "     Qemu Quickboot-CLI have been installed!"
+echo "     run: 'qboot-cli' to start"
 echo ""
 cd
 sleep 4
+sudo bash /usr/local/bin/qboot
