@@ -1,0 +1,29 @@
+#!/bin/bash
+
+sudo rm -f /tmp/dir-list
+
+# Ask the user for a directory path
+echo ""
+read -p "Enter directory path: " dir_path
+echo ""
+# Check if the directory exists
+if [ ! -d "$dir_path" ]; then
+    echo "Error: Directory '$dir_path' does not exist."
+    exit 1
+fi
+
+# Output file
+output_file="/tmp/dir-list"
+
+# Generate a sorted list of files by size (largest first)
+#echo "=================================================================" >> "$output_file"
+
+# Use 'find' to get all files, then 'du' to get sizes, and sort numerically (largest first)
+find "$dir_path" -type f -exec du -h {} + | sort -rh >> "$output_file"
+
+echo "Done! Output saved to: $output_file"
+echo ""
+tac /tmp/dir-list
+echo ""
+echo "Files in '$dir_path' sorted by size, largest first):" | borderize -FF00D8 -FFFFFF
+echo ""
