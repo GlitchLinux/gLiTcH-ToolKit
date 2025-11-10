@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# ============================================================
+# dd_easy - Interactive dd cloning/writing utility
+# Author: GlitchLinux
+# License: GPLv3
+# ============================================================
+
+set -euo pipefail
+
+# Require root
+if [[ $EUID -ne 0 ]]; then
+    echo "Please run as root (sudo ./dd_easy)"
+    exit 1
+fi
+
+clear
+echo "=== dd_easy - Simple and Safe dd Utility ==="
+echo ""
+echo "Select operation:"
+echo "1) Disk → Disk"
+echo "2) File → Disk"
+echo ""
+read -rp "Enter choice [1-2]: " choice
+
+# Helper: ensure /dev/ prefix
+ensure_dev_path() {
+    local dev="$1"
+    [[ "$dev" =~ ^/dev/ ]] || dev="/dev/$dev"
+    echo "$dev"
+}
+
+# Helper: verify device exists
+check_device_exists() {
+    local dev="$1"
+    if [[ ! -b "$dev" ]]; then
+        echo "Error: Device $dev not found or is not a valid block device."
+        exit 1
+    fi
+}
+
+if [[ "$choice" == "1" ]]; then
+    echo ""
+    echo "Available block devices:"
+    lsblk -dn -o NAME,SIZE | column -t
+    echo ""
+    read -rp "Select SOURCE disk: " SRC
+    read -rp "Select TARGET disk: " DST
+
+    SOURCE=$(ensure_dev_path "$SRC")
+    DESTINATION=$(ensure_dev_path "$DST")
+
+    check_device_exists "$SOURCE"
+    check_device_exists "$DESTINATION"
+
+    echo ""
+    echo "YOU ARE ABOUT TO CLONE:"
+    echo "    $SOURCE  --->  $DESTINATION"
+    echo ""
+    read -rp "Type YES to proceed (any other key to quit): " confirm
+
+    if [[ "$confirm" != "YES" ]]; then
+        echo "Operation cancelled."
+        exit 0
+    fi
+
+    echo ""
+    echo "Starting dd cloning job..."
+    echo "Progress shown below:"
+    echo "------------------------------------------"
+    dd if="$SOURCE" of="$DESTINATION" bs=4M status=progress conv=fsync,noerror || {
+        echo "❌ dd failed. Check device connections or permissions."
+        exit 1
+    }
+    echo "------------------------------------------"
+    echo "✅ Cloning completed successfully."
+    sync
+
+elif [[ "$choice" == "2" ]]; then
+    echo ""
+    read -rp "Enter path to source file: " SOURCE_FILE
+    if [[ ! -f "$SOURCE_FILE" ]]; then
+        echo "Error: Source file not found."
+        exit 1
+    fi
+
+    echo ""
+    echo "Available block devices:"
+    lsblk -dn -o NAME,SIZE | column -t
+    echo ""
+    read -rp "Select TARGET disk: " DST
+
+    DESTINATION=$(ensure_dev_path "$DST")
+    check_device_exists "$DESTINATION"
+
+    echo ""
+    echo "WARNING: YOU ARE ABOUT TO WRITE:"
+    echo "    $SOURCE_FILE  --->  $DESTINATION"
+    echo ""
+    read -rp "Type YES to proceed (any other key to quit): " confirm
+
+    if [[ "$confirm" != "YES" ]]; then
+        echo "Operation cancelled."
+        exit 0
+    fi
+
+    echo ""
+    echo "Starting dd write job..."
+    echo "Progress shown below:"
+    echo "------------------------------------------"
+    dd if="$SOURCE_FILE" of="$DESTINATION" bs=4M status=progress conv=fsync,noerror || {
+        echo "❌ dd failed. Check device connections or permissions."
+        exit 1
+    }
+    echo "------------------------------------------"
+    echo "✅ Write completed successfully."
+    sync
+
+else
+    echo "Invalid selection."
+    exit 1
+fi
