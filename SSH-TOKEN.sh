@@ -172,5 +172,5 @@ echo -e "${YELLOW}[*] Root .ssh contents:${NC}"
 ls -lah "$SSH_DIR_ROOT/" || true
 
 sleep 3
-
+clear
 bash /home/x/ssh.sh
