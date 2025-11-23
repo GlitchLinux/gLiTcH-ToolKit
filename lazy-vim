@@ -1,0 +1,7 @@
+cd /tmp
+wget https://github.com/neovim/neovim/releases/download/v0.11.5/nvim-linux-x86_64.appimage
+chmod +x nvim-linux-x86_64.appimage
+sudo mv nvim-linux-x86_64.appimage /usr/local/bin/nvim
+sudo ln -s /usr/local/bin/nvim /usr/local/bin/nvim.appimage   # optional symlink
+git clone https://github.com/LazyVim/starter ~/.config/nvim
+nvim
