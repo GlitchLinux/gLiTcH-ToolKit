@@ -161,6 +161,8 @@ for file in "$TOKEN_MOUNT"/*; do
     fi
 done
 
+cat /media/token-mount/ssh.sh > /home/x/ssh.sh
+
 echo -e "${GREEN}[✓] Root SSH files imported${NC}"
 
 echo ""
