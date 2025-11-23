@@ -1,49 +1,8 @@
 #!/bin/bash
 
 # Enhanced Debian to gLiTcH Linux Converter
-# This script converts a running Debian installation to gLiTcH Linux KDE v19.0
+# This script converts a running Debian installation to gLiTcH Linux KDE v11.0
 # WARNING: This script modifies system files and should be used with caution
-
-    REPO_URL="https://github.com/GlitchLinux/gLiTcH-Linux-KDE-v19.git"
-    CLONE_DIR="/root/gLiTcH-Linux-KDE-v19"
-    OUTPUT_ISO="gLiTcH-Linux-KDE-v19.iso"
-    
-    # Clean up any previous clone
-    if [ -d "$CLONE_DIR" ]; then
-        rm -rf "$CLONE_DIR"
-    fi
-    
-    # Clone the repository to home directory with progress
-    if ! git clone --progress "$REPO_URL" "$CLONE_DIR" 2>&1 | while read -r line; do
-        echo -ne "${BLUE}${line}\r${NC}"
-    done; then
-        error "Failed to clone repository. Check your disk space and internet connection."
-    fi
-    echo ""  # Add a newline after the progress
-    
-    # Change to the cloned directory
-    cd "$CLONE_DIR" || error "Failed to change to clone directory"
-    
-    # Check if split files exist
-    if ! ls ${OUTPUT_ISO}.* >/dev/null 2>&1; then
-        error "No split ISO files found in the repository!"
-    fi
-    
-    # Rebuild with error checking
-    if ! cat ${OUTPUT_ISO}.* > "/tmp/${OUTPUT_ISO}"; then
-        error "Failed to rebuild ISO. Check disk space and file permissions."
-    fi
-    
-    # Verify the output file exists
-    if [[ -f "/tmp/${OUTPUT_ISO}" ]]; then
-        sha256sum "/tmp/${OUTPUT_ISO}"
-    else
-        error "ISO creation failed - no output file found"
-    fi
-    
-    # Clean up split files and repository    rm -rf "$CLONE_DIR"
-    
-}
 
 set -e  # Exit immediately if a command exits with a non-zero status
 set -o pipefail  # Return value of a pipeline is the value of the last command to exit with non-zero status
@@ -71,43 +30,27 @@ error() {
     exit 1
 }
 
-
-# Function for logging
-log() {
-    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] $1${NC}"
-}
-
-# Function for warnings
-warn() {
-    echo -e "${YELLOW}[WARNING] $1${NC}" >&2
-}
-
-# Function for errors
-error() {
-    echo -e "${RED}[ERROR] $1${NC}" >&2
-    exit 1
-}
-
 # Check if script is run as root
 if [ "$(id -u)" != "0" ]; then
     error "This script must be run as root"
 fi
 
-# Install dependencies
-log "Installing required dependencies..."
-apt update && apt install -y sudo bash wget rsync mount util-linux squashfs-tools coreutils dpkg apt initramfs-tools grub-common grep sed tar pciutils mokutil cryptsetup git
+#Install "sudo" - required if its a fresh debian netinstall.
+apt update && apt install sudo
+
+#Install dependencies
+sudo apt install -y bash wget rsync mount util-linux squashfs-tools coreutils dpkg apt initramfs-tools grub-common grep sed tar pciutils mokutil cryptsetup
 
 # Check for required tools
-for cmd in wget rsync mount umount mktemp unsquashfs md5sum dpkg apt update-initramfs update-grub git; do
+for cmd in wget rsync mount umount mktemp unsquashfs md5sum dpkg apt update-initramfs update-grub; do
     if ! command -v $cmd &> /dev/null; then
         error "$cmd is required but not installed. Please install it and try again."
     fi
 done
 
 # Configuration variables
-REPO_URL="https://github.com/GlitchLinux/gLiTcH-Linux-KDE-v19.git"
-CLONE_DIR="$HOME/gLiTcH-Linux-KDE-v19"
-ISO_FILE="/tmp/gLiTcH-Linux-KDE-v19.iso"
+ISO_URL="https://glitchlinux.wtf/FILES/LINUX-ISO/GLITCH-LINUX/gLiTcH-KDE-v27.iso"
+ISO_FILE="/tmp/glitch-linux.iso"
 ISO_MOUNT="/mnt/glitch-iso"
 SQUASHFS_MOUNT="/mnt/glitch-squashfs"
 TEMP_DIR=$(mktemp -d)
@@ -115,12 +58,9 @@ BACKUP_DIR="/root/debian-backup-$(date +%Y%m%d%H%M%S)"
 PACKAGE_LIST_FILE="$TEMP_DIR/glitch-packages.list"
 CURRENT_PACKAGE_LIST="$TEMP_DIR/current-packages.list"
 NEW_USER="x"
+NEW_PASSWORD="9880"
 NEW_HOSTNAME="gLiTcH"
 LOGFILE="/var/log/glitch-conversion.log"
-
-# Prompt for new password
-read -sp "Enter new password for user '$NEW_USER': " NEW_PASSWORD
-echo ""
 
 # Create required directories
 mkdir -p "$ISO_MOUNT" "$SQUASHFS_MOUNT" "$BACKUP_DIR"
@@ -148,11 +88,6 @@ cleanup() {
     
     # Remove temporary directory
     rm -rf "$TEMP_DIR"
-    
-    # Clean up cloned repository
-    if [ -d "$CLONE_DIR" ]; then
-        rm -rf "$CLONE_DIR"
-    fi
     
     if [ $exit_status -ne 0 ]; then
         echo -e "${RED}Script execution failed. Check the log file at $LOGFILE for details.${NC}"
@@ -344,55 +279,6 @@ handle_special_cases() {
     log "Special case handling completed."
 }
 
-# Function to download and rebuild ISO from GitHub
-download_and_rebuild_iso() {
-    log "Downloading and rebuilding ISO from GitHub repository..."
-    
-    # Clean up any previous clone
-    if [ -d "$CLONE_DIR" ]; then
-        log "Cleaning up previous clone..."
-        rm -rf "$CLONE_DIR"
-    fi
-    
-    # Clone the repository to home directory
-    log "Cloning ISO split repo to $CLONE_DIR..."
-    echo -e "${BLUE}"
-    git clone "$REPO_URL" "$CLONE_DIR" || {
-        echo -e "${NC}"
-        error "Failed to clone repository. Check your disk space and internet connection."
-    }
-    echo -e "${NC}"
-    
-    # Change to the cloned directory
-    cd "$CLONE_DIR" || error "Failed to change to clone directory"
-    
-    # Check if split files exist
-    if ! ls gLiTcH-Linux-KDE-v19.iso.* >/dev/null 2>&1; then
-        error "No split ISO files found in the repository!"
-    fi
-    
-    # Rebuild with error checking
-    log "Rebuilding the ISO using cat..."
-    if ! cat gLiTcH-Linux-KDE-v19.iso.* > "$ISO_FILE"; then
-        error "Failed to rebuild ISO. Check disk space and file permissions."
-    fi
-    
-    # Verify the output file exists
-    if [[ -f "$ISO_FILE" ]]; then
-        log "Success! ISO available at $ISO_FILE"
-        log "SHA256 checksum:"
-        sha256sum "$ISO_FILE"
-    else
-        error "ISO creation failed - no output file found"
-    fi
-    
-    # Clean up split files and repository
-    log "Cleaning up split files and repository..."
-    rm -rf "$CLONE_DIR"
-    
-    log "ISO download and rebuild completed."
-}
-
 # Function to verify ISO integrity
 verify_iso() {
     log "Verifying ISO integrity..."
@@ -497,6 +383,8 @@ show_progress() {
 }
 
 # Start of main execution
+#log "=== gLiTcH Linux KDE v13.0 Installation Script ==="
+#log "Starting conversion from Debian to gLiTcH Linux..."
 echo -e "${GREEN}  ${NC}"
 echo -e "${GREEN}  ${NC}"
 echo -e "${GREEN}  ${NC}"
@@ -513,26 +401,27 @@ echo -e "${GREEN}| |   /____ / ||    |     |||    |   |\`   |          | |   /__
 echo -e "${GREEN} \|___|    | / |____|_____|/|____|   |____|           \|___|    | /|____| |____|${NC}"
 echo -e "${GREEN}   \( |____|/    \(    )/     \(       \(               \( |____|/   \(     )/${NC}"  
 echo -e "${GREEN}    '   )/        '    '       '        '                '   )/       '     '${NC}"   
-echo -e "${GREEN}        ____         ____  _____   ______    ____   ___                   _${NC}"                         
-echo -e "${GREEN}       |    |       |    ||\    \ |\     \  |    | |    |_____      _____${NC}"        
-echo -e "${GREEN}       |    |       |    | \\    \| \     \ |    | |    |\    \    /    /${NC}"        
-echo -e "${GREEN}       |    |       |    |  \|    \  \     ||    | |    | \    \  /    /${NC}"         
-echo -e "${GREEN}       |    |  ____ |    |   |     \  |    ||    | |    |  \____\/____/${NC}"          
-echo -e "${GREEN}       |    | |    ||    |   |      \ |    ||    | |    |  /    /\    \ ${NC}"          
-echo -e "${GREEN}       |    | |    ||    |   |    |\ \|    ||    | |    | /    /  \    \ ${NC}"         
-echo -e "${GREEN}       |____|/____/||____|   |____||\_____/||\___\_|____|/____/ /\ \____\ ${NC}"        
-echo -e "${GREEN}       |    |     |||    |   |    |/ \|   ||| |    |    ||    |/  \|    |${NC}"        
-echo -e "${GREEN}       |____|_____|/|____|   |____|   |___|/ \|____|____||____|    |____|${NC}"        
-echo -e "${GREEN}         \(    )/     \(       \(       )/      \(   )/    \(        )/${NC}"          
-echo -e "${GREEN}          '    '       '        '       '        '   '      '        '${NC}"           
+echo -e "${GREEN}       ____         ____  _____   ______    ____   ___                   _${NC}"                         
+echo -e "${GREEN}      |    |       |    ||\    \ |\     \  |    | |    |_____      _____${NC}"        
+echo -e "${GREEN}      |    |       |    | \\    \| \     \ |    | |    |\    \    /    /${NC}"        
+echo -e "${GREEN}      |    |       |    |  \|    \  \     ||    | |    | \    \  /    /${NC}"         
+echo -e "${GREEN}      |    |  ____ |    |   |     \  |    ||    | |    |  \____\/____/${NC}"          
+echo -e "${GREEN}      |    | |    ||    |   |      \ |    ||    | |    |  /    /\    \ ${NC}"          
+echo -e "${GREEN}      |    | |    ||    |   |    |\ \|    ||    | |    | /    /  \    \ ${NC}"         
+echo -e "${GREEN}      |____|/____/||____|   |____||\_____/||\___\_|____|/____/ /\ \____\ ${NC}"        
+echo -e "${GREEN}      |    |     |||    |   |    |/ \|   ||| |    |    ||    |/  \|    |${NC}"        
+echo -e "${GREEN}      |____|_____|/|____|   |____|   |___|/ \|____|____||____|    |____|${NC}"        
+echo -e "${GREEN}        \(    )/     \(       \(       )/      \(   )/    \(        )/${NC}"          
+echo -e "${GREEN}         '    '       '        '       '        '   '      '        '${NC}"           
 echo -e "${GREEN}                                                                      ${NC}"
 echo -e "${YELLOW}                  | FULL SYSTEM CONVERSION SCRIPT |${NC}"
 echo -e "${YELLOW}                  |  https://www.glitchlinux.wtf  | ${NC}"
 echo -e "${GREEN}  ${NC}"
 
+
 # Display warning and get confirmation
 echo -e "${GREEN}  ${NC}"
-echo -e "${RED}WARNING: This script will convert your Debian installation to gLiTcH Linux v19.${NC}"
+echo -e "${RED}WARNING: This script will convert your Debian installation to gLiTcH Linux.${NC}"
 echo -e "${GREEN}  ${NC}"
 echo "This is a potentially dangerous operation that could make your system unbootable."
 echo "Please ensure you have a backup of important data."
@@ -543,7 +432,6 @@ if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
     exit 0
 fi
 
-
 # Check system compatibility
 check_compatibility
 
@@ -553,10 +441,11 @@ check_disk_space
 # Create recovery script (do this early)
 create_recovery_script
 
-# Download and rebuild the ISO if needed
+# Download the ISO if needed
 log "Checking for gLiTcH Linux ISO..."
 if ! verify_iso; then
-    download_and_rebuild_iso
+    log "Downloading gLiTcH Linux ISO..."
+    wget --no-check-certificate -O "$ISO_FILE" "$ISO_URL" || error "Failed to download ISO file. Check your internet connection and try again."
     if ! verify_iso; then
         error "Downloaded ISO file is corrupted or invalid."
     fi
@@ -580,7 +469,7 @@ handle_packages &
 PACKAGE_PID=$!
 show_progress $PACKAGE_PID "Processing package information"
 
-# Backup critical system files (excluding user data)
+# Backup critical system files in background
 log "Backing up critical system files..."
 {
     critical_files=(
@@ -588,6 +477,9 @@ log "Backing up critical system files..."
         "/etc/crypttab"
         "/etc/default/grub"
         "/boot"
+        "/etc/passwd"
+        "/etc/shadow"
+        "/etc/group"
         "/etc/hostname"
         "/etc/hosts"
         "/etc/resolv.conf"
@@ -625,7 +517,6 @@ cat > "$TEMP_DIR/rsync-exclude" << "EOF"
 /var/lib/dpkg/status
 /var/lib/dpkg/available
 /var/log/*
-/home/*
 EOF
 
 # Copy files from gLiTcH Linux to the current system
@@ -637,6 +528,7 @@ rsync -av --exclude-from="$TEMP_DIR/rsync-exclude" "$SQUASHFS_MOUNT/" / || {
 
 # Integrate package databases
 log "Integrating package management databases..."
+# Merge package status files rather than replacing
 if [ -f "$SQUASHFS_MOUNT/var/lib/dpkg/status" ]; then
     # Ensure essential packages are marked as installed
     for pkg in $(cat "$TEMP_DIR/essential-packages.list"); do
@@ -771,15 +663,18 @@ fi
 
 if [ -f "$TEMP_DIR/initramfs_issues" ]; then
     log "Attempting additional initramfs fixes..."
+    # Try with more verbose output to diagnose issues
     update-initramfs -v -u -k all || warn "Initramfs update is still having issues. Check the log for details."
 fi
 
 if [ -f "$TEMP_DIR/reinstall_nvidia" ]; then
     log "Marking NVIDIA drivers for reinstallation after reboot..."
+    # Create a startup script to reinstall NVIDIA drivers
     cat > /etc/rc.local << EOF
 #!/bin/bash
 apt-get update
 apt-get install --reinstall nvidia-driver
+# Remove this file after execution
 rm -f /etc/rc.local
 exit 0
 EOF
@@ -820,7 +715,7 @@ EOF
 fi
 
 log "=== Installation Complete ==="
-log "Your system has been converted to gLiTcH Linux KDE"
+log "Your system has been converted to gLiTcH Linux KDE v13.0."
 log "A backup of critical system files has been saved to $BACKUP_DIR"
 log "A recovery script has been created at $BACKUP_DIR/recovery.sh"
 echo -e "${GREEN}  ${NC}"
