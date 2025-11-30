@@ -1,0 +1,4 @@
+cd /tmp
+git clone https://github.com/glitchlinux/glitch-monitor.git
+cd glitch-monitor
+sudo python3 installer.py
