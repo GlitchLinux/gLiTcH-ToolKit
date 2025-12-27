@@ -1,0 +1,5 @@
+#!/bin/bash
+
+cd /tmp
+wget https://raw.githubusercontent.com/GlitchLinux/vdl/refs/heads/main/install.sh
+sudo bash install.sh
