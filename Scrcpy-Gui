@@ -1,0 +1,22 @@
+#!/bin/bash
+
+sudo apt update && sudo apt install ffmpeg libsdl2-2.0-0 adb wget \
+                 gcc git pkg-config meson ninja-build libsdl2-dev \
+                 libavcodec-dev libavdevice-dev libavformat-dev libavutil-dev \
+                 libswresample-dev libusb-1.0-0 libusb-1.0-0-dev android-tools-adb android-tools-fastboot -y
+
+git clone https://github.com/Genymobile/scrcpy
+cd scrcpy
+./install_release.sh
+
+
+echo "Starting ADB Server" | borderize
+adb start-server
+echo "Searching for Android Devices" | borderize -FF00FF -00FFFF
+adb devices
+echo "Enable USB-Debugging on your Android device" | borderize -FF00FF -00FFFF
+sleep 3
+echo "When USB-Debugging is started hit enter" | borderize -FF00FF -00FFFF
+read
+echo "Starting SCRCPY-GUI" | borderize
+scrcpy
