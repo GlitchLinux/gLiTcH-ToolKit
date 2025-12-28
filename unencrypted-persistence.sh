@@ -76,7 +76,16 @@ echo -e "${BRIGHT_GREEN}+-----------------------------------------------------+$
 echo -e "${BRIGHT_GREEN}| THE UNENCRYPTED PERSISTENT PARTITION HAS BEEN CREATED |${RESET}"
 echo -e "${BRIGHT_GREEN}+-----------------------------------------------------+${RESET}"
 
+echo 'menuentry "gLiTcH Linux - Unencrypted Persistence" {' > /tmp/grub.cfg
+echo "linux /live/vmlinuz boot=live components quiet splash persistence" >> /tmp/grub.cfg 
+echo " initrd /live/initrd.img" >> /tmp/grub.cfg
+echo "}"  >> /tmp/grub.cfg
+
 # Final prompt to exit the script
+echo ""
+echo "A grub.cfg with a menuentry needed to boot"
+echo "this persistence is saved at /tmp/grub.cfg"
+echo ""
 echo -e "\n${PINK}Press Enter to exit the script.${RESET}"
 echo ""
 read -r
