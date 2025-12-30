@@ -7,9 +7,15 @@ git clone https://github.com/GlitchLinux/BonsaiFetch.git
 cd BonsaiFetch/bfetch
 sudo cp -r * /usr/local/bin/
 sudo chmod +x /usr/local/bin/bfetch
+sudo chmod +x /usr/local/bin/bfetch-edit
+sudo chmod +x /usr/local/bin/bfetch-update
+sudo chmod 777 /usr/local/bin/bfetch-edit
+sudo chmod 777 /usr/local/bin/bfetch-update
 sudo chmod +x /usr/local/bin/bfetch.cfg 
 sudo chmod 777 /usr/local/bin/bfetch.cfg 
 sudo chmod 777 /usr/local/bin/bfetch
-sudo chmod -R +x /usr/local/bin/bfetch-modules/
-sudo rm -r /tmp/BonsaiFetch
+sudo chmod +x /usr/local/bin/bfetch-modules/*
+cd && sudo rm -r /tmp/BonsaiFetch
+clear
+echo "bfetch was succesfully installed!" | borderize -505050
 bfetch
