@@ -43,7 +43,7 @@ download_bootfiles() {
     mkdir -p "$temp_dir"
     
     if ! wget --quiet \
-        "https://github.com/GlitchLinux/gLiTcH-ISO-Creator/raw/refs/heads/main/ISO-Hybrid-Base.tar.lzma" \
+        "https://github.com/GlitchLinux/gLiTcH-ISO-Creator/raw/refs/heads/main/ISO-Hybrid-Base-2.tar.lzma" \
         -O "$temp_dir/bootfiles.tar.lzma" 2>/dev/null; then
         echo -e "${RED}Error: Failed to download bootfiles${NC}"
         rm -rf "$temp_dir"
@@ -186,6 +186,11 @@ menuentry "$name - Boot to RAM" {
 
 menuentry "$name - Encrypted Persistence" {
     linux /live/$vmlinuz boot=live components quiet splash persistent=cryptsetup persistence-encryption=luks persistence
+    initrd /live/$initrd
+}
+
+menuentry "$name - Unencrypted Persistence" {
+    linux /live/$vmlinuz boot=live components quiet splash components quiet splash persistence
     initrd /live/$initrd
 }
 
@@ -426,7 +431,7 @@ create_live_iso() {
 main() {
     echo ""
     echo -e "${YELLOW} ╭──── gLiTcH ISO Compiler ────╮${NC}"
-    echo -e "${YELLOW} │${NC} BY: https://glitchlinux.wtf ${YELLOW}│${NC}"
+    echo -e "${YELLOW} │${NC} BY: ${GREEN}https://glitchlinux.wtf${NC} ${YELLOW}│${NC}"
     echo -e "${YELLOW} │${NC} BIOS & EFI live ISO builder ${YELLOW}│${NC}"
     echo -e "${YELLOW} │${NC} grub2 syslinux chainloading ${YELLOW}│${NC}"
     echo -e "${YELLOW} │${NC} For Debian & Ubuntu distros ${YELLOW}│${NC}"
@@ -442,7 +447,7 @@ main() {
 	echo -e "${GREEN}  │${NC} initrd vmlinuz .squashfs ${GREEN}│${NC}"
         echo -e "${GREEN}  ╰──────────────────────────╯${NC}"
 	echo ""
-        echo -e "${GREEN}   Enter parent dir to ${NC}live${NC}"
+        echo -e "${GREEN}   Enter parent dir of ${NC}live${NC}"
         echo ""        
 	read -p "   -> " parent_dir
 	echo ""        
