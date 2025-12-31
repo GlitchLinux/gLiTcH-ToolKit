@@ -1,0 +1,110 @@
+#!/bin/bash
+# fstab-generator.sh - Interactive fstab creator
+
+cat << 'EOF' | borderize
+FSTAB GENERATOR
+Interactive partition configuration tool
+EOF
+
+echo
+
+# Detect available block devices
+echo "=== Available Block Devices ==="
+lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT | grep -E "disk|part"
+echo
+
+# Initialize fstab content
+FSTAB="# /etc/fstab: static file system information
+# <file system>  <mount point>  <type>  <options>  <dump>  <pass>
+"
+
+# Function to get partition info
+get_partition() {
+    local prompt="$1"
+    local mountpoint="$2"
+    local default_opts="$3"
+    local dump="$4"
+    local pass="$5"
+    
+    echo -e "\n--- $prompt ---"
+    read -p "Partition (e.g., /dev/sda1) or [SKIP]: " part
+    
+    if [[ "$part" != "SKIP" && -n "$part" ]]; then
+        # Detect filesystem type
+        fstype=$(lsblk -no FSTYPE "$part" 2>/dev/null)
+        [[ -z "$fstype" ]] && read -p "Filesystem type: " fstype
+        
+        # Get UUID
+        uuid=$(blkid -s UUID -o value "$part" 2>/dev/null)
+        if [[ -n "$uuid" ]]; then
+            part="UUID=$uuid"
+        fi
+        
+        # Custom options?
+        read -p "Mount options [$default_opts]: " opts
+        opts=${opts:-$default_opts}
+        
+        # Add to fstab
+        printf "%-38s %-14s %-7s %-15s %s %s\n" \
+            "$part" "$mountpoint" "$fstype" "$opts" "$dump" "$pass" >> /tmp/fstab.tmp
+    fi
+}
+
+# Create temp file
+> /tmp/fstab.tmp
+
+# Collect partitions
+get_partition "ROOT PARTITION" "/" "defaults" "0" "1"
+get_partition "BOOT/EFI PARTITION" "/boot/efi" "defaults" "0" "2"
+get_partition "HOME PARTITION" "/home" "defaults" "0" "2"
+get_partition "SWAP PARTITION" "none" "sw" "0" "0"
+
+# Additional partitions
+while true; do
+    echo -e "\n--- ADDITIONAL PARTITION ---"
+    read -p "Add another partition? [y/N]: " add
+    [[ "$add" != "y" && "$add" != "Y" ]] && break
+    
+    read -p "Partition: " part
+    read -p "Mount point: " mpoint
+    fstype=$(lsblk -no FSTYPE "$part" 2>/dev/null)
+    [[ -z "$fstype" ]] && read -p "Filesystem type: " fstype
+    
+    uuid=$(blkid -s UUID -o value "$part" 2>/dev/null)
+    [[ -n "$uuid" ]] && part="UUID=$uuid"
+    
+    read -p "Options [defaults]: " opts
+    opts=${opts:-defaults}
+    
+    read -p "Dump [0]: " dump
+    dump=${dump:-0}
+    
+    read -p "Pass [2]: " pass
+    pass=${pass:-2}
+    
+    printf "%-38s %-14s %-7s %-15s %s %s\n" \
+        "$part" "$mpoint" "$fstype" "$opts" "$dump" "$pass" >> /tmp/fstab.tmp
+done
+
+# Display generated fstab
+echo -e "\n=== GENERATED FSTAB ==="
+cat << 'EOF' | borderize
+Preview of /etc/fstab
+EOF
+echo
+echo "$FSTAB"
+cat /tmp/fstab.tmp
+echo
+
+# Save options
+read -p "Save to file? [/tmp/fstab]: " outfile
+outfile=${outfile:-/tmp/fstab}
+
+echo "$FSTAB" > "$outfile"
+cat /tmp/fstab.tmp >> "$outfile"
+
+echo -e "\n✓ Saved to: $outfile"
+echo "  To install: sudo cp $outfile /etc/fstab"
+echo "  To test: sudo mount -a"
+
+rm -f /tmp/fstab.tmp
