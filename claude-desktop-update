@@ -1,0 +1,11 @@
+#!/bin/bash
+
+cd /tmp
+wget https://github.com/leobuskin/unofficial-claude-desktop-linux/releases/download/v1.1.799/claude-desktop_1.1.799_amd64.deb 
+sudo apt update
+sudo dpkg -i claude-desktop_1.1.799_amd64.deb
+sudo rm claude-desktop_1.1.799_amd64.deb
+echo  ""
+echo "claude-desktop v1.1.799 Installed!" | borderize
+echo ""
+sleep 20
