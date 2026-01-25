@@ -1,8 +1,10 @@
 #!/bin/bash
 #══════════════════════════════════════════════════════════════════════════════
 # KDE-Styler-Wizard.sh - Interactive wrapper for kde-styler.py
+# Auto-fetches kde-styler.py from GitHub if not present
 #══════════════════════════════════════════════════════════════════════════════
 
+REPO_URL="https://raw.githubusercontent.com/GlitchLinux/KDE-Styler/main"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KDE_STYLER="${SCRIPT_DIR}/kde-styler.py"
 
@@ -12,7 +14,6 @@ BOLD='\033[1m' NC='\033[0m'
 
 # Default paths
 DEFAULT_BACKUP_DIR="$HOME/KDE-Styler-Backups"
-DEFAULT_RESTORE_DIR="$DEFAULT_BACKUP_DIR"
 
 clear_screen() { printf '\033[2J\033[H'; }
 
@@ -26,22 +27,79 @@ header() {
     echo -e "${NC}"
 }
 
+fetch_kde_styler() {
+    echo -e "${B}[INFO]${NC} Fetching kde-styler.py from GitHub..."
+    
+    if command -v curl &>/dev/null; then
+        curl -fsSL "${REPO_URL}/kde-styler.py" -o "$KDE_STYLER"
+    elif command -v wget &>/dev/null; then
+        wget -q "${REPO_URL}/kde-styler.py" -O "$KDE_STYLER"
+    else
+        echo -e "${R}[ERROR]${NC} Neither curl nor wget found. Install one:"
+        echo "  sudo apt install curl"
+        return 1
+    fi
+    
+    if [[ $? -eq 0 && -f "$KDE_STYLER" ]]; then
+        chmod +x "$KDE_STYLER"
+        echo -e "${G}[SUCCESS]${NC} Downloaded kde-styler.py"
+        return 0
+    else
+        echo -e "${R}[ERROR]${NC} Failed to download kde-styler.py"
+        return 1
+    fi
+}
+
 check_deps() {
+    # Check/fetch kde-styler.py
     if [[ ! -f "$KDE_STYLER" ]]; then
-        echo -e "${R}[ERROR]${NC} kde-styler.py not found at: $KDE_STYLER"
-        echo "Place this wizard in the same directory as kde-styler.py"
+        echo -e "${Y}[WARNING]${NC} kde-styler.py not found locally"
+        fetch_kde_styler || exit 1
+    fi
+    
+    # Check python3
+    if ! command -v python3 &>/dev/null; then
+        echo -e "${R}[ERROR]${NC} python3 not found. Install it:"
+        echo "  sudo apt install python3"
         exit 1
     fi
     
-    for cmd in python3 dpkg-repack; do
-        if ! command -v "$cmd" &>/dev/null; then
-            echo -e "${Y}[WARNING]${NC} $cmd not found. Installing..."
-            sudo apt-get install -y "$cmd" || {
-                echo -e "${R}[ERROR]${NC} Failed to install $cmd"
-                exit 1
-            }
+    # Check dpkg-repack (optional but recommended)
+    if ! command -v dpkg-repack &>/dev/null; then
+        echo -e "${Y}[WARNING]${NC} dpkg-repack not found. Installing..."
+        sudo apt-get install -y dpkg-repack fakeroot 2>/dev/null || {
+            echo -e "${Y}[WARNING]${NC} Could not install dpkg-repack (optional)"
+        }
+    fi
+}
+
+update_kde_styler() {
+    header
+    echo -e "${BOLD}UPDATE KDE-STYLER${NC}\n"
+    echo -e "This will download the latest kde-styler.py from GitHub.\n"
+    read -p "Continue? [Y/n]: " confirm
+    
+    if [[ "$confirm" =~ ^[Nn]$ ]]; then
+        return
+    fi
+    
+    # Backup current version
+    if [[ -f "$KDE_STYLER" ]]; then
+        cp "$KDE_STYLER" "${KDE_STYLER}.bak"
+    fi
+    
+    if fetch_kde_styler; then
+        echo -e "\n${G}[SUCCESS]${NC} Updated to latest version"
+        rm -f "${KDE_STYLER}.bak"
+    else
+        # Restore backup on failure
+        if [[ -f "${KDE_STYLER}.bak" ]]; then
+            mv "${KDE_STYLER}.bak" "$KDE_STYLER"
+            echo -e "${Y}[INFO]${NC} Restored previous version"
         fi
-    done
+    fi
+    
+    read -p "Press Enter to continue..."
 }
 
 show_current() {
@@ -56,26 +114,23 @@ do_backup() {
     header
     echo -e "${BOLD}CREATE BACKUP${NC}\n"
     
-    # Prompt for backup location
     echo -e "Default backup directory: ${C}$DEFAULT_BACKUP_DIR${NC}"
     echo ""
     read -e -p "Backup location [Enter for default]: " backup_path
     
     if [[ -z "$backup_path" ]]; then
         mkdir -p "$DEFAULT_BACKUP_DIR"
-        backup_path=""  # Let kde-styler.py use its default naming
+        backup_path=""
         backup_dir="$DEFAULT_BACKUP_DIR"
     else
-        backup_path="${backup_path/#\~/$HOME}"  # Expand ~
+        backup_path="${backup_path/#\~/$HOME}"
         backup_dir="$(dirname "$backup_path")"
         mkdir -p "$backup_dir"
     fi
     
-    # Archive option
     echo ""
     read -p "Create .tar.gz archive as well? [y/N]: " create_archive
     
-    # Confirm
     echo ""
     echo -e "${Y}═══════════════════════════════════════════════════════════════${NC}"
     if [[ -z "$backup_path" ]]; then
@@ -94,7 +149,6 @@ do_backup() {
         return
     fi
     
-    # Build command
     cmd="python3 \"$KDE_STYLER\" backup"
     [[ -n "$backup_path" ]] && cmd+=" -o \"$backup_path\""
     [[ "$create_archive" =~ ^[Yy]$ ]] && cmd+=" --archive"
@@ -111,7 +165,6 @@ list_backups() {
     local dir="$1"
     local backups=()
     
-    # Find backup directories and archives
     if [[ -d "$dir" ]]; then
         while IFS= read -r -d '' item; do
             backups+=("$item")
@@ -125,7 +178,6 @@ do_restore() {
     header
     echo -e "${BOLD}RESTORE BACKUP${NC}\n"
     
-    # Check for existing backups
     echo -e "Scanning ${C}$DEFAULT_BACKUP_DIR${NC} for backups...\n"
     
     backups=($(list_backups "$DEFAULT_BACKUP_DIR"))
@@ -166,21 +218,18 @@ do_restore() {
         restore_path="${restore_path/#\~/$HOME}"
     fi
     
-    # Validate path
     if [[ ! -e "$restore_path" ]]; then
         echo -e "${R}[ERROR]${NC} Path does not exist: $restore_path"
         sleep 2
         return
     fi
     
-    # Restore options
     echo ""
     echo -e "${BOLD}Restore Options:${NC}"
     echo ""
     read -p "Aggressive mode (delete existing configs)? [Y/n]: " aggressive
     read -p "Restart Plasma shell after restore? [Y/n]: " restart
     
-    # Confirm
     echo ""
     echo -e "${R}═══════════════════════════════════════════════════════════════${NC}"
     echo -e "  Restore from: ${C}$restore_path${NC}"
@@ -198,17 +247,15 @@ do_restore() {
         return
     fi
     
-    # Build command
     cmd="python3 \"$KDE_STYLER\" restore \"$restore_path\""
     [[ "$aggressive" =~ ^[Nn]$ ]] && cmd+=" --no-aggressive"
     [[ "$restart" =~ ^[Nn]$ ]] && cmd+=" --no-restart"
     
     echo ""
-    # For restore, we need to handle the interactive prompts
-    eval "$cmd" << EOF
+    eval "$cmd" << RESTORE_EOF
 y
 y
-EOF
+RESTORE_EOF
     
     echo ""
     echo -e "${G}[DONE]${NC} Restore complete!"
@@ -223,6 +270,7 @@ main_menu() {
         echo -e "  ${C}[2]${NC} Create backup"
         echo -e "  ${C}[3]${NC} Restore from backup"
         echo -e "  ${C}[4]${NC} Open backup folder"
+        echo -e "  ${C}[5]${NC} Update kde-styler.py from GitHub"
         echo -e "  ${C}[q]${NC} Quit"
         echo ""
         read -p "Select option: " choice
@@ -234,14 +282,15 @@ main_menu() {
             4) 
                 mkdir -p "$DEFAULT_BACKUP_DIR"
                 if command -v dolphin &>/dev/null; then
-                    dolphin "$DEFAULT_BACKUP_DIR" &
+                    dolphin "$DEFAULT_BACKUP_DIR" &>/dev/null &
                 elif command -v xdg-open &>/dev/null; then
-                    xdg-open "$DEFAULT_BACKUP_DIR" &
+                    xdg-open "$DEFAULT_BACKUP_DIR" &>/dev/null &
                 else
                     echo -e "${B}[INFO]${NC} Backup folder: $DEFAULT_BACKUP_DIR"
                     read -p "Press Enter to continue..."
                 fi
                 ;;
+            5) update_kde_styler ;;
             q|Q) 
                 clear_screen
                 echo -e "${G}Goodbye!${NC}"
