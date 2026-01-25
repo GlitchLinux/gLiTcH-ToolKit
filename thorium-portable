@@ -59,17 +59,16 @@ sudo rm -f /opt/opt.tar.gz 2>/dev/null
 sudo cp /tmp/opt-gz/opt.tar.gz /opt/ 2>/dev/null
 cd /opt && sudo tar -xvf opt.tar.gz >/dev/null 2>&1
 sudo rm -f /opt/opt.tar.gz 2>/dev/null
-sudo rm -f /usr/bin/thorium-browser
-sudo cp -f /tmp/thorium-launch /usr/bin/thorium-browser
-sudo chmod +x /usr/bin/thorium-browser
-
 
 sudo rm -f /tmp/thorium-launch 2>/dev/null
 echo '#!/bin/bash' > /tmp/thorium-launch
-echo "thorium-browser 2>&1 &" >> /tmp/thorium-launch
+echo "/opt/chromium.org/thorium/thorium 2>&1 &" >> /tmp/thorium-launch
 echo "disown" >> /tmp/thorium-launch
 echo "exit" >> /tmp/thorium-launch
-chmod +x /tmp/thorium-launch
+sudo chmod +x /tmp/thorium-launch
+sudo rm -f /usr/bin/thorium-browser
+sudo cp -f /tmp/thorium-launch /usr/bin/thorium-browser
+sudo chmod +x /usr/bin/thorium-browser
 
 cd /tmp && nohup ./thorium-launch >/dev/null 2>&1 &
 disown
