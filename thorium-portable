@@ -1,0 +1,69 @@
+#!/bin/bash
+cd /tmp
+
+# Check if Thorium is already installed
+if [ -d /opt/chromium.org ]; then
+  # Thorium exists - just launch it
+  sudo rm -f /tmp/thorium-launch 2>/dev/null
+  echo '#!/bin/bash' > /tmp/thorium-launch
+  echo "thorium-browser 2>&1 &" >> /tmp/thorium-launch
+  echo "disown" >> /tmp/thorium-launch
+  echo "exit" >> /tmp/thorium-launch
+  chmod +x /tmp/thorium-launch
+  cd /tmp && nohup ./thorium-launch >/dev/null 2>&1 &
+  disown
+  exit 0
+fi
+
+# Check if image is already downloaded
+if [ -f /tmp/opt-tar-gz-300MB.img ]; then
+  # Image exists - mount and extract
+  sudo rm -rf /opt/chromium.org 2>/dev/null
+  sudo rm -f umount-opt.sh 2>/dev/null
+  sudo bash umount-opt.sh 2>/dev/null
+  
+  mkdir -p /tmp/opt-gz 2>/dev/null
+  xterm -geometry 30x1 -e "sudo mount /tmp/opt-tar-gz-300MB.img /tmp/opt-gz"
+  
+  sudo rm -f /opt/opt.tar.gz 2>/dev/null
+  sudo cp /tmp/opt-gz/opt.tar.gz /opt/ 2>/dev/null
+  cd /opt && sudo tar -xvf opt.tar.gz >/dev/null 2>&1
+  sudo rm -f /opt/opt.tar.gz 2>/dev/null
+  
+  sudo rm -f /tmp/thorium-launch 2>/dev/null
+  echo '#!/bin/bash' > /tmp/thorium-launch
+  echo "thorium-browser 2>&1 &" >> /tmp/thorium-launch
+  echo "disown" >> /tmp/thorium-launch
+  echo "exit" >> /tmp/thorium-launch
+  chmod +x /tmp/thorium-launch
+  cd /tmp && nohup ./thorium-launch >/dev/null 2>&1 &
+  disown
+  exit 0
+fi
+
+# Neither exists - full installation from scratch
+sudo rm -rf /opt/chromium.org 2>/dev/null
+sudo rm -f umount-opt.sh 2>/dev/null
+wget https://glitchlinux.wtf/FILES/thorium-luks-img/umount-opt.sh 2>/dev/null
+sudo bash umount-opt.sh 2>/dev/null
+sudo rm -f /tmp/opt-tar-gz-300MB.img 2>/dev/null
+
+xterm -geometry 70x1 -e "wget https://glitchlinux.wtf/FILES/thorium-luks-img/opt-tar-gz-300MB.img" 2>/dev/null
+
+mkdir -p /tmp/opt-gz 2>/dev/null
+xterm -geometry 30x1 -e "sudo mount /tmp/opt-tar-gz-300MB.img /tmp/opt-gz"
+
+sudo rm -f /opt/opt.tar.gz 2>/dev/null
+sudo cp /tmp/opt-gz/opt.tar.gz /opt/ 2>/dev/null
+cd /opt && sudo tar -xvf opt.tar.gz >/dev/null 2>&1
+sudo rm -f /opt/opt.tar.gz 2>/dev/null
+
+sudo rm -f /tmp/thorium-launch 2>/dev/null
+echo '#!/bin/bash' > /tmp/thorium-launch
+echo "thorium-browser 2>&1 &" >> /tmp/thorium-launch
+echo "disown" >> /tmp/thorium-launch
+echo "exit" >> /tmp/thorium-launch
+chmod +x /tmp/thorium-launch
+
+cd /tmp && nohup ./thorium-launch >/dev/null 2>&1 &
+disown
