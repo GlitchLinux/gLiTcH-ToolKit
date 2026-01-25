@@ -28,5 +28,5 @@ echo "License key: MC60H-DWHD5-H80U9-6V85M-8280D  " >> /tmp/vmware-installed
 sudo chmod +x /usr/bin/vmware
 /usr/bin/vmware 2>&1 &
 disown
-nohup xfce4-terminal --geometry 50x5 --command 'bash -c "cat /tmp/vmware-installed | borderize && sleep 300"' 2>&1 &
+sleep 3 && nohup xfce4-terminal --geometry 48x5 --command 'bash -c "cat /tmp/vmware-installed | borderize && sleep 300"' 2>&1 &
 exit
