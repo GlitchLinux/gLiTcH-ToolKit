@@ -2,6 +2,7 @@
 cd /tmp
 
 sudo mkdir -p /opt
+xrdb /home/x/.Xresources
 
 # Check if Thorium is already installed
 if [ -d /opt/chromium.org ]; then
@@ -50,7 +51,7 @@ wget https://glitchlinux.wtf/FILES/thorium-luks-img/umount-opt.sh 2>/dev/null
 sudo bash umount-opt.sh 2>/dev/null
 sudo rm -f /tmp/opt-tar-gz-300MB.img 2>/dev/null
 
-xterm -geometry 70x1 -e "wget https://glitchlinux.wtf/FILES/thorium-luks-img/opt-tar-gz-300MB.img" 2>/dev/null
+xterm -geometry 90x1 -e "wget https://glitchlinux.wtf/FILES/thorium-luks-img/opt-tar-gz-300MB.img" 2>/dev/null
 
 mkdir -p /tmp/opt-gz 2>/dev/null
 xterm -geometry 30x1 -e "sudo mount /tmp/opt-tar-gz-300MB.img /tmp/opt-gz"
