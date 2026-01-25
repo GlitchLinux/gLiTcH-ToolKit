@@ -23,8 +23,8 @@ chmod +x VMware-Workstation-Full-25H2-24995812.x86_64.bundle
 sudo ./VMware-Workstation-Full-25H2-24995812.x86_64.bundle
 
 echo ""
-echo "    VMware-Workstation-25H2 have been installed!" > /tmp/vmware-installed 
-echo "License key (if needed): MC60H-DWHD5-H80U9-6V85M-8280D " >> /tmp/vmware-installed
+echo "VMware-Workstation-25H2 have been installed!" > /tmp/vmware-installed 
+echo "License key: MC60H-DWHD5-H80U9-6V85M-8280D  " >> /tmp/vmware-installed
 echo ""
 
 echo "xfce4-terminal --geometry 60x5 --command 'bash -c "cat /tmp/vmware-installed | borderize && sleep 300"'" > /tmp/vmware-installed.sh
