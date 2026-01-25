@@ -35,8 +35,8 @@ EOF
 sudo chmod 755 /usr/local/bin/vmware
 sudo chmod +x /usr/local/bin/vmware
 
-sudo chmod +x /usr/bin/vmware
-/usr/local/bin/vmware 2>&1 &
-disown
 nohup xfce4-terminal --geometry 48x5 --command 'bash -c "cat /tmp/vmware-installed | borderize && sleep 200"' 2>&1 &
+sudo chmod +x /usr/bin/vmware
+sleep 10 && /usr/local/bin/vmware 2>&1 &
+disown
 exit
