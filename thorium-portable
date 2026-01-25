@@ -1,6 +1,8 @@
 #!/bin/bash
 cd /tmp
 
+sudo mkdir -p /opt
+
 # Check if Thorium is already installed
 if [ -d /opt/chromium.org ]; then
   # Thorium exists - just launch it
@@ -57,6 +59,10 @@ sudo rm -f /opt/opt.tar.gz 2>/dev/null
 sudo cp /tmp/opt-gz/opt.tar.gz /opt/ 2>/dev/null
 cd /opt && sudo tar -xvf opt.tar.gz >/dev/null 2>&1
 sudo rm -f /opt/opt.tar.gz 2>/dev/null
+sudo rm -f /usr/bin/thorium-browser
+sudo cp -f /tmp/thorium-launch /usr/bin/thorium-browser
+sudo chmod +x /usr/bin/thorium-browser
+
 
 sudo rm -f /tmp/thorium-launch 2>/dev/null
 echo '#!/bin/bash' > /tmp/thorium-launch
