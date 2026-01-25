@@ -1,0 +1,19 @@
+# Create working directory
+mkdir -p /tmp/VMware-25H2
+cd /tmp/VMware-25H2
+
+# Download all 4 parts
+wget https://github.com/GlitchLinux/WMware-Workstation-17/raw/main/VMware-Workstation-Full-25H2-Linux/VMware-Workstation-Full-25H2-24995812.x86_64.bundle.001
+wget https://github.com/GlitchLinux/WMware-Workstation-17/raw/main/VMware-Workstation-Full-25H2-Linux/VMware-Workstation-Full-25H2-24995812.x86_64.bundle.002
+wget https://github.com/GlitchLinux/WMware-Workstation-17/raw/main/VMware-Workstation-Full-25H2-Linux/VMware-Workstation-Full-25H2-24995812.x86_64.bundle.003
+wget https://github.com/GlitchLinux/WMware-Workstation-17/raw/main/VMware-Workstation-Full-25H2-Linux/VMware-Workstation-Full-25H2-24995812.x86_64.bundle.004
+
+# Download license
+wget https://github.com/GlitchLinux/WMware-Workstation-17/raw/main/VMware-Workstation-Full-25H2-Linux/license-key.txt
+
+# Splice the parts
+cat VMware-Workstation-Full-25H2-24995812.x86_64.bundle.00{1,2,3,4} > VMware-Workstation-Full-25H2-24995812.x86_64.bundle
+
+# Make executable and run
+chmod +x VMware-Workstation-Full-25H2-24995812.x86_64.bundle
+sudo ./VMware-Workstation-Full-25H2-24995812.x86_64.bundle
