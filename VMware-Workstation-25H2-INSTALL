@@ -25,8 +25,18 @@ sudo ./VMware-Workstation-Full-25H2-24995812.x86_64.bundle
 echo "VMware-Workstation-25H2 have been installed!" > /tmp/vmware-installed 
 echo "License key: MC60H-DWHD5-H80U9-6V85M-8280D  " >> /tmp/vmware-installed
 
-sudo chmod +x /usr/bin/vmware
-/usr/bin/vmware 2>&1 &
+sudo tee /usr/local/bin/vmware >/dev/null <<'EOF'
+#!/bin/bash
+sudo rm -f /tmp/vmware.log
+nohup sudo /usr/bin/vmware >/tmp/vmware.log 2>&1 &
 disown
-sleep 3 && nohup xfce4-terminal --geometry 48x5 --command 'bash -c "cat /tmp/vmware-installed | borderize && sleep 300"' 2>&1 &
+EOF
+
+sudo chmod 755 /usr/local/bin/vmware
+sudo chmod +x /usr/local/bin/vmware
+
+sudo chmod +x /usr/bin/vmware
+/usr/local/bin/vmware 2>&1 &
+disown
+nohup xfce4-terminal --geometry 48x5 --command 'bash -c "cat /tmp/vmware-installed | borderize && sleep 200"' 2>&1 &
 exit
