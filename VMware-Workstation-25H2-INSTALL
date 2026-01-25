@@ -14,6 +14,24 @@ wget https://github.com/GlitchLinux/WMware-Workstation-17/raw/main/VMware-Workst
 # Splice the parts
 cat VMware-Workstation-Full-25H2-24995812.x86_64.bundle.00{1,2,3,4} > VMware-Workstation-Full-25H2-24995812.x86_64.bundle
 
+# Update apt and install headers 
+sudo apt-get update -y
+sudo apt-get install -y linux-headers-$(uname -r)
+
 # Make executable and run
 chmod +x VMware-Workstation-Full-25H2-24995812.x86_64.bundle
 sudo ./VMware-Workstation-Full-25H2-24995812.x86_64.bundle
+
+echo ""
+echo "    VMware-Workstation-25H2 have been installed!" > /tmp/vmware-installed 
+echo "License key (if needed): MC60H-DWHD5-H80U9-6V85M-8280D " >> /tmp/vmware-installed
+echo ""
+
+echo "xfce4-terminal --geometry 60x5 --command 'bash -c "cat /tmp/vmware-installed | borderize && sleep 300"'" > /tmp/vmware-installed.sh
+bash /tmp/vmware-installed.sh 2>&1 &
+disown
+
+sleep 10 && sudo chmod +x /usr/bin/vmware
+/usr/bin/vmware 2>&1 &
+disown
+exit
