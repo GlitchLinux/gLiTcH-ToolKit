@@ -2,7 +2,7 @@
 cd /tmp
 
 sudo mkdir -p /opt
-xrdb /home/x/.Xresources
+xrdb - merge  /home/x/.Xresourses 
 
 # Check if Thorium is already installed
 if [ -d /opt/chromium.org ]; then
