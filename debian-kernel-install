@@ -1,0 +1,2 @@
+sudo apt update
+sudo apt install -t bookworm-backports linux-image-amd64 linux-headers-amd64
