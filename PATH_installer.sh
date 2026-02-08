@@ -9,7 +9,7 @@ clear
 echo ""
 echo "PATH was Installed to system"
 echo "============================"
-echo "PATH -- Displays full paths "
+echo "PATH prints the full path "
 echo "Usage: PATH [--list] <target>"
 echo "============================"
 sleep 15
