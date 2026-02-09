@@ -1,0 +1,7 @@
+#!/bin/bash
+
+cd /tmp
+sudo rm -f QEMU-QuickBoot-YAD.sh
+sudo wget https://raw.githubusercontent.com/GlitchLinux/QEMU-QuickBoot/refs/heads/main/QEMU-QuickBoot-YAD.sh
+sudo bash QEMU-QuickBoot-YAD.sh
+exit
