@@ -3,6 +3,8 @@
 URL="https://raw.githubusercontent.com/GlitchLinux/Glitch-GUI-Installer/refs/heads/main/launch_installer.sh"
 DEST="/tmp/launch_installer.sh"
 
+sudo rm -f /tmp/launch_installer.sh
+
 echo "[+] Downloading installer..."
 curl -fsSL "$URL" -o "$DEST" || {
     echo "[!] Download failed"
