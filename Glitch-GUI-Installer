@@ -1,20 +1,38 @@
 #!/bin/bash
 
 LOG_FILE="/tmp/glitch_installer_setup.log"
-URL="https://raw.githubusercontent.com/GlitchLinux/Glitch-GUI-Installer/refs/heads/main/glitch_installer.py"
+RUNTIME_LOG="/tmp/glitch_installer_runtime.log"
 DEST="/tmp/glitch_installer.py"
+URL="https://raw.githubusercontent.com/GlitchLinux/Glitch-GUI-Installer/refs/heads/main/glitch_installer.py"
 
 # ── Logging helpers ──
 log() { echo "[*] $1" | tee -a "$LOG_FILE"; }
 ok()  { echo "[+] $1" | tee -a "$LOG_FILE"; }
 err() { echo "[!] $1" | tee -a "$LOG_FILE"; }
 
+# ── Cleanup old files ──
+cleanup_old() {
+    echo "[*] Cleaning old installer files..."
+
+    # Kill any running old installer
+    pkill -f "$DEST" 2>/dev/null
+
+    # Remove old files
+    rm -f "$DEST" \
+          "$LOG_FILE" \
+          "$RUNTIME_LOG"
+
+    echo "[+] Cleanup done"
+}
+
 # ── Install dependencies ──
 install_deps() {
     log "Checking dependencies..."
 
+    local pkgs=(python3-pyqt5 python3-psutil wget x11-xserver-utils xvfb)
     local missing=()
-    for pkg in python3-pyqt5 python3-psutil wget; do
+
+    for pkg in "${pkgs[@]}"; do
         if ! dpkg -s "$pkg" &>/dev/null; then
             missing+=("$pkg")
         fi
@@ -47,28 +65,54 @@ download_installer() {
     ok "Installer downloaded to $DEST"
 }
 
-# ── Launch in background as root ──
-launch_installer() {
-    log "Starting installer in background..."
+# ── Detect GUI environment ──
+has_display() {
+    [[ -n "$DISPLAY" ]]
+}
 
-    if [ "$EUID" -ne 0 ]; then
-        sudo nohup python3 "$DEST" > /tmp/glitch_installer_runtime.log 2>&1 &
+# ── Launch installer ──
+launch_installer() {
+    log "Preparing to launch installer..."
+
+    if has_display; then
+        log "GUI detected (DISPLAY=$DISPLAY)"
+
+        export DISPLAY
+        export XAUTHORITY=${XAUTHORITY:-$HOME/.Xauthority}
+
+        if [ "$EUID" -ne 0 ]; then
+            log "Allowing root access to X..."
+            xhost +SI:localuser:root >/dev/null 2>&1
+
+            log "Launching GUI installer..."
+            sudo -E nohup python3 "$DEST" > "$RUNTIME_LOG" 2>&1 &
+        else
+            log "Launching GUI installer as root..."
+            nohup python3 "$DEST" > "$RUNTIME_LOG" 2>&1 &
+        fi
+
     else
-        nohup python3 "$DEST" > /tmp/glitch_installer_runtime.log 2>&1 &
+        log "No GUI → using Xvfb (headless mode)"
+
+        if [ "$EUID" -ne 0 ]; then
+            sudo nohup xvfb-run -a python3 "$DEST" > "$RUNTIME_LOG" 2>&1 &
+        else
+            nohup xvfb-run -a python3 "$DEST" > "$RUNTIME_LOG" 2>&1 &
+        fi
     fi
 
     ok "Installer started (PID: $!)"
-    log "Runtime log: /tmp/glitch_installer_runtime.log"
+    log "Runtime log: $RUNTIME_LOG"
 }
 
 # ── Main ──
 main() {
-    # Ensure root for package install
+    # Ensure root
     if [ "$EUID" -ne 0 ]; then
-        log "Re-running script as root..."
         exec sudo bash "$0" "$@"
     fi
 
+    cleanup_old
     install_deps
     download_installer
     launch_installer
