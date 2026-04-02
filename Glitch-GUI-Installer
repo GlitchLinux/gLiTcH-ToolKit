@@ -1,0 +1,24 @@
+#!/bin/bash
+
+URL="https://raw.githubusercontent.com/GlitchLinux/Glitch-GUI-Installer/refs/heads/main/launch_installer.sh"
+DEST="/tmp/launch_installer.sh"
+
+echo "[+] Downloading installer..."
+curl -fsSL "$URL" -o "$DEST" || {
+    echo "[!] Download failed"
+    exit 1
+}
+
+echo "[+] Making script executable..."
+chmod +x "$DEST"
+
+echo "[+] Launching installer as root in background..."
+
+if [ "$EUID" -ne 0 ]; then
+    sudo bash -c "nohup '$DEST' >/tmp/installer.log 2>&1 &"
+else
+    nohup "$DEST" >/tmp/installer.log 2>&1 &
+fi
+
+echo "[+] Installer started in background (separate PID)"
+echo "[+] Log file: /tmp/installer.log"
