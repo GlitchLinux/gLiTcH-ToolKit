@@ -1,24 +1,77 @@
 #!/bin/bash
 
-URL="https://raw.githubusercontent.com/GlitchLinux/Glitch-GUI-Installer/refs/heads/main/launch_installer.sh"
-DEST="/tmp/launch_installer.sh"
+LOG_FILE="/tmp/glitch_installer_setup.log"
+URL="https://raw.githubusercontent.com/GlitchLinux/Glitch-GUI-Installer/refs/heads/main/glitch_installer.py"
+DEST="/tmp/glitch_installer.py"
 
-echo "[+] Downloading installer..."
-curl -fsSL "$URL" -o "$DEST" || {
-    echo "[!] Download failed"
-    exit 1
+# ── Logging helpers ──
+log() { echo "[*] $1" | tee -a "$LOG_FILE"; }
+ok()  { echo "[+] $1" | tee -a "$LOG_FILE"; }
+err() { echo "[!] $1" | tee -a "$LOG_FILE"; }
+
+# ── Install dependencies ──
+install_deps() {
+    log "Checking dependencies..."
+
+    local missing=()
+    for pkg in python3-pyqt5 python3-psutil wget; do
+        if ! dpkg -s "$pkg" &>/dev/null; then
+            missing+=("$pkg")
+        fi
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        log "Installing: ${missing[*]}"
+        apt-get update -qq >> "$LOG_FILE" 2>&1 || {
+            err "apt update failed"
+            exit 1
+        }
+        apt-get install -y -qq "${missing[@]}" >> "$LOG_FILE" 2>&1 || {
+            err "Dependency installation failed"
+            exit 1
+        }
+        ok "Dependencies installed"
+    else
+        ok "All dependencies already installed"
+    fi
 }
 
-echo "[+] Making script executable..."
-chmod +x "$DEST"
+# ── Download installer ──
+download_installer() {
+    log "Downloading installer..."
+    wget -q "$URL" -O "$DEST" >> "$LOG_FILE" 2>&1 || {
+        err "Download failed"
+        exit 1
+    }
+    chmod +x "$DEST"
+    ok "Installer downloaded to $DEST"
+}
 
-echo "[+] Launching installer as root in background..."
+# ── Launch in background as root ──
+launch_installer() {
+    log "Starting installer in background..."
 
-if [ "$EUID" -ne 0 ]; then
-    sudo bash -c "nohup '$DEST' >/tmp/installer.log 2>&1 &"
-else
-    nohup "$DEST" >/tmp/installer.log 2>&1 &
-fi
+    if [ "$EUID" -ne 0 ]; then
+        sudo nohup python3 "$DEST" > /tmp/glitch_installer_runtime.log 2>&1 &
+    else
+        nohup python3 "$DEST" > /tmp/glitch_installer_runtime.log 2>&1 &
+    fi
 
-echo "[+] Installer started in background (separate PID)"
-echo "[+] Log file: /tmp/installer.log"
+    ok "Installer started (PID: $!)"
+    log "Runtime log: /tmp/glitch_installer_runtime.log"
+}
+
+# ── Main ──
+main() {
+    # Ensure root for package install
+    if [ "$EUID" -ne 0 ]; then
+        log "Re-running script as root..."
+        exec sudo bash "$0" "$@"
+    fi
+
+    install_deps
+    download_installer
+    launch_installer
+}
+
+main "$@"
