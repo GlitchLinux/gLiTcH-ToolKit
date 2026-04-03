@@ -1,0 +1,12 @@
+#!/bin/bash
+cd /tmp && git clone https://github.com/GlitchLinux/gfetch.git
+cd gfetch
+sudo cp -rf gfetch-data /usr/local/bin/
+sudo mv /usr/local/bin/gfetch-data/gfetch-edit-launch /usr/local/bin/gfetch-edit
+sudo mv /usr/local/bin/gfetch-data/gfetch-launch /usr/local/bin/gfetch
+sudo chmod +x /usr/local/bin/gfetch-edit
+sudo chmod +x /usr/local/bin/gfetch
+cd /usr/local/bin/gfetch-data/ && sudo chmod +x * && cd
+echo "gfetch was sucessfully installed to system!"
+sleep 3
+bash /usr/local/bin/gfetch
