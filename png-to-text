@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# png-to-text script
+
+# Prompt the user for the path to the PNG file
+echo "Enter path to .png"
+read png_path
+
+# Check if the provided file exists and is a PNG
+if [[ ! -f "$png_path" ]]; then
+  echo "Error: File not found!"
+  exit 1
+fi
+
+# Determine the output .sh script path (same name, but .sh extension)
+sh_path="${png_path%.png}-text.sh"
+
+# Create the .sh script that will decode the Base64 content back to the PNG file
+echo "#!/bin/bash" > "$sh_path"
+echo "echo 'Rebuilding $png_path...'" >> "$sh_path"
+echo "echo '$(base64 -w 0 "$png_path")' | base64 -d > \"$png_path\"" >> "$sh_path"
+
+# Make the new .sh script executable
+chmod +x "$sh_path"
+
+# Output success message
+echo "Converted $png_path to $sh_path"
