@@ -1,0 +1,50 @@
+#!/bin/bash
+set -e
+
+INSTALLER_PID=$$
+INSTALLER_PPID=$PPID
+
+echo "Fetching latest balenaEtcher release..."
+DOWNLOAD_URL=$(curl -s https://api.github.com/repos/balena-io/etcher/releases/latest \
+  | grep "browser_download_url" \
+  | grep -i "linux-x64.*\.zip" \
+  | head -1 \
+  | cut -d '"' -f 4)
+
+if [ -z "$DOWNLOAD_URL" ]; then
+  echo "ERROR: Could not find download URL"
+  exit 1
+fi
+
+FILENAME=$(basename "$DOWNLOAD_URL")
+DEST="/tmp/$FILENAME"
+EXTRACT_DIR="/tmp/balena-etcher"
+
+echo "Downloading $FILENAME..."
+curl -L --progress-bar -o "$DEST" "$DOWNLOAD_URL"
+
+echo "Extracting to $EXTRACT_DIR..."
+mkdir -p "$EXTRACT_DIR"
+unzip -o "$DEST" -d "$EXTRACT_DIR"
+
+# Find the executable
+BINARY=$(find "$EXTRACT_DIR" -name "balena-etcher" -type f | head -1)
+
+if [ -z "$BINARY" ]; then
+  echo "ERROR: balena-etcher executable not found in extracted archive"
+  ls -R "$EXTRACT_DIR"
+  exit 1
+fi
+
+chmod +x "$BINARY"
+
+echo "Launching $BINARY (detached)..."
+# setsid launches in a new session, fully detached from this terminal
+setsid "$BINARY" --no-sandbox &>/dev/null &
+ETCHER_PID=$!
+
+echo "balenaEtcher launched with PID $ETCHER_PID"
+echo "Closing installer terminal (PID $INSTALLER_PPID)..."
+sleep 1
+
+kill "$INSTALLER_PPID"
