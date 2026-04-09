@@ -76,32 +76,73 @@ create_grub_config() {
     
     # Create theme configuration
     cat > "$iso_dir/boot/grub/theme.cfg" <<'EOF'
-title-color: "white"
-title-text: " "
-title-font: "Sans Regular 16"
-desktop-color: "black"
+title-text: ""
+title-font: "Sans Bold 28"
+title-color: "#FFFFFF"
+desktop-color: "#111111"
 desktop-image: "/boot/grub/splash.png"
-message-color: "white"
-message-bg-color: "black"
-terminal-font: "Sans Regular 12"
+message-font: "Sans Regular 20"
+message-color: "#FFFFFF"
+message-bg-color: "#303030"
+terminal-font: "Sans Regular 20"
 
 + boot_menu {
-  top = 150
-  left = 15%
-  width = 75%
-  height = 150
-  item_font = "Sans Regular 12"
+  left = 10%
+  top = 20%
+  width = 70%
+  height = 80%
+
+  item_font = "DejaVu Sans Bold 14"
   item_color = "grey"
-  selected_item_color = "white"
-  item_height = 20
-  item_padding = 15
-  item_spacing = 5
+  item_height = 32
+  item_icon_space = 8
+  item_spacing = 2
+
+  selected_item_font = "DejaVu Sans Bold 14"
+  selected_item_color= "#ffffff"
+  # selected_item_pixmap_style = "select_*.png"
+
+  icon_height = 32
+  icon_width = 32
+
+  scrollbar = false
+  scrollbar_width = 20
+  scrollbar_thumb = "slider_*.png"
 }
 
++ progress_bar {
+  id = "__timeout__"
+
+  left = 15%
+  top = 85%
+  height = 5
+  width = 70%
+
+  # font = "DejaVu Sans Regular 14"
+
+  # text_color = "#"
+  fg_color = "grey"
+
+  bg_color = "#303030"
+  border_color = "#303030"
+
+  # instead of the above colors, use pixmaps
+  # bar_style = "progress_bar_*.png"
+  # highlight_style = "progress_highlight_*.png"
+
+  # text = "@TIMEOUT_NOTIFICATION_LONG@"
+}
+
+# Footer information
 + vbox {
-  top = 100%
-  left = 2%
-  + label {text = "Press 'E' key to edit" font = "Sans 10" color = "white" align = "left"}
+    top = 95%
+    left = 2%
+    + label {
+        text = ""
+        font = "DejaVu Sans Regular 14"
+        color = "#242424"
+
+    }
 }
 EOF
     
