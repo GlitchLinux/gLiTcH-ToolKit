@@ -1,0 +1,14 @@
+#!/bin/bash
+
+cd /tmp
+sudo rm -f ventoy-1.1.11-linux.tar.gz
+sudo rm -rf /tmp/ventoy-1.1.10/
+sudo rm -f /tmp/ventoy.log
+wget https://github.com/ventoy/Ventoy/releases/download/v1.1.11/ventoy-1.1.11-linux.tar.gz
+tar -xvf ventoy-1.1.11-linux.tar.gz
+sudo chmod 777 -R ventoy-1.1.11
+sudo chmod +x -R ventoy-1.1.11
+sudo chmod +x /tmp/ventoy-1.1.11/VentoyGUI.x86_64
+setsid sudo /tmp/ventoy-1.1.11/VentoyGUI.x86_64 \
+  </dev/null >/tmp/ventoy.log 2>&1 &
+exit
