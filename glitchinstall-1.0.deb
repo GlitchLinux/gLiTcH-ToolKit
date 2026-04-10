@@ -1,0 +1,15 @@
+#!/bin/bash
+
+cd /tmp
+wget https://github.com/GlitchLinux/Glitch-Install/raw/refs/heads/main/glitchinstall-1.0.deb
+sudo apt update && sudo dpkg -i glitchinstall-1.0.deb
+sudo apt install -f -y
+sudo dpkg -i glitchinstall-1.0.deb
+clear 
+which glitchinstall > /tmp/glitchinstall
+echo ""
+cat /tmp/glitchinstall
+echo ""
+echo "GlitchInstall v1.0 have been successfully installed!"
+echo "Launch with 'sudo glitchinstall'"
+echo ""
