@@ -1,0 +1,15 @@
+#!/bin/bash
+
+cd /tmp
+wget https://github.com/GlitchLinux/RemasterGlitch/raw/refs/heads/main/remasterglitch-1.0.deb
+sudo apt update && sudo dpkg -i remasterglitch-1.0.deb
+sudo apt install -f -y
+sudo dpkg -i remasterglitch-1.0.deb
+clear 
+which remasterglitch > /tmp/remasterglitch
+echo ""
+cat /tmp/remasterglitch 
+echo ""
+echo "RemasterGlitch v1.0 have been successfully installed!"
+echo "Launch with 'sudo remasterglitch'"
+echo ""
