@@ -5,8 +5,9 @@ sudo rm -f /tmp/glitch
 sudo curl -L https://raw.githubusercontent.com/GlitchLinux/BORDERIZE/refs/heads/main/borderize -o /usr/local/bin/borderize && sudo chmod +x /usr/local/bin/borderize
 sudo wget https://github.com/GlitchLinux/RemasterGlitch/raw/refs/heads/main/remasterglitch-1.0.deb
 sudo wget https://github.com/GlitchLinux/Glitch-Install/raw/refs/heads/main/glitchinstall-1.0.deb
-sudo apt update && sudo apt autoremove grub-pc -y && sudo apt install -y libqt5designer5 python3-minimal python3-pyqt5 python3-pyqt5.sip libqt5help5
-sudo dpkg -i remasterglitch-1.0.deb glitchinstall-1.0.deb
+wget https://github.com/GlitchLinux/QEMU-QuickBoot/releases/download/QEMU-QuickBoot-v1.4/QEMU-QuickBoot-v1.4_amd64.deb
+sudo apt update && sudo apt autoremove grub-pc -y && sudo apt install -y qemu-system wget qemu-utils qemu-system-gui xdotool ovmf qemu-system zenity git orchis-gtk-theme libqt5designer5 python3-minimal python3-pyqt5 python3-pyqt5.sip libqt5help5
+sudo dpkg -i remasterglitch-1.0.deb glitchinstall-1.0.deb QEMU-QuickBoot-v1.4_amd64.deb
 sudo apt install -f -y
 sudo dpkg --force-all -i remasterglitch-1.0.deb glitchinstall-1.0.deb
 which remasterglitch 
