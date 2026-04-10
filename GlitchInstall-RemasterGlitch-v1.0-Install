@@ -3,8 +3,9 @@
 cd /tmp
 sudo curl -L https://raw.githubusercontent.com/GlitchLinux/BORDERIZE/refs/heads/main/borderize -o /usr/local/bin/borderize && sudo chmod +x /usr/local/bin/borderize
 sudo wget https://github.com/GlitchLinux/RemasterGlitch/raw/refs/heads/main/remasterglitch-1.0.deb
-sudo wget https://github.com/GlitchLinux/Glitch-Install/raw/refs/heads/main/glitchinstall-1.0.deb
-sudo apt update && sudo dpkg -i remasterglitch-1.0.deb glitchinstall-1.0.deb
+sudo wget https://github.com/GlitchLinux/Glitch-Install/raw/refs/heads/main/glitchinstall-1.0.
+sudo apt update && sudo apt autoremove grub-pc -y && sudo apt install -y libqt5designer5 python3-minimal  python3-pyqt5  python3-pyqt5.sip  libqt5help5  libqt5test5t64 grub-efi cryptsetup cryptsetup-initramfs
+sudo dpkg -i remasterglitch-1.0.deb glitchinstall-1.0.deb
 sudo apt install -f -y
 sudo dpkg -i remasterglitch-1.0.deb glitchinstall-1.0.deb
 clear 
