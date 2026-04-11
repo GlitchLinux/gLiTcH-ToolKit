@@ -1,18 +1,18 @@
 #!/bin/bash
-# ╔═════════════════════════════════════════════════════════════════╗
+# ╔══════════════════════════════════════════════════════════════════╗
 # ║  vDiskChain Setup - Boot raw disk images as bare metal OS       ║
-# ║  https://github.com/ventoy/vdiskchain                           ║
+# ║  https://github.com/ventoy/vdiskchain                          ║
 # ║                                                                 ║
 # ║  Installs vdiskchain bootloader files into an existing GRUB     ║
 # ║  installation and generates boot entries for .vtoy disk images. ║
 # ║                                                                 ║
 # ║  Usage: sudo ./vdiskchain-setup.sh                              ║
 # ║         (interactive — prompts for all paths)                   ║
-# ╚═════════════════════════════════════════════════════════════════╝
+# ╚══════════════════════════════════════════════════════════════════╝
 
 set -e
 
-# ── Colors ──────────────────────────────────────
+# ── Colors ──────────────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -30,9 +30,9 @@ step()  { echo -e "\n${BOLD}${CYAN}── $1 ──${NC}"; }
 prompt() {
     local msg="$1" default="$2" reply
     if [[ -n "$default" ]]; then
-        echo -en "${BOLD}${msg}${NC} ${DIM}[${default}]${NC}: "
+        echo -en "${BOLD}${msg}${NC} ${DIM}[${default}]${NC}: " >&2
     else
-        echo -en "${BOLD}${msg}${NC}: "
+        echo -en "${BOLD}${msg}${NC}: " >&2
     fi
     read -r reply
     echo "${reply:-$default}"
