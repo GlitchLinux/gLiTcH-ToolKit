@@ -1,18 +1,18 @@
 #!/bin/bash
-# ╔══════════════════════════════════════════════════════════════════╗
+# ╔═════════════════════════════════════════════════════════════════╗
 # ║  vDiskChain Setup - Boot raw disk images as bare metal OS       ║
-# ║  https://github.com/ventoy/vdiskchain                          ║
+# ║  https://github.com/ventoy/vdiskchain                           ║
 # ║                                                                 ║
 # ║  Installs vdiskchain bootloader files into an existing GRUB     ║
 # ║  installation and generates boot entries for .vtoy disk images. ║
 # ║                                                                 ║
 # ║  Usage: sudo ./vdiskchain-setup.sh                              ║
 # ║         (interactive — prompts for all paths)                   ║
-# ╚══════════════════════════════════════════════════════════════════╝
+# ╚═════════════════════════════════════════════════════════════════╝
 
 set -e
 
-# ── Colors ──────────────────────────────────────────────────────────
+# ── Colors ──────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
