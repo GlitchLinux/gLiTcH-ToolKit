@@ -1,16 +1,16 @@
 #!/bin/bash
-# ╔══════════════════════════════════════════════════════════════════╗
-# ║  vDiskChain Setup - Boot raw disk images as bare metal OS        ║
-# ║  https://github.com/ventoy/vdiskchain                            ║
-# ║                                                                  ║
-# ║  Installs vdiskchain bootloader files into an existing GRUB      ║
-# ║  installation and generates boot entries for .vtoy disk images.  ║
-# ║                                                                  ║
-# ║  Usage: sudo ./vdiskchain-setup.sh /path/to/grub/directory       ║
-# ║                                                                  ║
-# ║  Example: sudo ./vdiskchain-setup.sh /mnt/usb/boot/grub          ║
-# ║           sudo ./vdiskchain-setup.sh /boot/grub                  ║
-# ╚══════════════════════════════════════════════════════════════════╝
+# ╔═════════════════════════════════════════════════════════════════╗
+# ║  vDiskChain Setup - Boot raw disk images as bare metal OS       ║
+# ║  https://github.com/ventoy/vdiskchain                           ║
+# ║                                                                 ║
+# ║  Installs vdiskchain bootloader files into an existing GRUB     ║
+# ║  installation and generates boot entries for .vtoy disk images. ║
+# ║                                                                 ║
+# ║  Usage: sudo ./vdiskchain-setup.sh /path/to/grub/directory      ║
+# ║                                                                 ║
+# ║  Example: sudo ./vdiskchain-setup.sh /mnt/usb/boot/grub         ║
+# ║           sudo ./vdiskchain-setup.sh /boot/grub                 ║
+# ╚═════════════════════════════════════════════════════════════════╝
 
 set -e
 
@@ -83,33 +83,33 @@ step "vDiskChain Setup"
 info "GRUB directory : $GRUB_DIR"
 info "Boot root      : $BOOT_ROOT"
 
-# ── Step 1: Clone vdiskchain repo ───────────────────────────────────
+# ── Step 1: Download vdiskchain release ─────────────────────────────
 step "Step 1/5 — Downloading vdiskchain"
 
 TMPDIR=$(mktemp -d /tmp/vdiskchain-setup.XXXXXX)
 trap "rm -rf $TMPDIR" EXIT
 
-if command -v git &>/dev/null; then
-    info "Cloning vdiskchain repository..."
-    git clone --quiet --depth 1 https://github.com/ventoy/vdiskchain.git "$TMPDIR/vdiskchain" 2>/dev/null
-    ok "Repository cloned"
+RELEASE_URL="https://github.com/ventoy/vdiskchain/releases/download/v1.3/vdiskchain-1.3.tar.gz"
+
+info "Downloading vdiskchain v1.3 release..."
+if command -v wget &>/dev/null; then
+    wget -q --show-progress -O "$TMPDIR/vdiskchain-1.3.tar.gz" "$RELEASE_URL"
+elif command -v curl &>/dev/null; then
+    curl -sL -o "$TMPDIR/vdiskchain-1.3.tar.gz" "$RELEASE_URL"
 else
-    info "git not found, downloading release tarball..."
-    RELEASE_URL="https://github.com/ventoy/vdiskchain/releases/download/v1.3/vdiskchain-1.3.tar.gz"
-    wget -q -O "$TMPDIR/vdiskchain-1.3.tar.gz" "$RELEASE_URL"
-    tar xzf "$TMPDIR/vdiskchain-1.3.tar.gz" -C "$TMPDIR"
-    ok "Release v1.3 downloaded and extracted"
+    err "Neither wget nor curl found — cannot download"
+    exit 1
 fi
+
+tar xzf "$TMPDIR/vdiskchain-1.3.tar.gz" -C "$TMPDIR"
+ok "Release v1.3 downloaded and extracted"
 
 # ── Locate binaries ─────────────────────────────────────────────────
 EFI_BIN=""
 BIOS_KRN=""
 
-# Check release tarball first, then repo Tool directory
-for search_dir in "$TMPDIR/vdiskchain-1.3" "$TMPDIR/vdiskchain/Tool"; do
-    [[ -f "$search_dir/vdiskchain" ]] && EFI_BIN="$search_dir/vdiskchain"
-    [[ -f "$search_dir/ipxe.krn" ]]   && BIOS_KRN="$search_dir/ipxe.krn"
-done
+[[ -f "$TMPDIR/vdiskchain-1.3/vdiskchain" ]] && EFI_BIN="$TMPDIR/vdiskchain-1.3/vdiskchain"
+[[ -f "$TMPDIR/vdiskchain-1.3/ipxe.krn" ]]   && BIOS_KRN="$TMPDIR/vdiskchain-1.3/ipxe.krn"
 
 if [[ -z "$EFI_BIN" ]]; then
     err "Could not find vdiskchain EFI binary"
