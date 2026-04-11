@@ -1,13 +1,13 @@
 #!/bin/bash
-# ╔═══════════════════════════════════════════════════════════╗
-# ║  vncforward - TigerVNC Remote Desktop Utility            ║
-# ║  Automates dependency checks, remote TigerVNC setup,     ║
-# ║  desktop environment detection, SSH tunneling, and       ║
-# ║  secure VNC session establishment.                        ║
-# ║                                                           ║
-# ║  Author: Marcus @ gLiTcH Linux                           ║
-# ║  License: MIT                                             ║
-# ╚═══════════════════════════════════════════════════════════╝
+# ╔══════════════════════════════════════════════════════╗
+# ║  vncforward - TigerVNC Remote Desktop Utility        ║
+# ║  Automates dependency checks, remote TigerVNC setup, ║
+# ║  desktop environment detection, SSH tunneling, and   ║
+# ║  secure VNC session establishment.                   ║
+# ║                                                      ║
+# ║  Author: Marcus @ gLiTcH Linux                       ║
+# ║  License: MIT                                        ║
+# ╚══════════════════════════════════════════════════════╝
 
 set -euo pipefail
 
