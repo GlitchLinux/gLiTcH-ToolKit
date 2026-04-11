@@ -1,0 +1,560 @@
+#!/bin/bash
+# ╔═══════════════════════════════════════════════════════════╗
+# ║  x11forward - X11 SSH Forwarding Utility                 ║
+# ║  Automates dependency checks, remote configuration,      ║
+# ║  and establishes X11-forwarded SSH sessions.              ║
+# ║                                                           ║
+# ║  Author: Marcus @ gLiTcH Linux                           ║
+# ║  License: MIT                                             ║
+# ╚═══════════════════════════════════════════════════════════╝
+
+set -euo pipefail
+
+# ── Colors ──────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+RESET='\033[0m'
+
+# ── Globals ─────────────────────────────────────────────────
+REMOTE_HOST=""
+REMOTE_PORT="22"
+REMOTE_USER=""
+REMOTE_PASS=""
+TRUSTED=false
+VERBOSE=false
+DRY_RUN=false
+
+# ── Helpers ─────────────────────────────────────────────────
+info()  { echo -e "${CYAN}[INFO]${RESET}  $*"; }
+ok()    { echo -e "${GREEN}[  OK]${RESET}  $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${RESET}  $*"; }
+fail()  { echo -e "${RED}[FAIL]${RESET}  $*"; }
+die()   { fail "$*"; exit 1; }
+
+banner() {
+    echo ""
+    echo -e "${BOLD}${CYAN}╔═══════════════════════════════════════════╗${RESET}"
+    echo -e "${BOLD}${CYAN}║     x11forward  ─  X11 SSH Forwarding    ║${RESET}"
+    echo -e "${BOLD}${CYAN}╚═══════════════════════════════════════════╝${RESET}"
+    echo ""
+}
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+  -h, --host HOST       Remote SSH host (IP or hostname)
+  -p, --port PORT       Remote SSH port (default: 22)
+  -u, --user USER       Remote SSH username
+  -w, --pass PASS       Remote SSH password (or use interactive prompt)
+  -Y, --trusted         Use trusted X11 forwarding (-Y instead of -X)
+  -n, --dry-run         Check everything but don't connect
+  -v, --verbose         Verbose output
+  --help                Show this help
+
+Examples:
+  $(basename "$0")                              # Interactive mode
+  $(basename "$0") -h 192.168.0.198 -u x       # Prompted for password
+  $(basename "$0") -h server.com -u root -w pw  # Full non-interactive
+
+EOF
+    exit 0
+}
+
+# ── Argument parsing ────────────────────────────────────────
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--host)    REMOTE_HOST="$2"; shift 2 ;;
+            -p|--port)    REMOTE_PORT="$2"; shift 2 ;;
+            -u|--user)    REMOTE_USER="$2"; shift 2 ;;
+            -w|--pass)    REMOTE_PASS="$2"; shift 2 ;;
+            -Y|--trusted) TRUSTED=true; shift ;;
+            -n|--dry-run) DRY_RUN=true; shift ;;
+            -v|--verbose) VERBOSE=true; shift ;;
+            --help)       usage ;;
+            *)            die "Unknown option: $1" ;;
+        esac
+    done
+}
+
+# ── Interactive credential prompt ───────────────────────────
+prompt_credentials() {
+    echo -e "${BOLD}─── Target X11 Host Credentials ───${RESET}"
+    echo ""
+
+    if [[ -z "$REMOTE_HOST" ]]; then
+        read -rp "  Host (IP or hostname): " REMOTE_HOST
+        [[ -z "$REMOTE_HOST" ]] && die "Host cannot be empty."
+    else
+        echo -e "  Host: ${GREEN}${REMOTE_HOST}${RESET}"
+    fi
+
+    if [[ "$REMOTE_PORT" == "22" ]] && [[ -z "${2:-}" ]]; then
+        read -rp "  Port [22]: " input_port
+        REMOTE_PORT="${input_port:-22}"
+    else
+        echo -e "  Port: ${GREEN}${REMOTE_PORT}${RESET}"
+    fi
+
+    if [[ -z "$REMOTE_USER" ]]; then
+        read -rp "  Username: " REMOTE_USER
+        [[ -z "$REMOTE_USER" ]] && die "Username cannot be empty."
+    else
+        echo -e "  User: ${GREEN}${REMOTE_USER}${RESET}"
+    fi
+
+    if [[ -z "$REMOTE_PASS" ]]; then
+        read -rsp "  Password: " REMOTE_PASS
+        echo ""
+        [[ -z "$REMOTE_PASS" ]] && die "Password cannot be empty."
+    else
+        echo -e "  Pass: ${DIM}(provided via flag)${RESET}"
+    fi
+
+    echo ""
+}
+
+# ── Local dependency checks ─────────────────────────────────
+check_local_deps() {
+    info "Checking local dependencies..."
+    local missing=()
+
+    # sshpass
+    if command -v sshpass &>/dev/null; then
+        ok "sshpass found: $(command -v sshpass)"
+    else
+        missing+=("sshpass")
+        fail "sshpass not found"
+    fi
+
+    # ssh
+    if command -v ssh &>/dev/null; then
+        ok "ssh found: $(command -v ssh)"
+    else
+        missing+=("openssh-client")
+        fail "ssh not found"
+    fi
+
+    # xauth
+    if command -v xauth &>/dev/null; then
+        ok "xauth found: $(command -v xauth)"
+    else
+        missing+=("xauth")
+        fail "xauth not found"
+    fi
+
+    # Check DISPLAY is set (X11 running locally)
+    if [[ -n "${DISPLAY:-}" ]]; then
+        ok "DISPLAY is set: $DISPLAY"
+    elif [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        warn "Wayland detected (DISPLAY not set). X11 forwarding may need XWayland."
+        warn "Try: export DISPLAY=:0  or ensure xwayland is running."
+    else
+        fail "DISPLAY is not set — no X11 server detected locally."
+        missing+=("x11-display")
+    fi
+
+    # Attempt install if missing
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo ""
+        warn "Missing packages: ${missing[*]}"
+
+        if [[ " ${missing[*]} " =~ " x11-display " ]]; then
+            die "No local X11 display. Start an X session or set DISPLAY before running."
+        fi
+
+        read -rp "  Install missing packages? [Y/n]: " install_confirm
+        if [[ "${install_confirm,,}" != "n" ]]; then
+            info "Installing: ${missing[*]}..."
+            if command -v apt-get &>/dev/null; then
+                sudo apt-get update -qq && sudo apt-get install -y -qq "${missing[@]}"
+            elif command -v dnf &>/dev/null; then
+                sudo dnf install -y "${missing[@]}"
+            elif command -v pacman &>/dev/null; then
+                sudo pacman -S --noconfirm "${missing[@]}"
+            else
+                die "Unknown package manager. Install manually: ${missing[*]}"
+            fi
+            ok "Packages installed."
+        else
+            die "Cannot proceed without: ${missing[*]}"
+        fi
+    fi
+
+    echo ""
+}
+
+# ── Local SSH client X11 config ─────────────────────────────
+check_local_ssh_config() {
+    info "Checking local SSH client X11 configuration..."
+
+    local ssh_config="$HOME/.ssh/config"
+    local needs_update=false
+    local forward_setting="ForwardX11 yes"
+    local trusted_setting="ForwardX11Trusted yes"
+
+    mkdir -p "$HOME/.ssh"
+    chmod 700 "$HOME/.ssh"
+
+    if [[ -f "$ssh_config" ]]; then
+        if grep -qi "ForwardX11" "$ssh_config"; then
+            ok "X11 forwarding already referenced in $ssh_config"
+        else
+            needs_update=true
+        fi
+    else
+        needs_update=true
+    fi
+
+    if $needs_update; then
+        warn "No X11 forwarding config found in $ssh_config"
+        read -rp "  Add X11 forwarding to SSH client config? [Y/n]: " add_confirm
+        if [[ "${add_confirm,,}" != "n" ]]; then
+            cat >> "$ssh_config" <<EOF
+
+# ── X11 Forwarding (added by x11forward) ──
+Host *
+    ForwardX11 yes
+    ForwardX11Trusted yes
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+EOF
+            chmod 600 "$ssh_config"
+            ok "X11 forwarding added to $ssh_config"
+        else
+            info "Skipped — will use -X/-Y flags directly."
+        fi
+    fi
+
+    echo ""
+}
+
+# ── Remote configuration ────────────────────────────────────
+configure_remote() {
+    info "Configuring remote host ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PORT}..."
+    echo ""
+
+    local SSHPASS_CMD="sshpass -p '${REMOTE_PASS}'"
+    local SSH_BASE="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${REMOTE_PORT} ${REMOTE_USER}@${REMOTE_HOST}"
+
+    # Test basic connectivity first
+    info "Testing SSH connectivity..."
+    if ! sshpass -p "$REMOTE_PASS" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+         -p "$REMOTE_PORT" "$REMOTE_USER@$REMOTE_HOST" "echo CONNECTION_OK" 2>/dev/null | grep -q "CONNECTION_OK"; then
+        die "Cannot connect to ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PORT}. Check credentials and network."
+    fi
+    ok "SSH connection successful."
+
+    # Check and install xauth remotely
+    info "Checking remote xauth..."
+    local remote_xauth
+    remote_xauth=$(sshpass -p "$REMOTE_PASS" ssh -o StrictHostKeyChecking=no \
+        -p "$REMOTE_PORT" "$REMOTE_USER@$REMOTE_HOST" \
+        "command -v xauth 2>/dev/null || echo MISSING" 2>/dev/null)
+
+    if [[ "$remote_xauth" == "MISSING" ]]; then
+        warn "xauth not found on remote host."
+        info "Installing xauth remotely..."
+        sshpass -p "$REMOTE_PASS" ssh -o StrictHostKeyChecking=no \
+            -p "$REMOTE_PORT" "$REMOTE_USER@$REMOTE_HOST" \
+            "if command -v apt-get &>/dev/null; then sudo apt-get update -qq && sudo apt-get install -y -qq xauth;
+             elif command -v dnf &>/dev/null; then sudo dnf install -y xorg-x11-xauth;
+             elif command -v pacman &>/dev/null; then sudo pacman -S --noconfirm xorg-xauth;
+             fi" 2>/dev/null
+        ok "xauth installed remotely."
+    else
+        ok "Remote xauth found: $remote_xauth"
+    fi
+
+    # Configure remote sshd_config for X11 forwarding
+    info "Checking remote sshd_config for X11 forwarding..."
+    local remote_x11_status
+    remote_x11_status=$(sshpass -p "$REMOTE_PASS" ssh -o StrictHostKeyChecking=no \
+        -p "$REMOTE_PORT" "$REMOTE_USER@$REMOTE_HOST" \
+        "grep -E '^[[:space:]]*(X11Forwarding|X11DisplayOffset|X11UseLocalhost)' /etc/ssh/sshd_config 2>/dev/null || echo UNCONFIGURED" 2>/dev/null)
+
+    $VERBOSE && echo -e "  ${DIM}Remote sshd X11 lines: ${remote_x11_status}${RESET}"
+
+    # Apply remote sshd configuration
+    info "Ensuring X11 forwarding is enabled in remote sshd_config..."
+    local sshd_changed
+    sshd_changed=$(sshpass -p "$REMOTE_PASS" ssh -o StrictHostKeyChecking=no \
+        -p "$REMOTE_PORT" "$REMOTE_USER@$REMOTE_HOST" bash <<'REMOTESCRIPT'
+CHANGED=false
+SSHD="/etc/ssh/sshd_config"
+
+# Backup sshd_config if no backup exists
+[ ! -f "${SSHD}.x11forward.bak" ] && sudo cp "$SSHD" "${SSHD}.x11forward.bak"
+
+# X11Forwarding yes
+if grep -qE '^[[:space:]]*X11Forwarding[[:space:]]+yes' "$SSHD"; then
+    :
+elif grep -qE '^[[:space:]]*#?[[:space:]]*X11Forwarding' "$SSHD"; then
+    sudo sed -i 's/^[[:space:]]*#\?[[:space:]]*X11Forwarding.*/X11Forwarding yes/' "$SSHD"
+    CHANGED=true
+else
+    echo "X11Forwarding yes" | sudo tee -a "$SSHD" >/dev/null
+    CHANGED=true
+fi
+
+# X11DisplayOffset 10
+if grep -qE '^[[:space:]]*X11DisplayOffset[[:space:]]+10' "$SSHD"; then
+    :
+elif grep -qE '^[[:space:]]*#?[[:space:]]*X11DisplayOffset' "$SSHD"; then
+    sudo sed -i 's/^[[:space:]]*#\?[[:space:]]*X11DisplayOffset.*/X11DisplayOffset 10/' "$SSHD"
+    CHANGED=true
+else
+    echo "X11DisplayOffset 10" | sudo tee -a "$SSHD" >/dev/null
+    CHANGED=true
+fi
+
+# X11UseLocalhost yes
+if grep -qE '^[[:space:]]*X11UseLocalhost[[:space:]]+yes' "$SSHD"; then
+    :
+elif grep -qE '^[[:space:]]*#?[[:space:]]*X11UseLocalhost' "$SSHD"; then
+    sudo sed -i 's/^[[:space:]]*#\?[[:space:]]*X11UseLocalhost.*/X11UseLocalhost yes/' "$SSHD"
+    CHANGED=true
+else
+    echo "X11UseLocalhost yes" | sudo tee -a "$SSHD" >/dev/null
+    CHANGED=true
+fi
+
+if $CHANGED; then
+    echo "SSHD_CHANGED"
+else
+    echo "SSHD_OK"
+fi
+REMOTESCRIPT
+    )
+
+    if [[ "$sshd_changed" == *"SSHD_CHANGED"* ]]; then
+        ok "Remote sshd_config updated. Restarting sshd..."
+        sshpass -p "$REMOTE_PASS" ssh -o StrictHostKeyChecking=no \
+            -p "$REMOTE_PORT" "$REMOTE_USER@$REMOTE_HOST" \
+            "sudo systemctl restart sshd 2>/dev/null || sudo systemctl restart ssh 2>/dev/null || sudo service ssh restart 2>/dev/null" 2>/dev/null
+        ok "Remote sshd restarted."
+    else
+        ok "Remote sshd_config already configured for X11."
+    fi
+
+    echo ""
+}
+
+# ── Configure sudo X11 passthrough on remote ────────────────
+configure_remote_sudo() {
+    info "Configuring remote sudo to preserve X11 forwarding..."
+
+    # 1. Create sudoers drop-in to keep DISPLAY and XAUTHORITY
+    local sudoers_status
+    sudoers_status=$(sshpass -p "$REMOTE_PASS" ssh -o StrictHostKeyChecking=no \
+        -p "$REMOTE_PORT" "$REMOTE_USER@$REMOTE_HOST" bash <<'SUDOSCRIPT'
+
+DROPFILE="/etc/sudoers.d/x11-forwarding"
+
+# Check if already configured
+if [ -f "$DROPFILE" ] && grep -q "DISPLAY" "$DROPFILE" && grep -q "XAUTHORITY" "$DROPFILE"; then
+    echo "SUDO_OK"
+    exit 0
+fi
+
+# Create sudoers drop-in
+cat > /tmp/x11-sudoers <<'INNER'
+# Allow X11 forwarding through sudo (added by x11forward)
+Defaults    env_keep += "DISPLAY"
+Defaults    env_keep += "XAUTHORITY"
+INNER
+
+# Validate with visudo before installing
+if visudo -cf /tmp/x11-sudoers >/dev/null 2>&1; then
+    sudo cp /tmp/x11-sudoers "$DROPFILE"
+    sudo chmod 440 "$DROPFILE"
+    rm -f /tmp/x11-sudoers
+    echo "SUDO_CHANGED"
+else
+    rm -f /tmp/x11-sudoers
+    echo "SUDO_INVALID"
+fi
+SUDOSCRIPT
+    )
+
+    if [[ "$sudoers_status" == *"SUDO_CHANGED"* ]]; then
+        ok "Sudoers drop-in created: /etc/sudoers.d/x11-forwarding"
+    elif [[ "$sudoers_status" == *"SUDO_OK"* ]]; then
+        ok "Sudoers X11 env_keep already configured."
+    else
+        warn "Could not validate sudoers file — sudo GUI may not work."
+    fi
+
+    # 2. Set up xauth cookie propagation script in remote profile
+    info "Setting up xauth cookie propagation for sudo..."
+    local xauth_status
+    xauth_status=$(sshpass -p "$REMOTE_PASS" ssh -o StrictHostKeyChecking=no \
+        -p "$REMOTE_PORT" "$REMOTE_USER@$REMOTE_HOST" bash <<'XAUTHSCRIPT'
+
+HELPER="/usr/local/bin/x11-sudo"
+PROFILE_LINE='# x11forward: propagate xauth to root for sudo GUI apps'
+
+# Create the x11-sudo helper wrapper
+cat > /tmp/x11-sudo <<'HELPEREOF'
+#!/bin/bash
+# x11-sudo: run a GUI app as root with X11 forwarding
+# Usage: x11-sudo gparted
+#        x11-sudo nautilus /
+
+if [ -z "$1" ]; then
+    echo "Usage: x11-sudo <command> [args...]"
+    echo "Runs a GUI application as root with X11 forwarding."
+    exit 1
+fi
+
+# Grab current user's xauth cookie
+if [ -n "$DISPLAY" ]; then
+    COOKIE=$(xauth list "$DISPLAY" 2>/dev/null | head -1)
+    if [ -n "$COOKIE" ]; then
+        # Add cookie to root's xauthority
+        sudo xauth add $COOKIE 2>/dev/null
+    fi
+fi
+
+# Run the command with sudo, preserving DISPLAY and XAUTHORITY
+sudo --preserve-env=DISPLAY,XAUTHORITY "$@"
+HELPEREOF
+
+sudo cp /tmp/x11-sudo "$HELPER"
+sudo chmod 755 "$HELPER"
+rm -f /tmp/x11-sudo
+
+# Also create a bashrc hook that auto-propagates xauth on login
+BASHRC_HOOK="/etc/profile.d/x11-sudo-xauth.sh"
+if [ ! -f "$BASHRC_HOOK" ]; then
+    cat > /tmp/x11hook <<'HOOKEOF'
+# Auto-propagate xauth cookie to root for sudo X11 apps (added by x11forward)
+if [ -n "$DISPLAY" ] && [ -n "$SSH_CONNECTION" ] && command -v xauth >/dev/null 2>&1; then
+    _X11_COOKIE=$(xauth list "$DISPLAY" 2>/dev/null | head -1)
+    if [ -n "$_X11_COOKIE" ]; then
+        sudo xauth add $_X11_COOKIE 2>/dev/null
+    fi
+    unset _X11_COOKIE
+fi
+HOOKEOF
+    sudo cp /tmp/x11hook "$BASHRC_HOOK"
+    sudo chmod 644 "$BASHRC_HOOK"
+    rm -f /tmp/x11hook
+    echo "XAUTH_CREATED"
+else
+    echo "XAUTH_EXISTS"
+fi
+XAUTHSCRIPT
+    )
+
+    if [[ "$xauth_status" == *"XAUTH_CREATED"* ]]; then
+        ok "xauth propagation hook installed: /etc/profile.d/x11-sudo-xauth.sh"
+        ok "Helper command installed: x11-sudo (e.g. 'x11-sudo gparted')"
+    else
+        ok "xauth propagation already configured."
+        ok "Helper command available: x11-sudo"
+    fi
+
+    echo ""
+}
+
+# ── Verify X11 forwarding works ─────────────────────────────
+verify_x11() {
+    info "Verifying X11 forwarding..."
+
+    local x_flag="-X"
+    $TRUSTED && x_flag="-Y"
+
+    local x11_test
+    x11_test=$(sshpass -p "$REMOTE_PASS" ssh -o StrictHostKeyChecking=no \
+        "$x_flag" -p "$REMOTE_PORT" "$REMOTE_USER@$REMOTE_HOST" \
+        "echo \$DISPLAY" 2>/dev/null)
+
+    if [[ -n "$x11_test" && "$x11_test" != "" ]]; then
+        ok "X11 forwarding verified! Remote DISPLAY=$x11_test"
+
+        # Also verify sudo preserves DISPLAY
+        local sudo_test
+        sudo_test=$(sshpass -p "$REMOTE_PASS" ssh -o StrictHostKeyChecking=no \
+            "$x_flag" -p "$REMOTE_PORT" "$REMOTE_USER@$REMOTE_HOST" \
+            "sudo --preserve-env=DISPLAY env | grep ^DISPLAY= 2>/dev/null" 2>/dev/null)
+        if [[ -n "$sudo_test" ]]; then
+            ok "Sudo X11 verified! $sudo_test"
+        else
+            warn "Sudo may not preserve DISPLAY. Use 'x11-sudo <app>' on the remote."
+        fi
+    else
+        warn "DISPLAY not set on remote after forwarding."
+        warn "X11 may still work — some shells don't propagate it to non-interactive commands."
+    fi
+
+    echo ""
+}
+
+# ── Summary ─────────────────────────────────────────────────
+print_summary() {
+    local x_flag="-X"
+    $TRUSTED && x_flag="-Y"
+
+    echo -e "${BOLD}─── X11 Forwarding Summary ───${RESET}"
+    echo ""
+    echo -e "  Remote:     ${GREEN}${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PORT}${RESET}"
+    echo -e "  Forwarding: ${GREEN}${x_flag} ($(if $TRUSTED; then echo trusted; else echo untrusted; fi))${RESET}"
+    echo -e "  Local:      ${GREEN}DISPLAY=$DISPLAY${RESET}"
+    echo ""
+    echo -e "  ${DIM}Remote GUI apps will render on your local X11 display.${RESET}"
+    echo -e "  ${DIM}Test with: xeyes, xclock, xterm, firefox, etc.${RESET}"
+    echo -e "  ${DIM}Sudo GUI: sudo gparted  OR  x11-sudo gparted${RESET}"
+    echo ""
+}
+
+# ── Connect with X11 forwarding ─────────────────────────────
+connect() {
+    local x_flag="-X"
+    $TRUSTED && x_flag="-Y"
+
+    print_summary
+
+    if $DRY_RUN; then
+        info "Dry run — not connecting. Command would be:"
+        echo ""
+        echo -e "  sshpass -p '***' ssh $x_flag -o StrictHostKeyChecking=no -p $REMOTE_PORT $REMOTE_USER@$REMOTE_HOST"
+        echo ""
+        exit 0
+    fi
+
+    echo -e "${BOLD}${GREEN}Connecting with X11 forwarding...${RESET}"
+    echo -e "${DIM}(Run GUI apps on the remote host — they'll appear on your screen)${RESET}"
+    echo ""
+
+    exec sshpass -p "$REMOTE_PASS" ssh \
+        "$x_flag" \
+        -o StrictHostKeyChecking=no \
+        -o ServerAliveInterval=60 \
+        -o ServerAliveCountMax=3 \
+        -o ForwardX11=yes \
+        -o ForwardX11Trusted="$(if $TRUSTED; then echo yes; else echo no; fi)" \
+        -p "$REMOTE_PORT" \
+        "$REMOTE_USER@$REMOTE_HOST"
+}
+
+# ── Main ────────────────────────────────────────────────────
+main() {
+    parse_args "$@"
+    banner
+    prompt_credentials
+    check_local_deps
+    check_local_ssh_config
+    configure_remote
+    configure_remote_sudo
+    verify_x11
+    connect
+}
+
+main "$@"
