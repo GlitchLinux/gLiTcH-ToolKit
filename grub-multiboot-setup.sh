@@ -10,9 +10,11 @@
 #    2) MBR — Single FAT32 partition (GRUB in MBR gap + EFI on FAT32)
 #    3) Repair — Reinstall GRUB on existing disk (no format)
 #
-#  Author: Marcus / gLiTcH Linux
+#  Author  gLiTcH Linux
 #  Date:   2026-04-14
 #═══════════════════════════════════════════════════════════════════════
+
+sudo apt update && sudo apt -y install gdisk util-linux dosfstools grub-pc-bin grub-efi-amd64-bin grub-common parted grub-efi
 
 set -euo pipefail
 
