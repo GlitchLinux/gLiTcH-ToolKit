@@ -12,6 +12,9 @@ sudo chmod +x /usr/share/QEMU-QuickBoot/QEMU-QuickBoot.sh
 sudo curl -sL https://raw.githubusercontent.com/GlitchLinux/QEMU-QuickBoot/refs/heads/main/usb-hotplug.sh -o /usr/share/QEMU-QuickBoot/usb-hotplug.sh 
 sudo chmod +x /usr/share/QEMU-QuickBoot/usb-hotplug.sh
 
+sudo curl -sL https://raw.githubusercontent.com/GlitchLinux/QEMU-QuickBoot/refs/heads/main/Qemu-Quickboot.desktop -o /usr/share/applications/Qemu-Quickboot.desktop
+sudo chmod +x /usr/share/applications/Qemu-Quickboot.desktop && sudo chmod 777 /usr/share/applications/Qemu-Quickboot.desktop
+
 echo '#!/bin/bash' > /tmp/qboot
 echo "sudo bash /usr/share/QEMU-QuickBoot/QEMU-QuickBoot.sh" >> /tmp/qboot
 sudo cp /tmp/qboot /usr/local/bin/qboot
@@ -22,6 +25,10 @@ sudo rm *.png
 sudo wget https://raw.githubusercontent.com/GlitchLinux/QEMU-QuickBoot/refs/heads/main/QEMU-QuickBoot.png && cd
 
 echo ""
-echo "Qemu-Quickboot installed to system!"
-echo "start in terminal with 'qboot'"
+echo ""
+echo "Qemu-Quickboot was successfully installed to system!"
+echo "Application can be launched with 'qboot' in terminal"
+echo "Or use the GUI desktop launcher in applications..."
+echo " /usr/share/applications/Qemu-Quickboot.desktop"
+echo ""
 echo ""
