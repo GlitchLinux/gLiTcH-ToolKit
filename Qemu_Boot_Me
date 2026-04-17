@@ -1,3 +1,20 @@
-git clone https://github.com/GlitchLinux/Qemu_Boot_Me.git
-cd Qemu_Boot_Me && sudo chmod +x QEMU_Boot_ME_BIOS.sh && sudo chmod +x QEMU_Boot_ME_UEFI.sh
-ls
+#!/bin/bash
+
+sudo curl -L https://raw.githubusercontent.com/GlitchLinux/BORDERIZE/refs/heads/main/borderize -o /usr/local/bin/borderize && sudo chmod +x /usr/local/bin/borderize
+
+cd /tmp
+wget "https://glitchlinux.wtf/FILES/Qemu-Boot-Disk/qemu-uefi.sh"
+wget "https://glitchlinux.wtf/FILES/Qemu-Boot-Disk/qemu-bios.sh"
+sudo cp qemu-bios.sh /
+sudo cp qemu-uefi.sh /
+sudo chmod +x /qemu-uefi.sh
+sudo chmod +x /qemu-bios.sh
+sudo cp /qemu-uefi.sh /usr/local/bin/qemu-uefi
+sudo cp /qemu-bios.sh /usr/local/bin/qemu-bios
+sudo chmod +x /usr/local/bin/qemu-uefi
+sudo chmod +x /usr/local/bin/qemu-bios
+echo ""
+echo "QEMU Boot-Me scripts installed to disk" > /tmp/qemu-boot-me-message
+echo " Execute With qemu-uefi or qemu-bios!" >> /tmp/qemu-boot-me-message
+cat /tmp/qemu-boot-me-message | borderize
+echo ""
