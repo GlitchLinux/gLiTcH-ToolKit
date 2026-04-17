@@ -15,6 +15,6 @@ sudo chmod +x /usr/local/bin/qemu-uefi
 sudo chmod +x /usr/local/bin/qemu-bios
 echo ""
 echo "QEMU Boot-Me scripts installed to disk" > /tmp/qemu-boot-me-message
-echo " Execute With qemu-uefi or qemu-bios!" >> /tmp/qemu-boot-me-message
+echo " Execute With qemu-uefi or qemu-bios" >> /tmp/qemu-boot-me-message
 cat /tmp/qemu-boot-me-message | borderize
 echo ""
