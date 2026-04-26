@@ -1,28 +1,41 @@
 #!/bin/bash
 
+sudo rm -f /usr/share/applications/qemu-quickboot.desktop
+sudo rm -rf /usr/share/qemu-quickboot/
+
 sudo apt update
 
-sudo apt install qemu-system qemu-utils qemu-system-gui ovmf yad socat wget git orchis-gtk-theme -y
+sudo apt install curl qemu-system qemu-utils qemu-system-gui ovmf yad socat wget git orchis-gtk-theme -y
 
-sudo mkdir -p /usr/share/QEMU-QuickBoot/
+sudo mkdir -p /usr/share/qemu-quickboot/
 
-sudo curl -sL https://raw.githubusercontent.com/GlitchLinux/QEMU-QuickBoot/refs/heads/main/QEMU-QuickBoot.sh -o /usr/share/QEMU-QuickBoot/QEMU-QuickBoot.sh
-sudo chmod +x /usr/share/QEMU-QuickBoot/QEMU-QuickBoot.sh
+sudo curl -sL https://raw.githubusercontent.com/GlitchLinux/QEMU-QuickBoot/refs/heads/main/qemu-quickboot.sh -o /usr/share/qemu-quickboot/qemu-quickboot.sh
+sudo chmod +x /usr/share/qemu-quickboot/qemu-quickboot.sh
 
-sudo curl -sL https://raw.githubusercontent.com/GlitchLinux/QEMU-QuickBoot/refs/heads/main/usb-hotplug.sh -o /usr/share/QEMU-QuickBoot/usb-hotplug.sh 
-sudo chmod +x /usr/share/QEMU-QuickBoot/usb-hotplug.sh
-
-sudo curl -sL https://raw.githubusercontent.com/GlitchLinux/QEMU-QuickBoot/refs/heads/main/Qemu-Quickboot.desktop -o /usr/share/applications/Qemu-Quickboot.desktop
-sudo chmod +x /usr/share/applications/Qemu-Quickboot.desktop && sudo chmod 777 /usr/share/applications/Qemu-Quickboot.desktop
+sudo curl -sL https://raw.githubusercontent.com/GlitchLinux/QEMU-QuickBoot/refs/heads/main/quickboot-settings.sh -o /usr/share/qemu-quickboot/quickboot-settings.sh 
+sudo chmod +x /usr/share/qemu-quickboot/quickboot-settings.sh
 
 echo '#!/bin/bash' > /tmp/qboot
-echo "sudo bash /usr/share/QEMU-QuickBoot/QEMU-QuickBoot.sh" >> /tmp/qboot
+echo "cd /usr/share/qemu-quickboot/ && sudo bash qemu-quickboot.sh" >> /tmp/qboot
 sudo cp /tmp/qboot /usr/local/bin/qboot
 sudo chmod +x /usr/local/bin/qboot
 
-cd /usr/share/QEMU-QuickBoot/
+cd /usr/share/qemu-quickboot/
 sudo rm *.png
-sudo wget https://raw.githubusercontent.com/GlitchLinux/QEMU-QuickBoot/refs/heads/main/QEMU-QuickBoot.png && cd
+sudo wget https://raw.githubusercontent.com/GlitchLinux/QEMU-QuickBoot/refs/heads/main/qemu-quickboot.png && cd
+
+echo "[Desktop Entry]" > /tmp/qemu-quickboot.desktop
+echo "Version=1.5.1" >> /tmp/qemu-quickboot.desktop
+echo "Type=Application" >> /tmp/qemu-quickboot.desktop
+echo "Name=Qemu Quickboot" >> /tmp/qemu-quickboot.desktop
+echo "Exec=/usr/local/bin/qboot" >> /tmp/qemu-quickboot.desktop
+echo "Icon=/usr/share/qemu-quickboot/qemu-quickboot.png" >> /tmp/qemu-quickboot.desktop
+echo "Terminal=false" >> /tmp/qemu-quickboot.desktop
+echo "Categories=Utility;" >> /tmp/qemu-quickboot.desktop
+echo "Comment=Yad gui for qemu virtual machines" >> /tmp/qemu-quickboot.desktop
+echo "Path=" >> /tmp/qemu-quickboot.desktop
+echo "StartupNotify=false" >> /tmp/qemu-quickboot.desktop
+sudo cp -f /tmp/qemu-quickboot.desktop /usr/share/applications/qemu-quickboot.desktop
 
 echo ""
 echo ""
