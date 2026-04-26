@@ -45,3 +45,5 @@ echo "Or use the GUI desktop launcher in applications..."
 echo " /usr/share/applications/qemu-quickboot.desktop"
 echo ""
 echo ""
+
+qboot &
