@@ -1,0 +1,287 @@
+#!/bin/bash
+
+# Create temporary directory
+TMP_DIR="/tmp/gLiTcH-Ventoy"
+mkdir -p "$TMP_DIR"
+cd "$TMP_DIR" || exit 1
+
+# Ventoy URLs
+VENTOY_URL="https://github.com/ventoy/Ventoy/releases/download/v1.1.12/ventoy-1.1.12-linux.tar.gz"
+VENTOY_TARBALL="ventoy-1.1.12-linux.tar.gz"
+VENTOY_DIR="ventoy-1.1.12"
+
+# G-Disk variants
+GDISK_MINI_URL="https://glitchlinux.wtf/FILES/G-Drive/G-DISK-MINI.zip"
+GDISK_FULL_URL="https://glitchlinux.wtf/FILES/G-Drive/G-DISK-VENTOY.zip"
+
+# Minimum required target-disk sizes (in bytes)
+#   MINI  zip ~44 MB  -> require >= 256 MB
+#   FULL  zip ~10 GB  -> require >= 10.5 GB
+MIN_DISK_BYTES_MINI=$((256 * 1024 * 1024))
+MIN_DISK_BYTES_FULL=$((10500 * 1024 * 1024))
+
+# Check required tools
+for tool in wget unzip lsblk; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "Error: required tool '$tool' is not installed."
+        exit 1
+    fi
+done
+
+# ---------------------------------------------------------------------------
+# Choose G-Disk variant
+# ---------------------------------------------------------------------------
+echo ""
+echo "Select G-Disk content variant to install:"
+echo "  1) MINI  (~44 MB zip) - bootloaders (rEFInd, agFM, GRUB2) + iPXE"
+echo "                          Minimum target disk: 256 MB"
+echo "  2) FULL  (~10 GB zip) - bootloaders + .iso + .wim + partition tools"
+echo "                          + Win11 installer + gLiTcH-Linux-KDE + iPXE"
+echo "                          Minimum target disk: 10.5 GB"
+echo ""
+
+while true; do
+    read -rp "Choice [1=MINI / 2=FULL] [Default: 2]: " GDISK_CHOICE
+    GDISK_CHOICE=${GDISK_CHOICE:-2}
+    case "$GDISK_CHOICE" in
+        1|mini|MINI)
+            GDISK_VARIANT="MINI"
+            GDISK_URL="$GDISK_MINI_URL"
+            GDISK_ZIP="G-DISK-MINI.zip"
+            MIN_DISK_BYTES=$MIN_DISK_BYTES_MINI
+            MIN_DISK_LABEL="256 MB"
+            break
+            ;;
+        2|full|FULL|ventoy|VENTOY)
+            GDISK_VARIANT="FULL"
+            GDISK_URL="$GDISK_FULL_URL"
+            GDISK_ZIP="G-DISK-VENTOY.zip"
+            MIN_DISK_BYTES=$MIN_DISK_BYTES_FULL
+            MIN_DISK_LABEL="10.5 GB"
+            break
+            ;;
+        *)
+            echo "Invalid choice. Enter 1 or 2."
+            ;;
+    esac
+done
+echo "Selected variant: $GDISK_VARIANT"
+
+# ---------------------------------------------------------------------------
+# Download Ventoy
+# ---------------------------------------------------------------------------
+echo ""
+echo "Downloading Ventoy v1.1.12..."
+wget -q --show-progress -O "$VENTOY_TARBALL" "$VENTOY_URL" || {
+    echo "Error: failed to download Ventoy."
+    exit 1
+}
+
+echo "Extracting Ventoy..."
+tar -xzf "$VENTOY_TARBALL"
+cd "$VENTOY_DIR" || { echo "Error: extracted directory $VENTOY_DIR not found."; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Disk selection
+# ---------------------------------------------------------------------------
+echo -e "\nAvailable disks:"
+lsblk -d -o NAME,SIZE,MODEL,TRAN,TYPE
+echo ""
+
+while true; do
+    read -rp "Enter the disk to install Ventoy to (e.g. sdb, loop1): " DISK
+    DISK="/dev/${DISK}"
+    if [ -b "$DISK" ]; then
+        DISK_BYTES=$(sudo blockdev --getsize64 "$DISK" 2>/dev/null)
+        if [ -z "$DISK_BYTES" ] || [ "$DISK_BYTES" -eq 0 ]; then
+            echo "Error: could not determine size of $DISK. Try again."
+            continue
+        fi
+        DISK_GB=$(awk "BEGIN {printf \"%.2f\", $DISK_BYTES/1024/1024/1024}")
+        if [ "$DISK_BYTES" -lt "$MIN_DISK_BYTES" ]; then
+            echo "Error: $DISK is only ${DISK_GB} GB."
+            echo "Variant $GDISK_VARIANT requires at least ${MIN_DISK_LABEL}."
+            echo "Please choose a larger disk."
+            continue
+        fi
+        echo "Selected $DISK (${DISK_GB} GB) - size OK for $GDISK_VARIANT."
+        break
+    else
+        echo "Error: $DISK is not a valid block device. Please try again."
+    fi
+done
+
+# Determine if this is a loop device
+IS_LOOP=false
+if [[ "$DISK" =~ /dev/loop ]]; then
+    IS_LOOP=true
+    echo "Detected loop device installation."
+fi
+
+# Prompt for partition style
+read -rp "Partition style (MBR/GPT) [Default: MBR]: " PART_STYLE
+PART_STYLE=${PART_STYLE:-MBR}
+if [[ "${PART_STYLE^^}" == "GPT" ]]; then
+    PART_OPT="-g"
+else
+    PART_OPT=""
+fi
+
+# Prompt for reserved space
+while true; do
+    read -rp "Reserved space (e.g. 50M, 50G or FULL) [Default: FULL]: " RESERVED_SPACE
+    RESERVED_SPACE=${RESERVED_SPACE:-FULL}
+    if [[ "${RESERVED_SPACE^^}" == "FULL" ]]; then
+        RESERVE_OPT=""
+        break
+    elif [[ "$RESERVED_SPACE" =~ ^([0-9]+)([MG])$ ]]; then
+        SIZE=${BASH_REMATCH[1]}
+        UNIT=${BASH_REMATCH[2]}
+        if [[ "$UNIT" == "G" ]]; then
+            SIZE=$((SIZE * 1024))
+        fi
+        RESERVE_OPT="-r $SIZE"
+        break
+    else
+        echo "Invalid format. Please use format like 50M, 50G or FULL."
+    fi
+done
+
+# Prompt for filesystem
+read -rp "Filesystem for data partition (vfat,exfat,ntfs) [Default: ntfs]: " FS_TYPE
+FS_TYPE=${FS_TYPE:-ntfs}
+
+# Confirm before proceeding
+echo -e "\nAbout to install Ventoy with these settings:"
+echo "G-Disk variant: $GDISK_VARIANT"
+echo "Disk: $DISK"
+echo "Partition style: ${PART_STYLE^^}"
+echo "Reserved space: ${RESERVED_SPACE^^}"
+echo "Filesystem: ${FS_TYPE,,}"
+echo "Data partition label: G-Disk-Vtoy"
+read -rp "Continue? (y/n) [Default: y]: " CONFIRM
+CONFIRM=${CONFIRM:-y}
+if [[ "${CONFIRM,,}" != "y" ]]; then
+    echo "Installation cancelled."
+    exit 0
+fi
+
+# ---------------------
+# Run Ventoy installer
+# ---------------------
+echo "Installing Ventoy to $DISK..."
+sudo bash Ventoy2Disk.sh -I $PART_OPT $RESERVE_OPT "$DISK"
+
+# Handle partition naming for loop devices vs regular disks
+if $IS_LOOP; then
+    VENTOY_PART="${DISK}p1"
+else
+    VENTOY_PART="${DISK}1"
+fi
+
+sleep 2
+
+if [ ! -b "$VENTOY_PART" ]; then
+    echo "Error: Partition $VENTOY_PART not found!"
+    echo "Trying alternative partition naming..."
+    if [ -b "${DISK}1" ]; then
+        VENTOY_PART="${DISK}1"
+    elif [ -b "${DISK}p1" ]; then
+        VENTOY_PART="${DISK}p1"
+    else
+        echo "Could not find Ventoy data partition. Installation may have failed."
+        exit 1
+    fi
+    echo "Found partition at $VENTOY_PART"
+fi
+
+# Unmount if already mounted
+MOUNT_POINT="/mnt/ventoy"
+sudo umount "$VENTOY_PART" 2>/dev/null
+
+# Format the data partition
+echo "Formatting partition with ${FS_TYPE^^} filesystem (label: G-Disk-Vtoy)..."
+case "${FS_TYPE,,}" in
+    vfat|fat|fat32)
+        sudo mkfs.vfat -n "G-Disk-Vtoy" "$VENTOY_PART"
+        ;;
+    exfat)
+        sudo mkfs.exfat -n "G-Disk-Vtoy" "$VENTOY_PART"
+        ;;
+    ntfs)
+        sudo mkfs.ntfs -f -L "G-Disk-Vtoy" "$VENTOY_PART"
+        ;;
+    *)
+        echo "Unknown filesystem, using NTFS as default"
+        sudo mkfs.ntfs -f -L "G-Disk-Vtoy" "$VENTOY_PART"
+        ;;
+esac
+
+# Mount the partition
+sudo mkdir -p "$MOUNT_POINT"
+echo "Mounting $VENTOY_PART to $MOUNT_POINT..."
+
+case "${FS_TYPE,,}" in
+    vfat|fat|fat32)
+        sudo mount -o umask=000 "$VENTOY_PART" "$MOUNT_POINT"
+        ;;
+    *)
+        sudo mount "$VENTOY_PART" "$MOUNT_POINT"
+        ;;
+esac
+
+if ! mountpoint -q "$MOUNT_POINT"; then
+    echo "Error: Failed to mount $VENTOY_PART"
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Download chosen G-Disk archive with progress, extract directly to partition
+# ---------------------------------------------------------------------------
+echo ""
+if [ "$GDISK_VARIANT" = "FULL" ]; then
+    echo "Downloading $GDISK_ZIP (~10 GB) - this will take a while..."
+else
+    echo "Downloading $GDISK_ZIP (~44 MB)..."
+fi
+
+cd "$TMP_DIR" || exit 1
+wget --show-progress -O "$GDISK_ZIP" "$GDISK_URL" || {
+    echo "Error: failed to download $GDISK_URL"
+    sudo umount "$MOUNT_POINT" 2>/dev/null
+    exit 1
+}
+
+ZIP_BYTES=$(stat -c%s "$GDISK_ZIP" 2>/dev/null || echo 0)
+ZIP_MB=$(awk "BEGIN {printf \"%.2f\", $ZIP_BYTES/1024/1024}")
+echo "Downloaded $GDISK_ZIP (${ZIP_MB} MB)."
+
+echo "Extracting $GDISK_ZIP to $MOUNT_POINT (root of G-Disk-Vtoy)..."
+sudo unzip -o "$TMP_DIR/$GDISK_ZIP" -d "$MOUNT_POINT" || {
+    echo "Error: extraction failed."
+    sudo umount "$MOUNT_POINT" 2>/dev/null
+    exit 1
+}
+
+# Clean up zip from /tmp (it was never copied onto the partition)
+rm -f "$TMP_DIR/$GDISK_ZIP"
+
+# --------------
+# Final cleanup
+# --------------
+echo "Cleaning up..."
+sync
+cd /
+sudo umount "$MOUNT_POINT" 2>/dev/null
+rm -rf "$TMP_DIR"
+
+echo ""
+echo "Ventoy v1.1.12 installation with g-disk customization complete!"
+echo "Variant installed: $GDISK_VARIANT"
+echo "Data partition label: G-Disk-Vtoy"
+if [ "$GDISK_VARIANT" = "FULL" ]; then
+    echo "You can now add additional ISO files to the G-Disk-Vtoy partition."
+else
+    echo "MINI variant installed (bootloaders + iPXE only)."
+    echo "You can drop your own ISO files onto the G-Disk-Vtoy partition."
+fi
