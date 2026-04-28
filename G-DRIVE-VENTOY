@@ -5,6 +5,9 @@ TMP_DIR="/tmp/gdrive-ventoy"
 mkdir -p "$TMP_DIR"
 cd "$TMP_DIR" || exit 1
 
+# This 10GB .zip contains the G-disk theme, all .iso, .wim .img files to be booted frpm the data partiton
+G-DRIVE-DATA-PARTITION="https:///glitchlinux.wtf/FILES/G-Drive/G-DISK-VENTOY.zip"
+
 # Download files
 echo "Downloading ventoy"
 wget -q "https://github.com/ventoy/Ventoy/releases/download/v1.1.12/ventoy-1.1.12-linux.tar.gz"
