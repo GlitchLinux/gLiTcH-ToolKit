@@ -1,5 +1,0 @@
-cd /tmp
-docker run -it --rm debian:stable-slim sh -c \
-  "apt update -qq && apt install -y git wget && \
-   wget -q https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/main/apps -O /toolkit && \
-   chmod +x /toolkit && /toolkit"
