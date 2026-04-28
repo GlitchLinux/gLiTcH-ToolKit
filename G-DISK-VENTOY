@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Create temporary directory
+# Create temporary directory for Ventoy + working files (small stuff only)
 TMP_DIR="/tmp/gLiTcH-Ventoy"
 mkdir -p "$TMP_DIR"
 cd "$TMP_DIR" || exit 1
@@ -20,8 +20,12 @@ GDISK_FULL_URL="https://glitchlinux.wtf/FILES/G-Drive/G-DISK-VENTOY.zip"
 MIN_DISK_BYTES_MINI=$((256 * 1024 * 1024))
 MIN_DISK_BYTES_FULL=$((10500 * 1024 * 1024))
 
+# Thresholds for the FULL-variant download-location decision
+RAM_REQUIRED_BYTES=$((15 * 1024 * 1024 * 1024))   # 15 GiB total RAM => "16 GB class" system
+HOME_FREE_REQUIRED_BYTES=$((11 * 1024 * 1024 * 1024))  # 11 GiB free in $HOME
+
 # Check required tools
-for tool in wget unzip lsblk; do
+for tool in wget unzip lsblk awk; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "Error: required tool '$tool' is not installed."
         exit 1
@@ -68,7 +72,7 @@ done
 echo "Selected variant: $GDISK_VARIANT"
 
 # ---------------------------------------------------------------------------
-# Download Ventoy
+# Download Ventoy (small, always to /tmp)
 # ---------------------------------------------------------------------------
 echo ""
 echo "Downloading Ventoy v1.1.12..."
@@ -166,9 +170,9 @@ if [[ "${CONFIRM,,}" != "y" ]]; then
     exit 0
 fi
 
-# ---------------------
+# ---------------------------------------------------------------------------
 # Run Ventoy installer
-# ---------------------
+# ---------------------------------------------------------------------------
 echo "Installing Ventoy to $DISK..."
 sudo bash Ventoy2Disk.sh -I $PART_OPT $RESERVE_OPT "$DISK"
 
@@ -236,39 +240,161 @@ if ! mountpoint -q "$MOUNT_POINT"; then
 fi
 
 # ---------------------------------------------------------------------------
-# Download chosen G-Disk archive with progress, extract directly to partition
+# Decide where to download the G-Disk archive
+#
+# MINI is small (~44 MB) -> always /tmp.
+#
+# FULL is ~10 GB. /tmp is tmpfs on many distros, so the download would be
+# RAM-bound. Decision tree:
+#   1. /tmp is NOT tmpfs (i.e. backed by disk) and has >= 11 GB free -> /tmp
+#   2. /tmp is tmpfs and total RAM >= 15 GiB                         -> /tmp
+#   3. $HOME has >= 11 GB free                                       -> $HOME
+#   4. otherwise                                                     -> direct
+#      to mounted Ventoy data partition
 # ---------------------------------------------------------------------------
+
+# Resolve the user's home reliably even when running under sudo
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+[ -z "$REAL_HOME" ] && REAL_HOME="$HOME"
+
+# Detect whether /tmp is tmpfs
+TMP_FSTYPE=$(findmnt -n -o FSTYPE --target /tmp 2>/dev/null)
+[ -z "$TMP_FSTYPE" ] && TMP_FSTYPE="unknown"
+
+# Total RAM in bytes
+RAM_BYTES=$(awk '/MemTotal/ {print $2 * 1024}' /proc/meminfo)
+RAM_GB=$(awk "BEGIN {printf \"%.2f\", $RAM_BYTES/1024/1024/1024}")
+
+# Free space helpers (in bytes) using df --output=avail (POSIX 1K blocks)
+free_bytes() {
+    df -B1 --output=avail "$1" 2>/dev/null | tail -n1 | tr -d ' '
+}
+
+TMP_FREE=$(free_bytes /tmp)
+HOME_FREE=$(free_bytes "$REAL_HOME")
+PART_FREE=$(free_bytes "$MOUNT_POINT")
+
+human_gb() { awk "BEGIN {printf \"%.2f GB\", $1/1024/1024/1024}"; }
+
 echo ""
+echo "Download-location analysis:"
+echo "  Variant            : $GDISK_VARIANT"
+echo "  Total RAM          : $(human_gb "$RAM_BYTES")"
+echo "  /tmp filesystem    : $TMP_FSTYPE"
+echo "  /tmp free          : $(human_gb "${TMP_FREE:-0}")"
+echo "  \$HOME ($REAL_HOME) free : $(human_gb "${HOME_FREE:-0}")"
+echo "  Ventoy partition free   : $(human_gb "${PART_FREE:-0}")"
+
+DL_DIR=""
+DL_LOC_DESC=""
+DL_ON_PARTITION=false
+
+if [ "$GDISK_VARIANT" = "MINI" ]; then
+    # Tiny file - just put it in /tmp
+    DL_DIR="$TMP_DIR"
+    DL_LOC_DESC="/tmp (small download)"
+else
+    # FULL: 10 GB decision tree
+    if [ "$TMP_FSTYPE" != "tmpfs" ] && [ -n "$TMP_FREE" ] && [ "$TMP_FREE" -ge "$HOME_FREE_REQUIRED_BYTES" ]; then
+        DL_DIR="$TMP_DIR"
+        DL_LOC_DESC="/tmp (disk-backed, $(human_gb "$TMP_FREE") free)"
+    elif [ "$TMP_FSTYPE" = "tmpfs" ] && [ -n "$RAM_BYTES" ] && [ "$RAM_BYTES" -ge "$RAM_REQUIRED_BYTES" ]; then
+        DL_DIR="$TMP_DIR"
+        DL_LOC_DESC="/tmp tmpfs (RAM is $(human_gb "$RAM_BYTES"), enough headroom)"
+    elif [ -n "$HOME_FREE" ] && [ "$HOME_FREE" -ge "$HOME_FREE_REQUIRED_BYTES" ]; then
+        DL_DIR="$REAL_HOME/.gLiTcH-Ventoy-dl"
+        sudo -u "$REAL_USER" mkdir -p "$DL_DIR" 2>/dev/null || mkdir -p "$DL_DIR"
+        DL_LOC_DESC="$DL_DIR ($(human_gb "$HOME_FREE") free in \$HOME)"
+    else
+        # Last resort: download straight onto the mounted Ventoy data partition
+        DL_DIR="$MOUNT_POINT"
+        DL_ON_PARTITION=true
+        DL_LOC_DESC="directly on G-Disk-Vtoy partition ($(human_gb "${PART_FREE:-0}") free)"
+        # Sanity check the partition itself can hold the zip (~10 GB)
+        if [ -n "$PART_FREE" ] && [ "$PART_FREE" -lt $((10 * 1024 * 1024 * 1024)) ]; then
+            echo "Error: not enough free space anywhere to stage the 10 GB download."
+            echo "  /tmp tmpfs: $TMP_FSTYPE, RAM: $(human_gb "$RAM_BYTES")"
+            echo "  \$HOME free: $(human_gb "${HOME_FREE:-0}")"
+            echo "  partition free: $(human_gb "${PART_FREE:-0}")"
+            sudo umount "$MOUNT_POINT" 2>/dev/null
+            exit 1
+        fi
+    fi
+fi
+
+echo "Chosen download location: $DL_LOC_DESC"
+echo ""
+
+# ---------------------------------------------------------------------------
+# Download chosen G-Disk archive
+# ---------------------------------------------------------------------------
 if [ "$GDISK_VARIANT" = "FULL" ]; then
     echo "Downloading $GDISK_ZIP (~10 GB) - this will take a while..."
 else
     echo "Downloading $GDISK_ZIP (~44 MB)..."
 fi
 
-cd "$TMP_DIR" || exit 1
-wget --show-progress -O "$GDISK_ZIP" "$GDISK_URL" || {
-    echo "Error: failed to download $GDISK_URL"
-    sudo umount "$MOUNT_POINT" 2>/dev/null
-    exit 1
-}
+DL_PATH="$DL_DIR/$GDISK_ZIP"
+if $DL_ON_PARTITION; then
+    sudo wget --show-progress -O "$DL_PATH" "$GDISK_URL" || {
+        echo "Error: failed to download $GDISK_URL"
+        sudo rm -f "$DL_PATH"
+        sudo umount "$MOUNT_POINT" 2>/dev/null
+        exit 1
+    }
+else
+    wget --show-progress -O "$DL_PATH" "$GDISK_URL" || {
+        echo "Error: failed to download $GDISK_URL"
+        rm -f "$DL_PATH"
+        sudo umount "$MOUNT_POINT" 2>/dev/null
+        exit 1
+    }
+fi
 
-ZIP_BYTES=$(stat -c%s "$GDISK_ZIP" 2>/dev/null || echo 0)
-ZIP_MB=$(awk "BEGIN {printf \"%.2f\", $ZIP_BYTES/1024/1024}")
-echo "Downloaded $GDISK_ZIP (${ZIP_MB} MB)."
+ZIP_BYTES=$(stat -c%s "$DL_PATH" 2>/dev/null || echo 0)
+echo "Downloaded $GDISK_ZIP ($(human_gb "$ZIP_BYTES"))."
 
+# ---------------------------------------------------------------------------
+# Extract to mounted partition
+# ---------------------------------------------------------------------------
 echo "Extracting $GDISK_ZIP to $MOUNT_POINT (root of G-Disk-Vtoy)..."
-sudo unzip -o "$TMP_DIR/$GDISK_ZIP" -d "$MOUNT_POINT" || {
+sudo unzip -o "$DL_PATH" -d "$MOUNT_POINT" || {
     echo "Error: extraction failed."
+    if ! $DL_ON_PARTITION; then
+        # leave the zip alone so user can retry
+        echo "Zip preserved at $DL_PATH for retry."
+    fi
     sudo umount "$MOUNT_POINT" 2>/dev/null
     exit 1
 }
 
-# Clean up zip from /tmp (it was never copied onto the partition)
-rm -f "$TMP_DIR/$GDISK_ZIP"
+# Verify extraction landed something on the partition (basic sanity check)
+EXTRACT_FILE_COUNT=$(sudo find "$MOUNT_POINT" -mindepth 1 ! -name "$GDISK_ZIP" 2>/dev/null | wc -l)
+if [ "$EXTRACT_FILE_COUNT" -lt 1 ]; then
+    echo "Error: extraction completed but partition appears empty."
+    sudo umount "$MOUNT_POINT" 2>/dev/null
+    exit 1
+fi
+echo "Extraction verified: $EXTRACT_FILE_COUNT entries on partition."
 
-# --------------
+# ---------------------------------------------------------------------------
+# Delete the downloaded zip from wherever it was staged
+# ---------------------------------------------------------------------------
+if $DL_ON_PARTITION; then
+    echo "Removing staged zip from partition: $DL_PATH"
+    sudo rm -f "$DL_PATH"
+elif [[ "$DL_PATH" == "$REAL_HOME/"* ]]; then
+    echo "Removing staged zip from \$HOME: $DL_PATH"
+    rm -f "$DL_PATH"
+    rmdir "$DL_DIR" 2>/dev/null
+else
+    rm -f "$DL_PATH"
+fi
+
+# ---------------------------------------------------------------------------
 # Final cleanup
-# --------------
+# ---------------------------------------------------------------------------
 echo "Cleaning up..."
 sync
 cd /
@@ -276,9 +402,10 @@ sudo umount "$MOUNT_POINT" 2>/dev/null
 rm -rf "$TMP_DIR"
 
 echo ""
-echo "Ventoy v1.1.12 installation with g-disk customization complete!"
+echo "Ventoy v1.1.12 installation with gLiTcH customization complete!"
 echo "Variant installed: $GDISK_VARIANT"
 echo "Data partition label: G-Disk-Vtoy"
+echo "Download was staged via: $DL_LOC_DESC"
 if [ "$GDISK_VARIANT" = "FULL" ]; then
     echo "You can now add additional ISO files to the G-Disk-Vtoy partition."
 else
