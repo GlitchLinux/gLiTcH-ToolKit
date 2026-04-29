@@ -1,4 +1,6 @@
 sudo rm -r /tmp/gLiTcH-ToolKit/
 cd /tmp
+sudo rm -f apps*
 wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/apps
-chmod 777 apps && bash apps
+sudo chmod 777 apps
+bash apps
