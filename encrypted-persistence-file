@@ -1,8 +1,0 @@
-dd if=/dev/zero of=persistence bs=1M count=4096
-cryptsetup luksFormat persistence
-cryptsetup luksOpen persistence my-persistence
-mkfs.ext4 -L persistence /dev/mapper/my-persistence
-mkdir /tmp/p && mount /dev/mapper/my-persistence /tmp/p
-echo "/ union" > /tmp/p/persistence.conf
-umount /tmp/p
-cryptsetup luksClose my-persistence
