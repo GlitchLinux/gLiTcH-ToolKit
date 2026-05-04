@@ -1,9 +1,9 @@
 #!/bin/bash
-# ╔══════════════════════════════════════════╗
-# ║  gLiTcH Linux - Persistence File Creator ║
-# ║  Creates labeled persistence images for   ║
-# ║  Debian live-boot (file-based overlay)    ║
-# ╚══════════════════════════════════════════╝
+# ╔═════════════════════════════════════════╗
+# ║ gLiTcH Linux - Persistence File Creator ║
+# ║ Creates labeled persistence images for  ║
+# ║ Debian live-boot (file-based overlay)   ║
+# ╚═════════════════════════════════════════╝
 
 set -e
 
@@ -17,9 +17,9 @@ N='\033[0m'
 
 header() {
     echo -e "${C}"
-    echo "╔══════════════════════════════════════════╗"
-    echo "║  gLiTcH Persistence File Creator         ║"
-    echo "╚══════════════════════════════════════════╝"
+    echo "╔═════════════════════════════════╗"
+    echo "║ gLiTcH Persistence File Creator ║"
+    echo "╚═════════════════════════════════╝"
     echo -e "${N}"
 }
 
@@ -93,11 +93,11 @@ echo -e "      ${G}✓${N} Output: ${OUTFILE}"
 echo
 
 # ── Summary ──
-echo -e "${C}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e "${C}━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 echo -e "  Size:       ${W}${SIZE_MB} MB${N}"
 echo -e "  Encrypted:  ${W}$([ "$ENCRYPT" = true ] && echo "Yes (LUKS)" || echo "No")${N}"
 echo -e "  Output:     ${W}${OUTFILE}${N}"
-echo -e "${C}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
+echo -e "${C}━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}"
 read -rp "  Proceed? [Y/n]: " CONFIRM
 [[ "$CONFIRM" =~ ^[Nn]$ ]] && exit 0
 echo
