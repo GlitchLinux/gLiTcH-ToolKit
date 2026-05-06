@@ -268,7 +268,8 @@ cat <<EOF
 
 EOF
 
-echo "sleep 6 && sudo calamares &" > /tmp/calmares-start
+echo "sleep 10 && sudo calamares &" > /tmp/calmares-start
 nohup bash /tmp/calmares-start 2>&1 &
-sudo pkill xfce4-terminal xterm
+sudo pkill xfce4-terminal
+sudo pkill xterm
 exit
