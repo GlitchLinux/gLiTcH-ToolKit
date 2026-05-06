@@ -1,12 +1,17 @@
 #/bin/bash
 
-sudo apt update && sudo apt install -y calamares calamares-settings-debian xinit
 cd /tmp
-sudo rm -rf calamares
-wget https://glitchlinux.wtf/FILES/Glitch-Calamares/calamares-glitch-13.zip
-unzip calamares-glitch-13.zip
-sudo cp -rf calamares/ /etc/
+sudo rm -rf calamares*
+sudo apt update
+wget https://github.com/GlitchLinux/gLiTcH-Calamares/blob/main/calamares_3.3.14-1glitch1_amd64.deb
+sudo dpkg -i calamares_3.3.14-1glitch1_amd64.deb && sudo apt install -f 
+sudo dpkg --force-all -i calamares_3.3.14-1glitch1_amd64.deb
+wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-Calamares/refs/heads/main/calamares-install-glitch.desktop
 sudo rm -f /usr/share/applications/calamares-install-debian.desktop
 sudo cp /tmp/calamares-install-glitch.desktop /usr/share/applications/calamares-install-glitch.desktop
-sudo calamares &
+sudo chown x:x /usr/share/applications/calamares-install-glitch.desktop
+sudo chmod +x /usr/share/applications/calamares-install-glitch.desktop
+echo "sleep 5 && sudo calamares &" > /tmp/calmares-start
+nohup bash /tmp/calmares-start 2>&1 &
+exit
 exit
