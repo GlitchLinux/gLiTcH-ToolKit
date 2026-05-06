@@ -1,21 +1,200 @@
 #/bin/bash
 
-cd /tmp
-sudo rm -rf calamares*
-sudo apt update && sudo apt install calamares-settings-debian -y
-wget https://github.com/GlitchLinux/gLiTcH-Calamares/raw/refs/heads/main/calamares_3.3.14-1glitch1_amd64.deb
-sudo dpkg --force-all -i calamares_3.3.14-1glitch1_amd64.deb
-sudo apt install -f && sudo dpkg -i calamares_3.3.14-1glitch1_amd64.deb
-wget https://github.com/GlitchLinux/gLiTcH-Calamares/raw/refs/heads/main/calamares-glitch-13.zip
-unzip calamares-glitch-13.zip
-sudo rm -rf /etc/calamares/
-sudo mv calamares/ /etc/
-sudo mkdir -p /usr/share/icons/ && sudo cp /etc/calamares/branding/debian/debian-logo.png /usr/share/icons/glitch-logo.png
-sudo rm -f /usr/share/applications/calamares-install-debian.desktop
-sudo cp /tmp/calamares-install-glitch.desktop /usr/share/applications/calamares-install-glitch.desktop
-sudo chown x:x /usr/share/applications/calamares-install-glitch.desktop
-sudo chmod +x /usr/share/applications/calamares-install-glitch.desktop
-echo "sleep 10 && sudo calamares &" > /tmp/calmares-start
+#!/usr/bin/env bash
+# ──────────────────────────────────────────────────────────────────────────
+#  install-glitch-calamares.sh
+#
+#  Fetches the patched gLiTcH Calamares build (3.3.14-1glitch1) from GitHub
+#  and installs it system-wide along with the gLiTcH branding, modules, and
+#  desktop launcher.
+#
+#  The patched build adds:
+#    • allowLoopDevices: true   in partition.conf  →  install to /dev/loop*
+#
+#  Usage:  sudo ./install-glitch-calamares.sh
+#
+#  Source: https://github.com/GlitchLinux/gLiTcH-Calamares
+# ──────────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+# ── Config ────────────────────────────────────────────────────────────────
+ZIP_URL="https://github.com/GlitchLinux/gLiTcH-Calamares/raw/refs/heads/main/calamares-glitch-13-build.zip"
+WORK_DIR="/tmp/glitch-calamares-install.$$"
+DEB_VERSION="3.3.14-1glitch1"
+
+# ── Pretty output ─────────────────────────────────────────────────────────
+RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[1;33m'; CYA='\033[0;36m'; RST='\033[0m'
+info()  { echo -e "${CYA}[*]${RST} $*"; }
+ok()    { echo -e "${GRN}[✓]${RST} $*"; }
+warn()  { echo -e "${YLW}[!]${RST} $*"; }
+die()   { echo -e "${RED}[✗]${RST} $*" >&2; exit 1; }
+
+trap 'rm -rf "$WORK_DIR"' EXIT
+
+# ── Sanity checks ─────────────────────────────────────────────────────────
+[[ $EUID -eq 0 ]] || die "Run with sudo: sudo $0"
+
+# Determine the non-root user who invoked sudo (for desktop file ownership).
+# Falls back to root if run as root directly without sudo.
+TARGET_USER="${SUDO_USER:-root}"
+TARGET_GROUP="$(id -gn "$TARGET_USER" 2>/dev/null || echo root)"
+info "Target user for desktop launcher: ${TARGET_USER}:${TARGET_GROUP}"
+
+command -v curl  >/dev/null || die "curl is required (apt install curl)"
+command -v unzip >/dev/null || die "unzip is required (apt install unzip)"
+
+# ── Banner ────────────────────────────────────────────────────────────────
+cat <<'BANNER'
+
+   ╔═══════════════════════════════════════════════════════╗
+   ║         gLiTcH Calamares Installer — v13              ║
+   ║   Calamares 3.3.14-1glitch1  +  loop device support   ║
+   ╚═══════════════════════════════════════════════════════╝
+
+BANNER
+
+# ── Stage 1: download ─────────────────────────────────────────────────────
+mkdir -p "$WORK_DIR"
+cd "$WORK_DIR"
+
+info "Downloading build bundle..."
+info "  URL: $ZIP_URL"
+curl -fL --progress-bar -o calamares-glitch-13-build.zip "$ZIP_URL" \
+    || die "Download failed"
+ok  "Downloaded $(du -h calamares-glitch-13-build.zip | cut -f1)"
+
+# ── Stage 2: extract ──────────────────────────────────────────────────────
+info "Extracting outer bundle..."
+unzip -q calamares-glitch-13-build.zip
+cd calamares-glitch-13-build
+
+DEB_FILE="calamares_${DEB_VERSION}_amd64.deb"
+INNER_ZIP="calamares-glitch-13.zip"
+
+[[ -f "$DEB_FILE"   ]] || die "Missing $DEB_FILE in bundle"
+[[ -f "$INNER_ZIP"  ]] || die "Missing $INNER_ZIP in bundle"
+ok "Bundle contents verified"
+
+# ── Stage 3: dependencies ─────────────────────────────────────────────────
+info "Updating apt cache and installing build/runtime dependencies..."
+
+# Refresh apt cache (non-fatal if some sources are flaky)
+apt-get update -qq || warn "apt-get update had issues, continuing anyway"
+
+# Install runtime dependencies declared by the .deb. apt will resolve and
+# install them when we use 'apt-get install ./file.deb' in stage 4, but we
+# pre-install some commonly-missing ones explicitly so users get clearer
+# error messages if a dep is unavailable on their distro.
+PRE_DEPS=(
+    os-prober
+    squashfs-tools
+    btrfs-progs
+    parted
+    dosfstools
+    e2fsprogs
+    cryptsetup
+    rsync
+    sudo
+    util-linux
+)
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    "${PRE_DEPS[@]}" 2>&1 | tail -5 || warn "Some pre-deps may not have installed"
+ok "Pre-dependencies in place"
+
+# ── Stage 4: remove conflicting packages ──────────────────────────────────
+# If a different version of calamares is already installed, we let apt
+# handle the upgrade/replace cleanly via 'apt-get install ./deb'. But the
+# stock Debian calamares-settings packages can pin conflicting configs —
+# remove them if present so our gLiTcH configs aren't shadowed.
+for pkg in calamares-settings-debian calamares-settings-ubuntu; do
+    if dpkg -l "$pkg" >/dev/null 2>&1; then
+        info "Removing conflicting package: $pkg"
+        DEBIAN_FRONTEND=noninteractive apt-get remove -y --purge "$pkg" \
+            2>&1 | tail -3 || warn "Failed to remove $pkg"
+    fi
+done
+
+# ── Stage 5: install patched calamares ────────────────────────────────────
+info "Installing patched Calamares package..."
+
+# 'apt-get install ./deb' resolves dependencies automatically (unlike dpkg -i)
+DEBIAN_FRONTEND=noninteractive apt-get install -y "./${DEB_FILE}" 2>&1 | tail -10 \
+    || die "Calamares package install failed"
+
+# Verify install
+INSTALLED_VER="$(dpkg-query -W -f='${Version}' calamares 2>/dev/null || true)"
+if [[ "$INSTALLED_VER" == "$DEB_VERSION" ]]; then
+    ok "Calamares ${DEB_VERSION} installed"
+else
+    die "Install verification failed (got version: '${INSTALLED_VER:-none}')"
+fi
+
+# ── Stage 6: deploy gLiTcH branding & module configs ──────────────────────
+info "Deploying gLiTcH branding and module configurations..."
+
+mkdir -p /etc/calamares
+
+# The inner zip contains:
+#   calamares/...                          → goes to /etc/calamares/...
+#   calamares-install-glitch.desktop       → goes to /tmp (then handled below)
+unzip -oq "$INNER_ZIP" -d /etc/
+
+# Move the desktop launcher to /tmp where the user's post-install steps
+# expect to find it. Old location: /etc/calamares-install-glitch.desktop
+if [[ -f /etc/calamares-install-glitch.desktop ]]; then
+    mv /etc/calamares-install-glitch.desktop /tmp/calamares-install-glitch.desktop
+fi
+ok "Configs deployed to /etc/calamares/"
+
+# ── Stage 7: post-install (user's custom steps) ───────────────────────────
+info "Running post-install steps..."
+
+# 1. Copy the gLiTcH logo into system icons
+mkdir -p /usr/share/icons/
+if [[ -f /etc/calamares/branding/debian/debian-logo.png ]]; then
+    cp /etc/calamares/branding/debian/debian-logo.png /usr/share/icons/glitch-logo.png
+    ok "Installed /usr/share/icons/glitch-logo.png"
+else
+    warn "Logo file not found at expected path; skipping icon copy"
+fi
+
+# 2. Remove the stock debian launcher if it was left behind by another package
+rm -f /usr/share/applications/calamares-install-debian.desktop
+
+# 3. Install the gLiTcH-branded launcher
+if [[ -f /tmp/calamares-install-glitch.desktop ]]; then
+    cp /tmp/calamares-install-glitch.desktop \
+       /usr/share/applications/calamares-install-glitch.desktop
+    chown "${TARGET_USER}:${TARGET_GROUP}" \
+       /usr/share/applications/calamares-install-glitch.desktop
+    chmod +x /usr/share/applications/calamares-install-glitch.desktop
+    ok "Installed /usr/share/applications/calamares-install-glitch.desktop"
+else
+    warn "Desktop launcher not found in /tmp; you may need to install it manually"
+fi
+
+# Refresh desktop database so new launcher shows up immediately
+command -v update-desktop-database >/dev/null && \
+    update-desktop-database -q /usr/share/applications/ 2>/dev/null || true
+
+# ── Done ──────────────────────────────────────────────────────────────────
+echo
+ok "gLiTcH Calamares installation complete"
+echo
+cat <<EOF
+   ┌──────────────────────────────────────────────────────────┐
+   │  Launch:    Applications menu → "Install gLiTcH Linux"   │
+   │  Or run:    sudo calamares                               │
+   │                                                          │
+   │  To install to a loop device, ensure partition.conf has: │
+   │      allowLoopDevices: true                              │
+   │  Then:    sudo losetup -fP /path/to/disk.img             │
+   │           sudo calamares                                 │
+   └──────────────────────────────────────────────────────────┘
+
+EOF
+
+echo "sleep 6 && sudo calamares &" > /tmp/calmares-start
 nohup bash /tmp/calmares-start 2>&1 &
-exit
 exit
