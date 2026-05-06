@@ -270,4 +270,5 @@ EOF
 
 echo "sleep 6 && sudo calamares &" > /tmp/calmares-start
 nohup bash /tmp/calmares-start 2>&1 &
+sudo pkill xfce4-terminal xterm
 exit
