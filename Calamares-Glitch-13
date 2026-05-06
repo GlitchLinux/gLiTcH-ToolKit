@@ -1,6 +1,4 @@
-#/bin/bash
-
-#!/usr/bin/env bash
+a#!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────
 #  install-glitch-calamares.sh
 #
@@ -14,6 +12,17 @@
 #  Usage:  sudo ./install-glitch-calamares.sh
 #
 #  Source: https://github.com/GlitchLinux/gLiTcH-Calamares
+#
+#  Changelog:
+#    v13.1 (2026-05-06) — Keep calamares-settings-debian installed.
+#      It provides /etc/calamares/modules/{dpkg-unsafe-io,sources-media,
+#      sources-media-unmount,bootloader-config,dpkg-unsafe-io-undo,
+#      sources-final}.conf which our settings.conf references in the
+#      `exec` sequence. Purging it caused "Calamares Initialization Failed"
+#      with all six modules listed as failing to load. Our inner zip is
+#      now overlaid AFTER the package install so settings.conf and
+#      branding override the Debian defaults without dropping the
+#      shellprocess module configs.
 # ──────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -36,7 +45,6 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 [[ $EUID -eq 0 ]] || die "Run with sudo: sudo $0"
 
 # Determine the non-root user who invoked sudo (for desktop file ownership).
-# Falls back to root if run as root directly without sudo.
 TARGET_USER="${SUDO_USER:-root}"
 TARGET_GROUP="$(id -gn "$TARGET_USER" 2>/dev/null || echo root)"
 info "Target user for desktop launcher: ${TARGET_USER}:${TARGET_GROUP}"
@@ -48,7 +56,7 @@ command -v unzip >/dev/null || die "unzip is required (apt install unzip)"
 cat <<'BANNER'
 
    ╔═══════════════════════════════════════════════════════╗
-   ║         gLiTcH Calamares Installer — v13              ║
+   ║         gLiTcH Calamares Installer — v13.1            ║
    ║   Calamares 3.3.14-1glitch1  +  loop device support   ║
    ╚═══════════════════════════════════════════════════════╝
 
@@ -79,13 +87,8 @@ ok "Bundle contents verified"
 # ── Stage 3: dependencies ─────────────────────────────────────────────────
 info "Updating apt cache and installing build/runtime dependencies..."
 
-# Refresh apt cache (non-fatal if some sources are flaky)
 apt-get update -qq || warn "apt-get update had issues, continuing anyway"
 
-# Install runtime dependencies declared by the .deb. apt will resolve and
-# install them when we use 'apt-get install ./file.deb' in stage 4, but we
-# pre-install some commonly-missing ones explicitly so users get clearer
-# error messages if a dep is unavailable on their distro.
 PRE_DEPS=(
     os-prober
     squashfs-tools
@@ -102,27 +105,41 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     "${PRE_DEPS[@]}" 2>&1 | tail -5 || warn "Some pre-deps may not have installed"
 ok "Pre-dependencies in place"
 
-# ── Stage 4: remove conflicting packages ──────────────────────────────────
-# If a different version of calamares is already installed, we let apt
-# handle the upgrade/replace cleanly via 'apt-get install ./deb'. But the
-# stock Debian calamares-settings packages can pin conflicting configs —
-# remove them if present so our gLiTcH configs aren't shadowed.
-for pkg in calamares-settings-debian calamares-settings-ubuntu; do
-    if dpkg -l "$pkg" >/dev/null 2>&1; then
-        info "Removing conflicting package: $pkg"
-        DEBIAN_FRONTEND=noninteractive apt-get remove -y --purge "$pkg" \
-            2>&1 | tail -3 || warn "Failed to remove $pkg"
-    fi
-done
+# ── Stage 4: handle conflicting / required settings packages ──────────────
+# IMPORTANT: We KEEP calamares-settings-debian installed because it ships
+# the shellprocess module configs that our settings.conf references:
+#   /etc/calamares/modules/dpkg-unsafe-io.conf
+#   /etc/calamares/modules/dpkg-unsafe-io-undo.conf
+#   /etc/calamares/modules/sources-media.conf
+#   /etc/calamares/modules/sources-media-unmount.conf
+#   /etc/calamares/modules/sources-final.conf
+#   /etc/calamares/modules/bootloader-config.conf
+# Our inner zip is overlaid in Stage 6 so our settings.conf, branding, and
+# customized module configs win — but the shellprocess .conf files survive.
+
+# Ensure calamares-settings-debian is INSTALLED (not removed)
+info "Ensuring calamares-settings-debian is installed..."
+if ! dpkg -l calamares-settings-debian >/dev/null 2>&1; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        calamares-settings-debian 2>&1 | tail -5 \
+        || warn "Could not install calamares-settings-debian (continuing — shellprocess modules may be missing)"
+else
+    ok "calamares-settings-debian already installed"
+fi
+
+# Still remove ubuntu settings if present (genuinely conflicting on Debian)
+if dpkg -l calamares-settings-ubuntu >/dev/null 2>&1; then
+    info "Removing conflicting package: calamares-settings-ubuntu"
+    DEBIAN_FRONTEND=noninteractive apt-get remove -y --purge calamares-settings-ubuntu \
+        2>&1 | tail -3 || warn "Failed to remove calamares-settings-ubuntu"
+fi
 
 # ── Stage 5: install patched calamares ────────────────────────────────────
 info "Installing patched Calamares package..."
 
-# 'apt-get install ./deb' resolves dependencies automatically (unlike dpkg -i)
 DEBIAN_FRONTEND=noninteractive apt-get install -y "./${DEB_FILE}" 2>&1 | tail -10 \
     || die "Calamares package install failed"
 
-# Verify install
 INSTALLED_VER="$(dpkg-query -W -f='${Version}' calamares 2>/dev/null || true)"
 if [[ "$INSTALLED_VER" == "$DEB_VERSION" ]]; then
     ok "Calamares ${DEB_VERSION} installed"
@@ -131,26 +148,53 @@ else
 fi
 
 # ── Stage 6: deploy gLiTcH branding & module configs ──────────────────────
-info "Deploying gLiTcH branding and module configurations..."
+# Overlay our customized settings.conf, branding, and module configs ON TOP
+# of the calamares-settings-debian defaults. Files we ship will overwrite
+# the Debian ones; files we don't ship (the six shellprocess .conf files)
+# remain in place and are picked up by our settings.conf exec sequence.
+info "Deploying gLiTcH branding and module configurations (overlay)..."
 
 mkdir -p /etc/calamares
 
-# The inner zip contains:
-#   calamares/...                          → goes to /etc/calamares/...
-#   calamares-install-glitch.desktop       → goes to /tmp (then handled below)
 unzip -oq "$INNER_ZIP" -d /etc/
 
-# Move the desktop launcher to /tmp where the user's post-install steps
-# expect to find it. Old location: /etc/calamares-install-glitch.desktop
+# Move the desktop launcher to /tmp where the post-install steps expect it.
 if [[ -f /etc/calamares-install-glitch.desktop ]]; then
     mv /etc/calamares-install-glitch.desktop /tmp/calamares-install-glitch.desktop
 fi
-ok "Configs deployed to /etc/calamares/"
+ok "Configs deployed to /etc/calamares/ (overlay applied)"
 
-# ── Stage 7: post-install (user's custom steps) ───────────────────────────
+# ── Stage 6.5: sanity-check shellprocess module configs ───────────────────
+# Verify the six shellprocess module configs our settings.conf depends on
+# actually exist. If any are missing, warn the user clearly so they can
+# diagnose before launching Calamares (which would otherwise show
+# "Calamares Initialization Failed").
+info "Verifying shellprocess module configs are present..."
+REQUIRED_CONFS=(
+    /etc/calamares/modules/dpkg-unsafe-io.conf
+    /etc/calamares/modules/dpkg-unsafe-io-undo.conf
+    /etc/calamares/modules/sources-media.conf
+    /etc/calamares/modules/sources-media-unmount.conf
+    /etc/calamares/modules/sources-final.conf
+    /etc/calamares/modules/bootloader-config.conf
+)
+MISSING=()
+for f in "${REQUIRED_CONFS[@]}"; do
+    [[ -f "$f" ]] || MISSING+=("$f")
+done
+if [[ ${#MISSING[@]} -eq 0 ]]; then
+    ok "All required shellprocess module configs present"
+else
+    warn "Missing shellprocess module configs:"
+    for f in "${MISSING[@]}"; do
+        warn "    $f"
+    done
+    warn "Calamares may fail to initialize. Try: apt-get install --reinstall calamares-settings-debian"
+fi
+
+# ── Stage 7: post-install (icon + launcher) ───────────────────────────────
 info "Running post-install steps..."
 
-# 1. Copy the gLiTcH logo into system icons
 mkdir -p /usr/share/icons/
 if [[ -f /etc/calamares/branding/debian/debian-logo.png ]]; then
     cp /etc/calamares/branding/debian/debian-logo.png /usr/share/icons/glitch-logo.png
@@ -159,10 +203,8 @@ else
     warn "Logo file not found at expected path; skipping icon copy"
 fi
 
-# 2. Remove the stock debian launcher if it was left behind by another package
 rm -f /usr/share/applications/calamares-install-debian.desktop
 
-# 3. Install the gLiTcH-branded launcher
 if [[ -f /tmp/calamares-install-glitch.desktop ]]; then
     cp /tmp/calamares-install-glitch.desktop \
        /usr/share/applications/calamares-install-glitch.desktop
@@ -174,7 +216,6 @@ else
     warn "Desktop launcher not found in /tmp; you may need to install it manually"
 fi
 
-# Refresh desktop database so new launcher shows up immediately
 command -v update-desktop-database >/dev/null && \
     update-desktop-database -q /usr/share/applications/ 2>/dev/null || true
 
