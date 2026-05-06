@@ -14,15 +14,21 @@
 #  Source: https://github.com/GlitchLinux/gLiTcH-Calamares
 #
 #  Changelog:
-#    v13.1 (2026-05-06) — Keep calamares-settings-debian installed.
-#      It provides /etc/calamares/modules/{dpkg-unsafe-io,sources-media,
-#      sources-media-unmount,bootloader-config,dpkg-unsafe-io-undo,
-#      sources-final}.conf which our settings.conf references in the
-#      `exec` sequence. Purging it caused "Calamares Initialization Failed"
-#      with all six modules listed as failing to load. Our inner zip is
-#      now overlaid AFTER the package install so settings.conf and
-#      branding override the Debian defaults without dropping the
-#      shellprocess module configs.
+#    v13.3 (2026-05-06) — Append `allowLoopDevices: true` to partition.conf
+#      after the gLiTcH overlay deploys. The C++ patches in the .deb DO
+#      read this setting (Config.cpp inserts it into GlobalStorage,
+#      DeviceList::getDevices() ORs in ScanFlag::includeLoopback when true),
+#      but the inner zip's partition.conf doesn't set it. The patch
+#      03-partition.conf-doc.patch only adds a commented-out documentation
+#      line, not the active setting. Without `allowLoopDevices: true` on
+#      disk, loop devices stay hidden in the device picker.
+#
+#    v13.2 — Pin calamares-settings-debian to Debian Trixie 13.0.13-1 from
+#      deb.debian.org because Ubuntu Noble's variant strips the six
+#      shellprocess module.desc files (dpkg-unsafe-io, sources-media, etc).
+#
+#    v13.1 — Stopped purging calamares-settings-debian (insufficient — see
+#      v13.2).
 # ──────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -31,6 +37,12 @@ set -euo pipefail
 ZIP_URL="https://github.com/GlitchLinux/gLiTcH-Calamares/raw/refs/heads/main/calamares-glitch-13-build.zip"
 WORK_DIR="/tmp/glitch-calamares-install.$$"
 DEB_VERSION="3.3.14-1glitch1"
+
+# Pin the Debian Trixie calamares-settings-debian directly. Update when
+# Trixie ships a new point release. Check available versions at:
+#   https://deb.debian.org/debian/pool/main/c/calamares-settings-debian/
+CSD_VERSION="13.0.13-1"
+CSD_URL="https://deb.debian.org/debian/pool/main/c/calamares-settings-debian/calamares-settings-debian_${CSD_VERSION}_all.deb"
 
 # ── Pretty output ─────────────────────────────────────────────────────────
 RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[1;33m'; CYA='\033[0;36m'; RST='\033[0m'
@@ -44,7 +56,6 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 # ── Sanity checks ─────────────────────────────────────────────────────────
 [[ $EUID -eq 0 ]] || die "Run with sudo: sudo $0"
 
-# Determine the non-root user who invoked sudo (for desktop file ownership).
 TARGET_USER="${SUDO_USER:-root}"
 TARGET_GROUP="$(id -gn "$TARGET_USER" 2>/dev/null || echo root)"
 info "Target user for desktop launcher: ${TARGET_USER}:${TARGET_GROUP}"
@@ -56,26 +67,33 @@ command -v unzip >/dev/null || die "unzip is required (apt install unzip)"
 cat <<'BANNER'
 
    ╔═══════════════════════════════════════════════════════╗
-   ║         gLiTcH Calamares Installer — v13.1            ║
+   ║         gLiTcH Calamares Installer — v13.3            ║
    ║   Calamares 3.3.14-1glitch1  +  loop device support   ║
    ╚═══════════════════════════════════════════════════════╝
 
 BANNER
 
-# ── Stage 1: download ─────────────────────────────────────────────────────
+# ── Stage 1: download bundle ──────────────────────────────────────────────
 mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
 
-info "Downloading build bundle..."
+info "Downloading gLiTcH build bundle..."
 info "  URL: $ZIP_URL"
 curl -fL --progress-bar -o calamares-glitch-13-build.zip "$ZIP_URL" \
     || die "Download failed"
 ok  "Downloaded $(du -h calamares-glitch-13-build.zip | cut -f1)"
 
-# ── Stage 2: extract ──────────────────────────────────────────────────────
-info "Extracting outer bundle..."
+info "Downloading Debian Trixie calamares-settings-debian (${CSD_VERSION})..."
+info "  URL: $CSD_URL"
+curl -fL --progress-bar -o "calamares-settings-debian_${CSD_VERSION}_all.deb" "$CSD_URL" \
+    || die "Failed to fetch calamares-settings-debian from Debian pool"
+ok  "Downloaded $(du -h calamares-settings-debian_${CSD_VERSION}_all.deb | cut -f1)"
+
+# ── Stage 2: extract gLiTcH bundle ────────────────────────────────────────
+info "Extracting gLiTcH bundle..."
 unzip -q calamares-glitch-13-build.zip
-cd calamares-glitch-13-build
+GLITCH_BUNDLE_DIR="$WORK_DIR/calamares-glitch-13-build"
+cd "$GLITCH_BUNDLE_DIR"
 
 DEB_FILE="calamares_${DEB_VERSION}_amd64.deb"
 INNER_ZIP="calamares-glitch-13.zip"
@@ -84,9 +102,10 @@ INNER_ZIP="calamares-glitch-13.zip"
 [[ -f "$INNER_ZIP"  ]] || die "Missing $INNER_ZIP in bundle"
 ok "Bundle contents verified"
 
+cd "$WORK_DIR"
+
 # ── Stage 3: dependencies ─────────────────────────────────────────────────
 info "Updating apt cache and installing build/runtime dependencies..."
-
 apt-get update -qq || warn "apt-get update had issues, continuing anyway"
 
 PRE_DEPS=(
@@ -105,40 +124,49 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     "${PRE_DEPS[@]}" 2>&1 | tail -5 || warn "Some pre-deps may not have installed"
 ok "Pre-dependencies in place"
 
-# ── Stage 4: handle conflicting / required settings packages ──────────────
-# IMPORTANT: We KEEP calamares-settings-debian installed because it ships
-# the shellprocess module configs that our settings.conf references:
-#   /etc/calamares/modules/dpkg-unsafe-io.conf
-#   /etc/calamares/modules/dpkg-unsafe-io-undo.conf
-#   /etc/calamares/modules/sources-media.conf
-#   /etc/calamares/modules/sources-media-unmount.conf
-#   /etc/calamares/modules/sources-final.conf
-#   /etc/calamares/modules/bootloader-config.conf
-# Our inner zip is overlaid in Stage 6 so our settings.conf, branding, and
-# customized module configs win — but the shellprocess .conf files survive.
+# ── Stage 4: handle conflicting settings packages ─────────────────────────
+# Remove any existing calamares-settings-* (Ubuntu Noble's variant lacks the
+# shellprocess module.desc files and would shadow the Trixie one we install
+# in Stage 5). Also remove the Ubuntu variant if present.
+for pkg in calamares-settings-debian calamares-settings-ubuntu; do
+    if dpkg -l "$pkg" >/dev/null 2>&1; then
+        info "Removing existing package: $pkg"
+        DEBIAN_FRONTEND=noninteractive apt-get remove -y --purge "$pkg" \
+            2>&1 | tail -3 || warn "Failed to remove $pkg"
+    fi
+done
 
-# Ensure calamares-settings-debian is INSTALLED (not removed)
-info "Ensuring calamares-settings-debian is installed..."
-if ! dpkg -l calamares-settings-debian >/dev/null 2>&1; then
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        calamares-settings-debian 2>&1 | tail -5 \
-        || warn "Could not install calamares-settings-debian (continuing — shellprocess modules may be missing)"
-else
-    ok "calamares-settings-debian already installed"
+# ── Stage 5: install Debian Trixie calamares-settings-debian ──────────────
+info "Installing Debian Trixie calamares-settings-debian..."
+DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    "./calamares-settings-debian_${CSD_VERSION}_all.deb" 2>&1 | tail -10 \
+    || die "calamares-settings-debian install failed"
+
+REQUIRED_MODULES=(
+    /usr/lib/calamares/modules/dpkg-unsafe-io/module.desc
+    /usr/lib/calamares/modules/dpkg-unsafe-io-undo/module.desc
+    /usr/lib/calamares/modules/sources-media/module.desc
+    /usr/lib/calamares/modules/sources-media-unmount/module.desc
+    /usr/lib/calamares/modules/sources-final/module.desc
+    /usr/lib/calamares/modules/bootloader-config/module.desc
+)
+MISSING=()
+for f in "${REQUIRED_MODULES[@]}"; do
+    [[ -f "$f" ]] || MISSING+=("$f")
+done
+if [[ ${#MISSING[@]} -ne 0 ]]; then
+    warn "Some shellprocess module.desc files are still missing:"
+    for f in "${MISSING[@]}"; do warn "    $f"; done
+    die "Trixie calamares-settings-debian install did not deploy required modules"
 fi
+ok "All six shellprocess module.desc files present"
 
-# Still remove ubuntu settings if present (genuinely conflicting on Debian)
-if dpkg -l calamares-settings-ubuntu >/dev/null 2>&1; then
-    info "Removing conflicting package: calamares-settings-ubuntu"
-    DEBIAN_FRONTEND=noninteractive apt-get remove -y --purge calamares-settings-ubuntu \
-        2>&1 | tail -3 || warn "Failed to remove calamares-settings-ubuntu"
-fi
-
-# ── Stage 5: install patched calamares ────────────────────────────────────
+# ── Stage 6: install patched calamares ────────────────────────────────────
 info "Installing patched Calamares package..."
-
+cd "$GLITCH_BUNDLE_DIR"
 DEBIAN_FRONTEND=noninteractive apt-get install -y "./${DEB_FILE}" 2>&1 | tail -10 \
     || die "Calamares package install failed"
+cd "$WORK_DIR"
 
 INSTALLED_VER="$(dpkg-query -W -f='${Version}' calamares 2>/dev/null || true)"
 if [[ "$INSTALLED_VER" == "$DEB_VERSION" ]]; then
@@ -147,52 +175,56 @@ else
     die "Install verification failed (got version: '${INSTALLED_VER:-none}')"
 fi
 
-# ── Stage 6: deploy gLiTcH branding & module configs ──────────────────────
-# Overlay our customized settings.conf, branding, and module configs ON TOP
-# of the calamares-settings-debian defaults. Files we ship will overwrite
-# the Debian ones; files we don't ship (the six shellprocess .conf files)
-# remain in place and are picked up by our settings.conf exec sequence.
+# ── Stage 7: deploy gLiTcH branding & module configs (overlay) ────────────
 info "Deploying gLiTcH branding and module configurations (overlay)..."
-
 mkdir -p /etc/calamares
+unzip -oq "${GLITCH_BUNDLE_DIR}/${INNER_ZIP}" -d /etc/
 
-unzip -oq "$INNER_ZIP" -d /etc/
-
-# Move the desktop launcher to /tmp where the post-install steps expect it.
 if [[ -f /etc/calamares-install-glitch.desktop ]]; then
     mv /etc/calamares-install-glitch.desktop /tmp/calamares-install-glitch.desktop
 fi
-ok "Configs deployed to /etc/calamares/ (overlay applied)"
+ok "Configs deployed to /etc/calamares/"
 
-# ── Stage 6.5: sanity-check shellprocess module configs ───────────────────
-# Verify the six shellprocess module configs our settings.conf depends on
-# actually exist. If any are missing, warn the user clearly so they can
-# diagnose before launching Calamares (which would otherwise show
-# "Calamares Initialization Failed").
-info "Verifying shellprocess module configs are present..."
-REQUIRED_CONFS=(
-    /etc/calamares/modules/dpkg-unsafe-io.conf
-    /etc/calamares/modules/dpkg-unsafe-io-undo.conf
-    /etc/calamares/modules/sources-media.conf
-    /etc/calamares/modules/sources-media-unmount.conf
-    /etc/calamares/modules/sources-final.conf
-    /etc/calamares/modules/bootloader-config.conf
-)
-MISSING=()
-for f in "${REQUIRED_CONFS[@]}"; do
-    [[ -f "$f" ]] || MISSING+=("$f")
+for f in "${REQUIRED_MODULES[@]}"; do
+    [[ -f "$f" ]] || die "Module disappeared after overlay: $f"
 done
-if [[ ${#MISSING[@]} -eq 0 ]]; then
-    ok "All required shellprocess module configs present"
+ok "Shellprocess modules still present after overlay"
+
+# ── Stage 7.5: enable allowLoopDevices in partition.conf ──────────────────
+# The C++ patches in our .deb honor this setting (Config.cpp reads it,
+# DeviceList::getDevices() applies ScanFlag::includeLoopback when true),
+# but the inner zip's partition.conf does NOT set it. Add it now,
+# idempotently — if the line already exists, we leave it alone.
+PARTITION_CONF="/etc/calamares/modules/partition.conf"
+if [[ -f "$PARTITION_CONF" ]]; then
+    if grep -qE '^[[:space:]]*allowLoopDevices[[:space:]]*:' "$PARTITION_CONF"; then
+        # Setting present (commented or active) — make sure it's set to true and uncommented
+        sed -i -E 's|^[[:space:]]*#?[[:space:]]*allowLoopDevices[[:space:]]*:.*$|allowLoopDevices: true|' \
+            "$PARTITION_CONF"
+        ok "Updated existing allowLoopDevices line in partition.conf to: true"
+    else
+        # Append a fresh block at EOF
+        cat >>"$PARTITION_CONF" <<'EOF'
+
+# Allow loop devices (/dev/loop*) to appear in the device picker.
+# Useful for installing into raw image files attached via losetup.
+# gLiTcH addition (paired with C++ patches in calamares 3.3.14-1glitch1).
+allowLoopDevices: true
+EOF
+        ok "Appended allowLoopDevices: true to partition.conf"
+    fi
+
+    # Verify
+    if grep -qE '^allowLoopDevices[[:space:]]*:[[:space:]]*true' "$PARTITION_CONF"; then
+        ok "allowLoopDevices: true confirmed active in $PARTITION_CONF"
+    else
+        warn "Could not confirm allowLoopDevices: true in $PARTITION_CONF — please check manually"
+    fi
 else
-    warn "Missing shellprocess module configs:"
-    for f in "${MISSING[@]}"; do
-        warn "    $f"
-    done
-    warn "Calamares may fail to initialize. Try: apt-get install --reinstall calamares-settings-debian"
+    warn "$PARTITION_CONF not found — loop device support cannot be enabled"
 fi
 
-# ── Stage 7: post-install (icon + launcher) ───────────────────────────────
+# ── Stage 8: post-install (icon + launcher) ───────────────────────────────
 info "Running post-install steps..."
 
 mkdir -p /usr/share/icons/
@@ -228,10 +260,10 @@ cat <<EOF
    │  Launch:    Applications menu → "Install gLiTcH Linux"   │
    │  Or run:    sudo calamares                               │
    │                                                          │
-   │  To install to a loop device, ensure partition.conf has: │
-   │      allowLoopDevices: true                              │
-   │  Then:    sudo losetup -fP /path/to/disk.img             │
-   │           sudo calamares                                 │
+   │  To install to a loop device:                            │
+   │      sudo losetup -fP /path/to/disk.img                  │
+   │      sudo calamares                                      │
+   │   (loop device support is now enabled in partition.conf) │
    └──────────────────────────────────────────────────────────┘
 
 EOF
