@@ -1,0 +1,12 @@
+#/bin/bash
+
+sudo apt update && sudo apt install -y calamares calamares-settings-debian xinit
+cd /tmp
+sudo rm -rf calamares
+wget https://glitchlinux.wtf/FILES/Glitch-Calamares/calamares-glitch-13.zip
+unzip calamares-glitch-13.zip
+sudo cp -rf calamares/ /etc/
+sudo rm -f /usr/share/applications/calamares-install-debian.desktop
+sudo cp /tmp/calamares-install-glitch.desktop /usr/share/applications/calamares-install-glitch.desktop
+sudo calamares &
+exit
