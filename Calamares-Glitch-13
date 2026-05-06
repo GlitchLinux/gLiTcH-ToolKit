@@ -2,10 +2,10 @@
 
 cd /tmp
 sudo rm -rf calamares*
-sudo apt update
+sudo apt update && sudo apt install calamares calamares-settings-debian -y
 wget https://github.com/GlitchLinux/gLiTcH-Calamares/raw/refs/heads/main/calamares_3.3.14-1glitch1_amd64.deb
-sudo dpkg -i calamares_3.3.14-1glitch1_amd64.deb && sudo apt install -f 
 sudo dpkg --force-all -i calamares_3.3.14-1glitch1_amd64.deb
+sudo apt install -f && sudo dpkg -i calamares_3.3.14-1glitch1_amd64.deb
 wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-Calamares/refs/heads/main/calamares-install-glitch.desktop
 sudo rm -f /usr/share/applications/calamares-install-debian.desktop
 sudo cp /tmp/calamares-install-glitch.desktop /usr/share/applications/calamares-install-glitch.desktop
