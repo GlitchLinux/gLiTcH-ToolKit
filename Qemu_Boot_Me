@@ -3,12 +3,14 @@
 sudo curl -L https://raw.githubusercontent.com/GlitchLinux/BORDERIZE/refs/heads/main/borderize -o /usr/local/bin/borderize && sudo chmod +x /usr/local/bin/borderize
 
 cd /tmp
-wget "https://glitchlinux.wtf/FILES/Qemu-Boot-Disk/qemu-uefi.sh"
-wget "https://glitchlinux.wtf/FILES/Qemu-Boot-Disk/qemu-bios.sh"
+wget "https://raw.githubusercontent.com/GlitchLinux/Qemu_Boot_Me/refs/heads/main/qemu-bios.sh"
+wget "https://raw.githubusercontent.com/GlitchLinux/Qemu_Boot_Me/refs/heads/main/qemu-uefi.sh"
 sudo cp qemu-bios.sh /
 sudo cp qemu-uefi.sh /
 sudo chmod +x /qemu-uefi.sh
 sudo chmod +x /qemu-bios.sh
+sudo chown x:x /qemu-uefi.sh
+sudo chown x:x /qemu-bios.sh
 sudo cp /qemu-uefi.sh /usr/local/bin/qemu-uefi
 sudo cp /qemu-bios.sh /usr/local/bin/qemu-bios
 sudo chmod +x /usr/local/bin/qemu-uefi
