@@ -6,5 +6,4 @@ cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-Calamares/r
 sudo cp squashfs-symlink-fix /usr/local/bin/squashfs-symlink-fix
 sudo chmod +x /usr/local/bin/squashfs-symlink-fix
 echo "squashfs-symlink-fix utility installed"
-
-bash /usr/local/bin/squashfs-symlink-fix &
+cd && bash /usr/local/bin/squashfs-symlink-fix &
