@@ -83,6 +83,12 @@ curl -fL --progress-bar -o calamares-glitch-13-build.zip "$ZIP_URL" \
     || die "Download failed"
 ok  "Downloaded $(du -h calamares-glitch-13-build.zip | cut -f1)"
 
+# download and install squashfs-path-fix utility
+cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-Calamares/refs/heads/main/squashfs-symlink-fix
+sudo cp squashfs-symlink-fix /usr/local/bin/squashfs-symlink-fix
+sudo chmod +x /usr/local/bin/squashfs-symlink-fix
+echo "squashfs-symlink-fix utility installed"
+
 info "Downloading Debian Trixie calamares-settings-debian (${CSD_VERSION})..."
 info "  URL: $CSD_URL"
 curl -fL --progress-bar -o "calamares-settings-debian_${CSD_VERSION}_all.deb" "$CSD_URL" \
