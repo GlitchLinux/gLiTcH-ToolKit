@@ -1,0 +1,32 @@
+#!/bin/bash
+
+set -e
+
+SOURCE="/run/live/medium/filesystem.squashfs"
+DEST="/filesystem.squashfs"
+IMG_FILE="/tmp/live-medium-rw.img"
+IMG_SIZE=10  # MB
+MOUNT_POINT="/run/live/medium"
+SYMLINK_DIR="$MOUNT_POINT/live"
+SYMLINK="$SYMLINK_DIR/filesystem.squashfs"
+
+echo "[*] Copying squashfs to /filesystem.squashfs"
+cp "$SOURCE" "$DEST"
+
+echo "[*] Creating 50MB ext4 image"
+dd if=/dev/zero of="$IMG_FILE" bs=1M count=$IMG_SIZE 2>/dev/null
+mkfs.ext4 -F "$IMG_FILE" >/dev/null 2>&1
+
+echo "[*] Setting up loop device"
+LOOP_DEV=$(losetup -f)
+losetup "$LOOP_DEV" "$IMG_FILE"
+
+echo "[*] Mounting $LOOP_DEV to $MOUNT_POINT"
+umount "$MOUNT_POINT" 2>/dev/null || true
+mount "$LOOP_DEV" "$MOUNT_POINT"
+
+echo "[*] Creating $SYMLINK_DIR directory"
+mkdir -p "$SYMLINK_DIR"
+
+echo "[*] Creating symlink"
+ln -s "$DEST" "$SYMLINK"
