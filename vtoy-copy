@@ -1,0 +1,77 @@
+#!/bin/bash
+# vtoy-copy - Copy a .vtoy file to ext4 with guaranteed contiguous allocation
+# Usage: sudo bash vtoy-copy.sh
+
+RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[1;33m'; CYN='\033[0;36m'; RST='\033[0m'
+
+echo -e "${CYN}"
+echo "  vtoy-copy"
+echo "  Copies .vtoy disk images to ext4 with 1-extent contiguous write"
+echo -e "${RST}"
+
+[ "$EUID" -ne 0 ] && echo -e "${RED}  Error: must run as root (sudo)${RST}" && exit 1
+
+# Source file
+read -p "  Source .vtoy file: " SOURCE
+SOURCE="${SOURCE/#\~/$HOME}"
+
+[ ! -f "$SOURCE" ] && echo -e "${RED}  Error: file not found: $SOURCE${RST}" && exit 1
+
+FILENAME=$(basename "$SOURCE")
+SIZE=$(stat -c%s "$SOURCE")
+SIZE_H=$(du -h "$SOURCE" | cut -f1)
+
+echo -e "  File:   ${YLW}$FILENAME${RST} ($SIZE_H)"
+echo ""
+
+# Destination
+read -p "  Destination directory (e.g. /mnt/gdisk/boot/grub/images/): " DESTDIR
+DESTDIR="${DESTDIR/#\~/$HOME}"
+DESTDIR="${DESTDIR%/}"
+
+[ ! -d "$DESTDIR" ] && echo -e "${RED}  Error: directory not found: $DESTDIR${RST}" && exit 1
+
+DEST="$DESTDIR/$FILENAME"
+
+# Check destination filesystem
+DEST_FS=$(stat -f -c%T "$DESTDIR" 2>/dev/null)
+echo -e "  Destination filesystem: ${YLW}${DEST_FS}${RST}"
+
+# Warn if overwriting
+if [ -f "$DEST" ]; then
+    echo -e "  ${YLW}Warning: $DEST already exists - will overwrite${RST}"
+    read -p "  Continue? [y/N]: " CONFIRM
+    [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "  Aborted."; exit 0; }
+    rm -f "$DEST"
+fi
+
+# Check free space
+FREE=$(df -k "$DESTDIR" | awk 'NR==2{print $4*1024}')
+if [ "$FREE" -lt "$SIZE" ]; then
+    echo -e "${RED}  Error: not enough space. Need $SIZE_H, have $(df -h $DESTDIR | awk 'NR==2{print $4}')${RST}"
+    exit 1
+fi
+
+echo ""
+echo -e "  Writing ${YLW}$FILENAME${RST} -> ${YLW}$DEST${RST} ..."
+
+# fallocate reserves a contiguous block run FIRST, then dd writes into it
+# This is what prevents fragmentation on ext4
+fallocate -l "$SIZE" "$DEST"
+dd if="$SOURCE" of="$DEST" conv=notrunc bs=4M status=progress 2>&1
+echo ""
+
+# Verify fragmentation
+EXTENTS=$(filefrag "$DEST" 2>/dev/null | grep -oP '\d+ extent')
+echo -e "  Fragmentation check: ${GRN}${EXTENTS}${RST}"
+
+if echo "$EXTENTS" | grep -q "^1 extent"; then
+    echo -e "  ${GRN}Perfect - 1 extent, vdiskchain will boot this correctly.${RST}"
+else
+    echo -e "  ${YLW}Warning: more than 1 extent. May still work but not ideal.${RST}"
+    echo -e "  ${YLW}Try running on a less full partition or defragment first.${RST}"
+fi
+
+echo ""
+echo -e "  Done. ${YLW}$FILENAME${RST} is ready to boot via vdiskchain."
+echo ""
