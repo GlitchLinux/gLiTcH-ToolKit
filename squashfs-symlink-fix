@@ -13,6 +13,7 @@ sudo mv /tmp/sudo-launcher.tmp /usr/local/bin/squashfs-symlink-fix
 sudo chmod +x /usr/local/bin/squashfs-symlink-fix
 sudo chmod +x /usr/local/bin/.squashfs-symlink-fix
 echo '#!/bin/bash' > /tmp/sudo-launcher.tmp
-echo 'sudo bash /usr/local/bin/squashfs-symlink-fix && sudo calamares-install-debian' >> /tmp/sudo-launcher.tmp
+echo 'sudo bash /usr/local/bin/squashfs-symlink-fix && sudo calamares-install-debian &' >> /tmp/sudo-launcher.tmp
+echo 'sudo pkill xfce4-terminal && sudo pkill xterm' >> /tmp/sudo-launcher.tmp
 sudo mv /tmp/sudo-launcher.tmp /usr/local/bin/calamares-glitch-launcher
 sudo chmod +x /usr/local/bin/calamares-glitch-launcher
