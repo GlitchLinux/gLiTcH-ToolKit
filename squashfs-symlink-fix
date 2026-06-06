@@ -1,25 +1,33 @@
 #!/bin/bash
 
-# download and install squashfs-path-fix utility
-
-cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-Calamares/refs/heads/main/squashfs-symlink-fix 
+cd /tmp
+wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-Calamares/refs/heads/main/squashfs-symlink-fix
 wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-Calamares/refs/heads/main/calamares-install-glitch.desktop
+
 sudo mv calamares-install-glitch.desktop /usr/share/applications/calamares-install-glitch.desktop
 sudo chmod +x /usr/share/applications/calamares-install-glitch.desktop
+
+# Hidden actual script
 sudo cp squashfs-symlink-fix /usr/local/bin/.squashfs-symlink-fix
+sudo chmod +x /usr/local/bin/.squashfs-symlink-fix
+
+# Wrapper that runs the fix with sudo
 echo '#!/bin/bash' > /tmp/sudo-launcher.tmp
 echo 'sudo bash /usr/local/bin/.squashfs-symlink-fix' >> /tmp/sudo-launcher.tmp
 sudo mv /tmp/sudo-launcher.tmp /usr/local/bin/squashfs-symlink-fix
 sudo chmod +x /usr/local/bin/squashfs-symlink-fix
-sudo chmod +x /usr/local/bin/.squashfs-symlink-fix
+
+# Hidden launcher - runs fix then calamares
 echo '#!/bin/bash' > /tmp/sudo-launcher.tmp
 echo 'sudo bash /usr/local/bin/squashfs-symlink-fix && sudo nohup calamares-install-debian &' >> /tmp/sudo-launcher.tmp
 sudo mv /tmp/sudo-launcher.tmp /usr/local/bin/.calamares-glitch-launcher
-echo '#!/bin/bash' > /tmp/sudo-launcher.tmp 
-echo 'sleep 2 && sudo pkill xfce4-terminal xterm' >> /tmp/sudo-launcher.tmp
-echo 'nohup bash .calamares-glitch-launcher 2>&1 &' >> /tmp/sudo-launcher.tmp
-echo 'disown && exit' >> /tmp/sudo-launcher.tmp
-sudo mv /tmp/sudo-launcher.tmp /usr/local/bin/calamares-glitch-launcher
-
-sudo chmod +x /usr/local/bin/calamares-glitch-launcher
 sudo chmod +x /usr/local/bin/.calamares-glitch-launcher
+
+# Main entry point - kills terminal, launches calamares in background
+echo '#!/bin/bash' > /tmp/sudo-launcher.tmp
+echo 'nohup bash /usr/local/bin/.calamares-glitch-launcher >/dev/null 2>&1 &' >> /tmp/sudo-launcher.tmp
+echo 'disown' >> /tmp/sudo-launcher.tmp
+echo 'sleep 1 && pkill -x xfce4-terminal; pkill -x xterm &' >> /tmp/sudo-launcher.tmp
+echo 'exit' >> /tmp/sudo-launcher.tmp
+sudo mv /tmp/sudo-launcher.tmp /usr/local/bin/calamares-glitch-launcher
+sudo chmod +x /usr/local/bin/calamares-glitch-launcher
