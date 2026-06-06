@@ -5,17 +5,57 @@
 
 set -e
 
-IMAGE_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-ext4-100MB.img"
-IMAGE_FILE="/tmp/Gdisk-ext4-100MB.img"
-DOWNLOAD_DIR="/tmp"
-
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${GREEN}=== Disk Image Writer ===${NC}\n"
+
+# Step 0: Select Gdisk version
+echo -e "${BLUE}Select Gdisk-ext4 version:${NC}\n"
+echo "1) Minimal - Bootloaders & Gdisk Ventoy - 100MB"
+echo "2) Regular - Minimal + Glitch Linux Live Boot - 3.2GB"
+echo "3) Prepper - Regular + WinPE & IPXE Framework - 7.8GB"
+echo ""
+
+read -p "Enter selection (1-3): " VERSION_SELECT
+
+case $VERSION_SELECT in
+    1)
+        IMAGE_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-ext4-100MB.img"
+        IMAGE_FILE="/tmp/Gdisk-ext4-100MB.img"
+        IMAGE_NAME="Gdisk-ext4-100MB.img"
+        CLEANUP=false
+        echo -e "${GREEN}Selected: Minimal (100MB)${NC}\n"
+        ;;
+    2)
+        IMAGE_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-ext4-3.2GB.img"
+        IMAGE_FILE="$HOME/.temp/Gdisk-ext4-3.2GB.img"
+        IMAGE_NAME="Gdisk-ext4-3.2GB.img"
+        CLEANUP=true
+        echo -e "${GREEN}Selected: Regular (3.2GB)${NC}\n"
+        ;;
+    3)
+        IMAGE_URL="https://glitchlinux.wtf/FILES/Virtual-Disks/Gdisk-Ext4-Micro-Line-7.8GB.img"
+        IMAGE_FILE="$HOME/.temp/Gdisk-Ext4-Micro-Line-7.8GB.img"
+        IMAGE_NAME="Gdisk-Ext4-Micro-Line-7.8GB.img"
+        CLEANUP=true
+        echo -e "${GREEN}Selected: Prepper (7.8GB)${NC}\n"
+        ;;
+    *)
+        echo -e "${RED}Invalid selection${NC}"
+        exit 1
+        ;;
+esac
+
+# Create .temp directory if needed for larger files
+if [ "$CLEANUP" = true ] && [ ! -d "$HOME/.temp" ]; then
+    mkdir -p "$HOME/.temp"
+    echo -e "${YELLOW}Created directory: $HOME/.temp${NC}\n"
+fi
 
 # Step 1: Download image
 echo -e "${YELLOW}[1/4]${NC} Downloading image file..."
@@ -99,6 +139,14 @@ if [ $RESULT -eq 0 ]; then
     echo "Syncing filesystem..."
     sudo sync
     echo -e "${GREEN}Done!${NC}"
+    
+    # Cleanup larger image files
+    if [ "$CLEANUP" = true ] && [ -f "$IMAGE_FILE" ]; then
+        echo ""
+        echo -e "${YELLOW}Cleaning up image file...${NC}"
+        rm -f "$IMAGE_FILE"
+        echo -e "${GREEN}Deleted: $IMAGE_FILE${NC}"
+    fi
 else
     echo -e "\n${RED}Error writing image (exit code: $RESULT)${NC}"
     exit $RESULT
