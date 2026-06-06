@@ -18,7 +18,7 @@ echo -e "${GREEN}=== Disk Image Writer ===${NC}\n"
 echo -e "${BLUE}Select Gdisk-ext4 version:${NC}\n"
 echo "1) Minimal - Bootloaders & Gdisk Ventoy - 100MB"
 echo "2) Regular - Minimal + Glitch Linux Live Boot - 3.2GB"
-echo "3) Prepper - Regular + WinPE & IPXE Framework - 7.8GB"
+echo "3) Prepper - Regular + WinPE & IPXE Framework - 6GB"
 echo ""
 
 read -p "Enter selection (1-3): " VERSION_SELECT
