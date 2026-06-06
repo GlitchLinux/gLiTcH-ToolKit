@@ -54,24 +54,41 @@ fi
 
 echo ""
 echo -e "  Writing ${YLW}$FILENAME${RST} -> ${YLW}$DEST${RST} ..."
+echo ""
 
-# fallocate reserves a contiguous block run FIRST, then dd writes into it
-# This is what prevents fragmentation on ext4
-fallocate -l "$SIZE" "$DEST"
+# Try fallocate first - pre-reserves contiguous blocks before writing
+# Falls back to direct dd if fallocate unsupported (e.g. fuse/network mounts)
+FALLOCATE_OK=0
+if fallocate -l "$SIZE" "$DEST" 2>/dev/null; then
+    FALLOCATE_OK=1
+    echo -e "  ${GRN}fallocate OK - blocks pre-reserved contiguously${RST}"
+else
+    echo -e "  ${YLW}fallocate not supported on this mount - writing directly${RST}"
+    echo -e "  ${YLW}(extent count may be >1, check result below)${RST}"
+fi
+
+echo ""
 dd if="$SOURCE" of="$DEST" conv=notrunc bs=4M status=progress 2>&1
 echo ""
 
 # Verify fragmentation
 EXTENTS=$(filefrag "$DEST" 2>/dev/null | grep -oP '\d+ extent')
-echo -e "  Fragmentation check: ${GRN}${EXTENTS}${RST}"
+echo -e "  Fragmentation: ${YLW}${EXTENTS}${RST}"
 
 if echo "$EXTENTS" | grep -q "^1 extent"; then
-    echo -e "  ${GRN}Perfect - 1 extent, vdiskchain will boot this correctly.${RST}"
+    echo -e "  ${GRN}1 extent - vdiskchain will boot this correctly.${RST}"
 else
-    echo -e "  ${YLW}Warning: more than 1 extent. May still work but not ideal.${RST}"
-    echo -e "  ${YLW}Try running on a less full partition or defragment first.${RST}"
+    EXTENT_NUM=$(echo "$EXTENTS" | grep -oP '^\d+')
+    echo ""
+    echo -e "  ${YLW}Warning: $EXTENTS found.${RST}"
+    echo -e "  ${YLW}This may cause vdiskchain to stall on ext4.${RST}"
+    echo ""
+    echo -e "  To fix, remount the partition directly (not via file manager):"
+    echo -e "    ${CYN}sudo mount /dev/sdXN /mnt/target${RST}"
+    echo -e "    ${CYN}sudo bash vtoy-copy.sh${RST}"
+    echo -e "  Direct block device mounts support fallocate correctly."
 fi
 
 echo ""
-echo -e "  Done. ${YLW}$FILENAME${RST} is ready to boot via vdiskchain."
+echo -e "  Done. ${YLW}$FILENAME${RST} written to ${YLW}$DEST${RST}"
 echo ""
