@@ -2,7 +2,10 @@
 
 # download and install squashfs-path-fix utility
 
-cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-Calamares/refs/heads/main/squashfs-symlink-fix
+cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-Calamares/refs/heads/main/squashfs-symlink-fix 
+wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-Calamares/refs/heads/main/calamares-install-glitch.desktop
+sudo mv calamares-install-glitch.desktop /usr/share/applications/calamares-install-glitch.desktop
+sudo chmod +x /usr/share/applications/calamares-install-glitch.desktop
 sudo cp squashfs-symlink-fix /usr/local/bin/squashfs-symlink-fix
 sudo chmod +x /usr/local/bin/squashfs-symlink-fix
 echo "squashfs-symlink-fix utility installed"
