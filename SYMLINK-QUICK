@@ -1,0 +1,73 @@
+#!/bin/bash
+
+echo "Select Task:"
+echo
+echo "1. Symlink file"
+echo "2. Symlink folder"
+echo "3. Delete symlink"
+echo
+
+read -p "Enter symlink action (1-3): " choice
+
+echo
+
+if [[ "$choice" == "1" ]]; then
+    echo "Create file symlink"
+
+    read -p "Enter path to source file: " source
+    read -p "Enter path to symlink target: " target
+
+    ln -s "$source" "$target"
+
+    if [[ $? -eq 0 ]]; then
+        echo
+        echo "Symlink created successfully!"
+        echo "$target -> $source"
+    else
+        echo
+        echo "Failed to create symlink."
+    fi
+
+elif [[ "$choice" == "2" ]]; then
+    echo "Create folder symlink"
+
+    read -p "Enter path to source folder: " source
+    read -p "Enter path to symlink target: " target
+
+    ln -s "$source" "$target"
+
+    if [[ $? -eq 0 ]]; then
+        echo
+        echo "Symlink created successfully!"
+        echo "$target -> $source"
+    else
+        echo
+        echo "Failed to create symlink."
+    fi
+
+elif [[ "$choice" == "3" ]]; then
+    echo "Delete symlink"
+
+    read -p "Enter path to symlink: " symlink_path
+
+    # Check if it is actually a symlink
+    if [[ -L "$symlink_path" ]]; then
+        rm "$symlink_path"
+
+        if [[ $? -eq 0 ]]; then
+            echo
+            echo "Symlink removed successfully!"
+            echo "Original source remains untouched."
+        else
+            echo
+            echo "Failed to remove symlink."
+        fi
+    else
+        echo
+        echo "Error: This is not a symbolic link!"
+    fi
+
+else
+    echo "Invalid option!"
+    exit 1
+fi
