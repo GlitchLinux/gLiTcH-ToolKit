@@ -6,7 +6,13 @@ cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-Calamares/r
 wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-Calamares/refs/heads/main/calamares-install-glitch.desktop
 sudo mv calamares-install-glitch.desktop /usr/share/applications/calamares-install-glitch.desktop
 sudo chmod +x /usr/share/applications/calamares-install-glitch.desktop
-sudo cp squashfs-symlink-fix /usr/local/bin/squashfs-symlink-fix
+sudo cp squashfs-symlink-fix /usr/local/bin/.squashfs-symlink-fix
+echo '#!/bin/bash' > /tmp/sudo-launcher.tmp
+echo 'sudo bash /usr/local/bin/.squashfs-symlink-fix' >> /tmp/sudo-launcher.tmp
+sudo mv /tmp/sudo-launcher.tmp /usr/local/bin/squashfs-symlink-fix
 sudo chmod +x /usr/local/bin/squashfs-symlink-fix
-echo "squashfs-symlink-fix utility installed"
-cd && bash /usr/local/bin/squashfs-symlink-fix &
+sudo chmod +x /usr/local/bin/.squashfs-symlink-fix
+echo '#!/bin/bash' > /tmp/sudo-launcher.tmp
+echo 'sudo bash /usr/local/bin/squashfs-symlink-fix && sudo calamares-install-debian' >> /tmp/sudo-launcher.tmp
+sudo mv /tmp/sudo-launcher.tmp /usr/local/bin/calamares-glitch-launcher
+sudo chmod +x /usr/local/bin/calamares-glitch-launcher
