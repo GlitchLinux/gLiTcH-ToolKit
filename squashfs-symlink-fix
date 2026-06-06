@@ -13,6 +13,12 @@ sudo mv /tmp/sudo-launcher.tmp /usr/local/bin/squashfs-symlink-fix
 sudo chmod +x /usr/local/bin/squashfs-symlink-fix
 sudo chmod +x /usr/local/bin/.squashfs-symlink-fix
 echo '#!/bin/bash' > /tmp/sudo-launcher.tmp
-echo 'sudo bash /usr/local/bin/squashfs-symlink-fix && sudo calamares-install-debian' >> /tmp/sudo-launcher.tmp
-sudo mv /tmp/sudo-launcher.tmp /usr/local/bin/calamares-glitch-launcher
+echo 'sudo bash /usr/local/bin/squashfs-symlink-fix && sudo nohup calamares-install-debian &' >> /tmp/sudo-launcher.tmp
+sudo mv /tmp/sudo-launcher.tmp /usr/local/bin/.calamares-glitch-launcher
+"echo '#!/bin/bash' > /tmp/sudo-launcher.tmp" >> /usr/local/bin/calamares-glitch-launcher
+"echo 'sleep 2 && sudo pkill xfce4-terminal xterm' >> /tmp/sudo-launcher.tmp" >> /usr/local/bin/calamares-glitch-launcher
+"echo 'nohup calamares-glitch-launcher 2>&1 &' >> /tmp/sudo-launcher.tmp" >> /usr/local/bin/calamares-glitch-launcher
+"echo 'disown && exit' >> /tmp/sudo-launcher.tmp" >> /usr/local/bin/calamares-glitch-launcher
+
+
 sudo chmod +x /usr/local/bin/calamares-glitch-launcher
