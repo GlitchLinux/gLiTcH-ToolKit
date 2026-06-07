@@ -1,0 +1,8 @@
+#!/bin/bash
+
+nohup bash /usr/share/images/ksplash/Glitch-Wallpaper.sh >/dev/null 2>&1 &
+disown
+sleep 1
+sudo pkill -x xfce4-terminal
+sudo pkill -x xterm &
+exit
