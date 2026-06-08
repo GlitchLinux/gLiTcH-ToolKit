@@ -35,7 +35,7 @@ OWNER_FILE="$SCRIPT_DIR/.foldervault.owner"
 banner() {
     echo ""
     echo -e "${C}╔═════════════════════════════════════════╗${RST}"
-    echo -e "${C}║   ${W}${BOLD}FolderVault${RST}${DIM} v${VERSION}  gocryptfs v2${RST}       ${C}║${RST}"
+    echo -e "${C}║   ${W}${BOLD}FolderVault${RST}${DIM} v${VERSION}  gocryptfs v2${RST}        ${C}║${RST}"
     echo -e "${C}║   ${DIM}zero-sudo encrypted directory locker${RST}  ${C}║${RST}"
     echo -e "${C}╚═════════════════════════════════════════╝${RST}"
     echo ""
