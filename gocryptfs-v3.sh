@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # ╔═══════════════════════════════════════════════════════╗
-# ║              FolderVault  v3.0                        ║
+# ║              FolderVault  v3.1                        ║
 # ║       gocryptfs v2 - Zero-sudo Directory Locker       ║
 # ╠═══════════════════════════════════════════════════════╣
 # ║  - No sudo required for any operation                 ║
 # ║  - Vault owner gets full rwx control                  ║
-# ║  - Root/other users cannot see decrypted content      ║
+# ║  - Private mode: only owner sees decrypted content    ║
+# ║  - Shared mode:  Apache/services can read (web serve) ║
 # ║  - Works on any user-accessible or root-mounted disk  ║
 # ║  - Passphrase set on first run, changeable later      ║
 # ╚═══════════════════════════════════════════════════════╝
@@ -13,7 +14,7 @@
 set -euo pipefail
 
 # ── Version ───────────────────────────────────────
-VERSION="3.0"
+VERSION="3.1"
 
 # ── Colors ────────────────────────────────────────
 R='\033[0;31m'; G='\033[0;32m'; Y='\033[1;33m'
@@ -30,12 +31,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CIPHER_DIR="$SCRIPT_DIR/.foldervault.cipher"
 PLAIN_DIR="$SCRIPT_DIR/foldervault"
 OWNER_FILE="$SCRIPT_DIR/.foldervault.owner"
+MODE_FILE="$SCRIPT_DIR/.foldervault.mode"
+
+# ── Mount mode ────────────────────────────────────
+# "private" = owner-only (default, FUSE owner_only)
+# "shared"  = allow_other (Apache/www-data can read)
+# Persisted in .foldervault.mode, overridden by --shared / --private flags
+MOUNT_MODE="private"
+if [[ -f "$MODE_FILE" ]]; then
+    MOUNT_MODE="$(cat "$MODE_FILE" 2>/dev/null)" || MOUNT_MODE="private"
+fi
 
 # ── Helpers ───────────────────────────────────────
 banner() {
     echo ""
     echo -e "${C}╔═════════════════════════════════════════╗${RST}"
-    echo -e "${C}║   ${W}${BOLD}FolderVault${RST}${DIM} v${VERSION}  gocryptfs v2${RST}        ${C}║${RST}"
+    echo -e "${C}║   ${W}${BOLD}FolderVault${RST}${DIM} v${VERSION}  gocryptfs v2${RST}    ${C}║${RST}"
     echo -e "${C}║   ${DIM}zero-sudo encrypted directory locker${RST}  ${C}║${RST}"
     echo -e "${C}╚═════════════════════════════════════════╝${RST}"
     echo ""
@@ -76,6 +87,17 @@ check_deps() {
     if [[ -n "$major" ]] && (( major < 2 )); then
         warn "gocryptfs ${gcver} detected - v2.0+ recommended for best security"
     fi
+}
+
+# ── Check if /etc/fuse.conf allows -allow_other ───
+fuse_allows_other() {
+    grep -q '^user_allow_other' /etc/fuse.conf 2>/dev/null
+}
+
+# ── Persist mount mode ────────────────────────────
+save_mode() {
+    echo "$MOUNT_MODE" > "$MODE_FILE" 2>/dev/null
+    chmod 600 "$MODE_FILE" 2>/dev/null
 }
 
 # ── Refuse to run as root ─────────────────────────
@@ -159,46 +181,64 @@ do_init() {
 }
 
 # ── Unlock: mount with passphrase ─────────────────
-# FUSE mounts already show files owned by the mounting user (kernel behaviour).
-# -owner_only is gocryptfs default: only the mounting UID can access the mount.
-# We do NOT use -force_owner because it implicitly enables -allow_other,
-# which requires 'user_allow_other' in /etc/fuse.conf (needs root to set).
-#
-# Result: normal user mounts, owns everything, root/others see nothing.
+# Two modes:
+#   private (default) - FUSE owner_only, only mounting user can access
+#   shared            - FUSE allow_other, Apache/www-data can read
+#                       Requires 'user_allow_other' in /etc/fuse.conf
 do_unlock() {
     local pass="$1"
     local mount_err
 
     mkdir -p "$PLAIN_DIR"
-    chmod 700 "$PLAIN_DIR"
 
-    # Mount with minimal safe flags - no -force_owner, no -allow_other
+    # Build gocryptfs flags
+    local gflags=(-passfile /dev/stdin -nosuid -nodev -quiet)
+
+    if [[ "$MOUNT_MODE" == "shared" ]]; then
+        # Verify fuse.conf allows it
+        if ! fuse_allows_other; then
+            die "Shared mode requires 'user_allow_other' in /etc/fuse.conf
+      One-time fix: echo 'user_allow_other' | sudo tee -a /etc/fuse.conf"
+        fi
+        gflags+=(-allow_other)
+        # Mount dir needs to be readable by www-data
+        chmod 755 "$PLAIN_DIR"
+    else
+        # Private: owner-only
+        chmod 700 "$PLAIN_DIR"
+    fi
+
+    # Mount
     mount_err="$(echo "$pass" | gocryptfs \
-        -passfile /dev/stdin \
-        -nosuid \
-        -nodev \
-        -quiet \
+        "${gflags[@]}" \
         "$CIPHER_DIR" "$PLAIN_DIR" 2>&1)" \
         || {
             rmdir "$PLAIN_DIR" 2>/dev/null || true
-            # Check for specific error conditions
             if [[ "$mount_err" == *"allow_other"* ]]; then
-                warn "FUSE allow_other issue detected (should not happen without -force_owner)"
-                warn "Error: ${mount_err}"
-            elif [[ "$mount_err" == *"Password"* || "$mount_err" == *"password"* ]]; then
-                : # Wrong password - let caller handle silently
+                die "FUSE allow_other rejected. Fix:
+      echo 'user_allow_other' | sudo tee -a /etc/fuse.conf"
+            elif [[ "$mount_err" == *"Password"* || "$mount_err" == *"password"* || "$mount_err" == *"decrypt"* ]]; then
+                : # Wrong password - let caller handle
             elif [[ -n "$mount_err" ]]; then
                 warn "Mount error: ${mount_err}"
             fi
             return 1
         }
 
-    # Verify the mount actually works for this user
+    # Verify mount is accessible
     if ! ls "$PLAIN_DIR" &>/dev/null; then
         fusermount -u "$PLAIN_DIR" 2>/dev/null || true
         rmdir "$PLAIN_DIR" 2>/dev/null || true
         warn "Mount succeeded but directory not accessible"
         return 1
+    fi
+
+    # For shared mode, ensure the parent path is also traversable
+    if [[ "$MOUNT_MODE" == "shared" ]]; then
+        # The mountpoint itself needs r+x for www-data to list/read files
+        # gocryptfs with -allow_other handles this at the FUSE level
+        # but the *directory entry* on the underlying fs also needs o+rx
+        chmod 755 "$PLAIN_DIR"
     fi
 
     return 0
@@ -242,6 +282,13 @@ show_info() {
     echo -e "  Cipher dir:  ${DIM}${CIPHER_DIR}${RST}"
     echo -e "  Mount point: ${DIM}${PLAIN_DIR}${RST}"
     echo -e "  Mounted:     $(is_mounted && echo -e "${G}yes${RST}" || echo -e "${R}no${RST}")"
+
+    # Mount mode
+    if [[ "$MOUNT_MODE" == "shared" ]]; then
+        echo -e "  Mode:        ${Y}shared${RST} (Apache/services can read)"
+    else
+        echo -e "  Mode:        ${G}private${RST} (owner-only)"
+    fi
 
     # Cipher dir size
     local cipher_size
@@ -321,10 +368,19 @@ export_vault() {
 # ── Settings menu ─────────────────────────────────
 settings_menu() {
     while true; do
+        # Build mode label
+        local mode_label
+        if [[ "$MOUNT_MODE" == "shared" ]]; then
+            mode_label="${Y}shared${RST} -> switch to private"
+        else
+            mode_label="${G}private${RST} -> switch to shared"
+        fi
+
         echo ""
         echo -e "${B}${BOLD}  ┌── Vault Settings ──────────────────────┐${RST}"
         echo -e "${B}${BOLD}  |${RST}                                         ${B}${BOLD}|${RST}"
         echo -e "${B}${BOLD}  |${RST}  ${W}P${RST}  Change passphrase                 ${B}${BOLD}|${RST}"
+        echo -e "${B}${BOLD}  |${RST}  ${W}M${RST}  Toggle mode (${mode_label})  ${B}${BOLD}${RST}"
         echo -e "${B}${BOLD}  |${RST}  ${W}I${RST}  Vault info                        ${B}${BOLD}|${RST}"
         echo -e "${B}${BOLD}  |${RST}  ${W}E${RST}  Export encrypted backup            ${B}${BOLD}|${RST}"
         echo -e "${B}${BOLD}  |${RST}  ${R}D${RST}  Destroy vault (permanent)          ${B}${BOLD}|${RST}"
@@ -342,6 +398,51 @@ settings_menu() {
                     do_lock
                 fi
                 change_passphrase
+                ;;
+            M)
+                if [[ "$MOUNT_MODE" == "shared" ]]; then
+                    MOUNT_MODE="private"
+                    save_mode
+                    ok "Mode set to PRIVATE (owner-only)."
+                    if is_mounted; then
+                        warn "Remount required for mode change to take effect."
+                        prompt "Remount now? [Y/n]:"
+                        read -r remount_yn
+                        if [[ "${remount_yn^^}" != "N" ]]; then
+                            info "Locking vault..."
+                            do_lock
+                            echo ""
+                            read_pass remount_pass "Passphrase to remount"
+                            do_unlock "$remount_pass" \
+                                && ok "Vault remounted in private mode." \
+                                || warn "Remount failed. Vault is locked - unlock manually."
+                        fi
+                    fi
+                else
+                    # Switching to shared - verify fuse.conf first
+                    if ! fuse_allows_other; then
+                        warn "Shared mode requires 'user_allow_other' in /etc/fuse.conf"
+                        info "One-time fix: echo 'user_allow_other' | sudo tee -a /etc/fuse.conf"
+                    else
+                        MOUNT_MODE="shared"
+                        save_mode
+                        ok "Mode set to SHARED (Apache/services can read)."
+                        if is_mounted; then
+                            warn "Remount required for mode change to take effect."
+                            prompt "Remount now? [Y/n]:"
+                            read -r remount_yn
+                            if [[ "${remount_yn^^}" != "N" ]]; then
+                                info "Locking vault..."
+                                do_lock
+                                echo ""
+                                read_pass remount_pass "Passphrase to remount"
+                                do_unlock "$remount_pass" \
+                                    && ok "Vault remounted in shared mode." \
+                                    || warn "Remount failed. Vault is locked - unlock manually."
+                            fi
+                        fi
+                    fi
+                fi
                 ;;
             I)
                 show_info
@@ -362,7 +463,7 @@ settings_menu() {
                         fusermount -u "$PLAIN_DIR" 2>/dev/null || true
                         rmdir "$PLAIN_DIR" 2>/dev/null || true
                     fi
-                    rm -rf "$CIPHER_DIR" "$PLAIN_DIR" "$OWNER_FILE"
+                    rm -rf "$CIPHER_DIR" "$PLAIN_DIR" "$OWNER_FILE" "$MODE_FILE"
                     ok "Vault destroyed."
                     exit 0
                 else
@@ -383,7 +484,7 @@ settings_menu() {
 #  MAIN
 # ══════════════════════════════════════════════════
 main() {
-    # Handle --help before anything else
+    # Handle flags before anything else
     case "${1:-}" in
         -h|--help)
             banner
@@ -391,23 +492,37 @@ main() {
             echo ""
             echo -e "  ${W}Options:${RST}"
             echo -e "    ${DIM}(none)${RST}       Interactive mode (create/unlock/lock/settings)"
+            echo -e "    ${W}--shared${RST}     Unlock in shared mode (Apache/www-data can read)"
+            echo -e "    ${W}--private${RST}    Unlock in private mode (owner-only, default)"
             echo -e "    ${W}--lock${RST}       Lock vault and exit"
             echo -e "    ${W}--status${RST}     Show vault status"
             echo -e "    ${W}--diag${RST}       Run diagnostics"
             echo -e "    ${W}-h, --help${RST}   Show this help"
             echo ""
-            echo -e "  ${W}How it works:${RST}"
-            echo -e "    First run creates an encrypted vault in the current directory."
-            echo -e "    Subsequent runs toggle lock/unlock. No sudo needed."
-            echo -e "    Only the creating user can access decrypted files."
-            echo -e "    Root and other users see nothing (FUSE owner-only mount)."
+            echo -e "  ${W}Mount modes:${RST}"
+            echo -e "    ${G}private${RST}  Only the vault owner can see decrypted files."
+            echo -e "             Root and other users see nothing (FUSE owner-only)."
+            echo -e "    ${Y}shared${RST}   Apache/www-data and other system services can read"
+            echo -e "             the decrypted mountpoint. Use for web-served vaults."
+            echo -e "             Requires 'user_allow_other' in /etc/fuse.conf."
             echo ""
             echo -e "  ${W}Files created:${RST}"
             echo -e "    ${DIM}.foldervault.cipher/${RST}   Encrypted data (always on disk)"
             echo -e "    ${DIM}.foldervault.owner${RST}     Owner UID tracking"
+            echo -e "    ${DIM}.foldervault.mode${RST}      Mount mode (private/shared)"
             echo -e "    ${DIM}foldervault/${RST}           Decrypted mountpoint (only when unlocked)"
             echo ""
             exit 0
+            ;;
+        --shared)
+            MOUNT_MODE="shared"
+            save_mode 2>/dev/null || true
+            shift
+            ;;
+        --private)
+            MOUNT_MODE="private"
+            save_mode 2>/dev/null || true
+            shift
             ;;
         --lock)
             banner
@@ -425,7 +540,7 @@ main() {
             if ! $has_cipher; then
                 echo -e "  ${DIM}No vault in this directory.${RST}"
             elif is_mounted; then
-                echo -e "  ${G}${BOLD}Unlocked${RST}"
+                echo -e "  ${G}${BOLD}Unlocked${RST} (${MOUNT_MODE} mode)"
                 echo -e "  ${DIM}${PLAIN_DIR}${RST}"
             else
                 echo -e "  ${Y}${BOLD}Locked${RST}"
@@ -445,6 +560,7 @@ main() {
             echo -e "  /etc/fuse.conf user_allow_other: $(grep -q '^user_allow_other' /etc/fuse.conf 2>/dev/null && echo -e "${G}enabled${RST}" || echo -e "${DIM}disabled (not needed)${RST}")"
             echo -e "  Cipher dir:   $(test -d "$CIPHER_DIR" && echo "exists" || echo "none")"
             echo -e "  Mounted:      $(is_mounted && echo -e "${G}yes${RST}" || echo "no")"
+            echo -e "  Mount mode:   ${MOUNT_MODE}"
             if [[ -d "$CIPHER_DIR" ]]; then
                 echo -e "  Cipher owner: $(stat -c '%U:%G (%u:%g)' "$CIPHER_DIR" 2>/dev/null || echo "unknown")"
             fi
@@ -494,11 +610,17 @@ main() {
         echo -e "  Owner:     ${W}${VAULT_USER}${RST} (only you can access)"
         echo -e "  Vault:     ${PLAIN_DIR}"
         echo -e "  Sudo:      ${G}not required${RST}"
-        echo -e "  Root sees: ${R}nothing${RST} (FUSE owner-only mount)"
+        if [[ "$MOUNT_MODE" == "shared" ]]; then
+            echo -e "  Mode:      ${Y}shared${RST} (Apache/services can read)"
+        else
+            echo -e "  Mode:      ${G}private${RST} (owner-only)"
+            echo -e "  Root sees: ${R}nothing${RST} (FUSE owner-only mount)"
+        fi
         echo -e "${DIM}  ─────────────────────────────────────${RST}"
         echo ""
         echo -e "${DIM}  Add files to: ${PLAIN_DIR}${RST}"
         echo -e "${DIM}  Lock vault:   run this script again${RST}"
+        echo -e "${DIM}  Share via web: run with --shared flag${RST}"
         echo ""
         exit 0
     fi
@@ -518,6 +640,11 @@ main() {
             read_pass pass "Passphrase"
             if do_unlock "$pass"; then
                 ok "Vault unlocked."
+                if [[ "$MOUNT_MODE" == "shared" ]]; then
+                    info "Mode: ${Y}shared${RST} - Apache/services can read"
+                else
+                    info "Mode: ${G}private${RST} - owner-only"
+                fi
                 show_contents
                 echo -e "${DIM}  Lock again: run this script${RST}"
                 echo ""
@@ -537,6 +664,11 @@ main() {
     # ── CASE 3: Vault is UNLOCKED (mounted) ───────
     echo -e "  ${G}${BOLD}Vault is unlocked${RST}"
     echo -e "  ${DIM}${PLAIN_DIR}${RST}"
+    if [[ "$MOUNT_MODE" == "shared" ]]; then
+        echo -e "  Mode: ${Y}shared${RST} (Apache/services can read)"
+    else
+        echo -e "  Mode: ${G}private${RST} (owner-only)"
+    fi
     echo ""
     show_contents
     echo -e "  ${W}L${RST}  Lock vault"
