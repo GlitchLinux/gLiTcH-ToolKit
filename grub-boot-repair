@@ -1,0 +1,904 @@
+#!/bin/bash
+#═══════════════════════════════════════════════════════════════════════
+#  grub-repair  -  Freeform GRUB repair & surgery toolkit
+#
+#  A permissive companion to grub-multiboot-setup. Where the installer
+#  locks you into GPT/MBR/Repair use-cases, this tool does the opposite:
+#  it gives you decoupled, single-purpose repair jobs and TRUSTS you.
+#
+#  Design rules:
+#    - No 'set -e'. Jobs may fail; the tool keeps running. (Freedom to fail.)
+#    - Blocking checks become WARN + single confirm, then proceed.
+#    - Install target and boot directory are DECOUPLED. Write core.img to
+#      disk A while /boot/grub lives on disk B, a loop image, or you point
+#      at a UUID that is not even attached to this machine. On trust.
+#    - Every job returns to the menu. Nothing is locked to a layout.
+#
+#  Author:  gLiTcH Linux
+#  Date:    2026-06-08
+#
+#  Deps (best effort - missing tools only block the job that needs them):
+#    grub-pc-bin grub-efi-amd64-bin grub-common gdisk util-linux
+#    dosfstools parted e2fsprogs mtools efibootmgr
+#═══════════════════════════════════════════════════════════════════════
+
+# NOTE: intentionally NO 'set -e' / 'set -u'. This tool must survive a
+# failed job and drop back to the menu so the operator stays in control.
+set -o pipefail 2>/dev/null || true
+
+# ─── Colors ──────────────────────────────────────────────────────────
+RED='\033[1;31m'; GRN='\033[1;32m'; YLW='\033[1;33m'; CYN='\033[1;36m'
+MAG='\033[1;35m'; WHT='\033[1;37m'; DIM='\033[2m'; BLD='\033[1m'; RST='\033[0m'
+
+# ─── Borderize box (your utility, optional) ─────────────────────────
+box() {
+    if command -v borderize &>/dev/null; then
+        echo -e "$1" | borderize
+    else
+        echo -e "  ${BLD}$1${RST}"
+    fi
+}
+
+# ─── Output helpers ─────────────────────────────────────────────────
+die()   { echo -e "${RED}FATAL: $1${RST}"; cleanup; exit 1; }       # only for env-fatal
+err()   { echo -e "${RED}  x $1${RST}"; }
+warn()  { echo -e "${YLW}  ! $1${RST}"; }
+ok()    { echo -e "${GRN}  + $1${RST}"; }
+info()  { echo -e "${DIM}    $1${RST}"; }
+hr()    { echo -e "${DIM}  ----------------------------------------------------------${RST}"; }
+prompt(){ read -rp "$(echo -e "  ${CYN}>${RST} $1")" "$2"; }
+pause() { echo ""; read -rp "$(echo -e "  ${DIM}[Enter] to return to menu...${RST}")" _; }
+
+# Warn + single confirm, then proceed. Returns 0 on yes.
+confirm() {
+    echo -e "${YLW}  ! $1${RST}"
+    local _c=""
+    prompt "Proceed? [y/N]: " _c
+    [[ "${_c,,}" == "y" || "${_c,,}" == "yes" ]]
+}
+
+# Soft dependency: warn if a command is missing, let operator decide.
+need() {
+    local missing=()
+    local c
+    for c in "$@"; do command -v "$c" &>/dev/null || missing+=("$c"); done
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        warn "Missing tool(s): ${missing[*]}"
+        info "Install hint: apt install grub-pc-bin grub-efi-amd64-bin grub-common gdisk util-linux dosfstools parted e2fsprogs mtools efibootmgr"
+        confirm "Continue anyway? (the job may fail)" || return 1
+    fi
+    return 0
+}
+
+# ─── Loop / mount bookkeeping (auto-cleanup on exit) ────────────────
+declare -a TMP_MOUNTS=()
+declare -a OUR_LOOPS=()
+
+cleanup() {
+    local m
+    for m in "${TMP_MOUNTS[@]}"; do
+        mountpoint -q "$m" 2>/dev/null && umount "$m" 2>/dev/null
+        [[ -d "$m" ]] && rmdir "$m" 2>/dev/null
+    done
+    local l
+    for l in "${OUR_LOOPS[@]}"; do
+        losetup -d "$l" 2>/dev/null
+    done
+}
+trap cleanup EXIT
+
+# ─── Device helpers ─────────────────────────────────────────────────
+part_name() {
+    local disk="$1" num="$2"
+    if [[ "$disk" =~ [0-9]$ ]]; then echo "${disk}p${num}"; else echo "${disk}${num}"; fi
+}
+
+is_mounted() {
+    grep -q "^$1[p]*[0-9]* \|^$1 " /proc/mounts 2>/dev/null
+}
+
+rescan() {
+    local disk="$1"
+    [[ "$disk" =~ ^/dev/loop ]] && { losetup -P "$disk" 2>/dev/null; partx -u "$disk" 2>/dev/null; }
+    partprobe "$disk" 2>/dev/null || true
+    sleep 0.5
+}
+
+# Mount a partition RW to a temp dir; echoes mountpoint, tracks for cleanup.
+mount_tmp() {
+    local p="$1" mp
+    mp=$(mktemp -d /tmp/grub-rep.XXXXXX)
+    if mount "$p" "$mp" 2>/dev/null; then
+        TMP_MOUNTS+=("$mp"); echo "$mp"; return 0
+    fi
+    rmdir "$mp" 2>/dev/null
+    return 1
+}
+
+umount_tmp() {
+    local mp="$1"
+    mountpoint -q "$mp" 2>/dev/null && umount "$mp" 2>/dev/null
+    [[ -d "$mp" ]] && rmdir "$mp" 2>/dev/null
+    # drop from tracking
+    local i new=()
+    for i in "${TMP_MOUNTS[@]}"; do [[ "$i" != "$mp" ]] && new+=("$i"); done
+    TMP_MOUNTS=("${new[@]}")
+}
+
+list_block() {
+    echo ""
+    echo -e "  ${WHT}Block devices:${RST}"
+    lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,UUID,MOUNTPOINT 2>/dev/null | sed 's/^/    /'
+    echo ""
+    echo -e "  ${DIM}Image file? Enter its path and it is auto-attached as a loop device.${RST}"
+    echo ""
+}
+
+# Permissive disk picker. Accepts a block device OR a regular file (loop).
+# Sets: DISK, DISK_SIZE_HUMAN, DISK_MODEL, PTTYPE. Returns 1 on cancel.
+select_disk() {
+    list_block
+    DISK=""; prompt "Target device or image (blank = cancel): " DISK
+    [[ -z "$DISK" ]] && return 1
+
+    if [[ -f "$DISK" ]]; then
+        info "'$(basename "$DISK")' is a file - attaching as loop..."
+        local l; l=$(losetup --show -fP "$DISK" 2>/dev/null)
+        [[ -z "$l" ]] && { err "Could not attach '$DISK'"; return 1; }
+        OUR_LOOPS+=("$l"); DISK="$l"; ok "Attached: $DISK"
+    fi
+
+    if [[ ! -b "$DISK" ]]; then
+        warn "'$DISK' is not a block device."
+        confirm "Use this path anyway (you know what you are doing)?" || return 1
+    fi
+
+    is_mounted "$DISK" && warn "'$DISK' or its partitions are mounted - proceeding regardless."
+
+    DISK_SIZE_HUMAN=$(lsblk -dno SIZE "$DISK" 2>/dev/null | head -1 | xargs)
+    DISK_MODEL=$(lsblk -dno MODEL "$DISK" 2>/dev/null | head -1 | xargs)
+    PTTYPE=$(blkid -o value -s PTTYPE "$DISK" 2>/dev/null || echo "unknown")
+    return 0
+}
+
+# Ask for a partition path (free text, validated softly).
+ask_part() {
+    local msg="$1" __var="$2" reply=""
+    prompt "$msg" reply
+    if [[ -n "$reply" && ! -b "$reply" ]]; then
+        warn "'$reply' is not a block device."
+        confirm "Use it anyway?" || { printf -v "$__var" '%s' ""; return 1; }
+    fi
+    printf -v "$__var" '%s' "$reply"
+    return 0
+}
+
+# Ask for a UUID (free text). Warns if not present on any attached device.
+ask_uuid() {
+    local msg="$1" __var="$2" reply=""
+    prompt "$msg" reply
+    if [[ -n "$reply" ]]; then
+        if ! blkid -U "$reply" &>/dev/null && ! blkid | grep -qi "$reply"; then
+            warn "UUID '$reply' is not present on any attached device."
+            info "That is fine if it lives on another system - embedding on trust."
+        fi
+    fi
+    printf -v "$__var" '%s' "$reply"
+}
+
+# ─── GRUB platform detection (non-fatal) ────────────────────────────
+GRUB_BIOS_DIR="/usr/lib/grub/i386-pc"
+GRUB_EFI_DIR="/usr/lib/grub/x86_64-efi"
+HAS_BIOS=false; HAS_EFI=false
+[[ -d "$GRUB_BIOS_DIR" ]] && HAS_BIOS=true
+[[ -d "$GRUB_EFI_DIR"  ]] && HAS_EFI=true
+
+BIOS_EMBED_MODS="fat part_gpt part_msdos biosdisk search_fs_uuid normal configfile boot ext2 gzio"
+EFI_IMAGE_MODS="fat part_gpt part_msdos search_fs_uuid normal configfile boot efi_gop efi_uga all_video gfxterm png ext2 iso9660 loopback gzio chain search search_fs_file search_label ls cat echo test true"
+
+# ─── Root check (the one genuinely fatal env requirement) ───────────
+[[ $EUID -ne 0 ]] && die "Run as root (sudo $0)"
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 1 - Diagnose / dump boot info (read-only)
+# ═══════════════════════════════════════════════════════════════════
+job_diagnose() {
+    box "${CYN}  Job 1: Diagnose (read-only)  ${RST}"
+    select_disk || { warn "Cancelled."; return; }
+
+    echo ""
+    echo -e "  ${WHT}Layout of ${DISK}:${RST} (table: $PTTYPE)"
+    lsblk -o NAME,SIZE,FSTYPE,LABEL,UUID,PARTUUID,PARTLABEL "$DISK" 2>/dev/null | sed 's/^/    /'
+    echo ""
+
+    if [[ "$PTTYPE" == "gpt" ]] && command -v sgdisk &>/dev/null; then
+        echo -e "  ${WHT}GPT header:${RST}"
+        sgdisk -p "$DISK" 2>/dev/null | sed 's/^/    /'
+        local dguid; dguid=$(sgdisk -p "$DISK" 2>/dev/null | awk -F': ' '/Disk identifier/{print $2}')
+        [[ -n "$dguid" ]] && ok "Disk GUID: $dguid"
+        sgdisk -p "$DISK" 2>/dev/null | grep -qi "EF02" && ok "BIOS Boot partition (ef02) present"
+    elif [[ "$PTTYPE" == "dos" ]]; then
+        local did; did=$(fdisk -l "$DISK" 2>/dev/null | awk '/Disk identifier/{print $3}')
+        [[ -n "$did" ]] && ok "MBR disk identifier: $did"
+    fi
+
+    echo ""
+    echo -e "  ${WHT}Embedded BIOS core.img search (MBR gap, sectors 1-2046):${RST}"
+    local emb
+    emb=$(dd if="$DISK" bs=512 skip=1 count=2046 2>/dev/null | strings | grep -m1 'search' )
+    if [[ -n "$emb" ]]; then ok "core.img: $emb"; else info "no search string found in MBR gap (EFI-only or empty)"; fi
+
+    echo ""
+    echo -e "  ${WHT}EFI binaries on vfat partitions:${RST}"
+    local p
+    for p in $(lsblk -lno NAME,FSTYPE "$DISK" 2>/dev/null | awk '$2=="vfat"{print $1}'); do
+        local dev="/dev/$p" mp
+        if mp=$(mount_tmp "$dev"); then
+            find "$mp" -iname '*.efi' 2>/dev/null | sed "s|$mp|    [$dev]|"
+            umount_tmp "$mp"
+        fi
+    done
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 2 - Reinstall BIOS GRUB (core.img). Target disk and boot dir
+#          are DECOUPLED. Always allows --force.
+# ═══════════════════════════════════════════════════════════════════
+job_bios() {
+    box "${CYN}  Job 2: Reinstall BIOS GRUB (core.img)  ${RST}"
+    need grub-install || return
+    [[ "$HAS_BIOS" == false ]] && { warn "No i386-pc modules at $GRUB_BIOS_DIR."; confirm "Continue anyway?" || return; }
+
+    echo -e "  ${DIM}The install DISK (where boot code goes) and the BOOT DIRECTORY${RST}"
+    echo -e "  ${DIM}(where /boot/grub lives) can be different devices.${RST}"
+    echo ""
+
+    info "Step 1: pick the disk that receives core.img (MBR gap or ef02)."
+    select_disk || { warn "Cancelled."; return; }
+    local target_disk="$DISK"
+
+    echo ""
+    info "Step 2: where is /boot ? Give a partition to mount, or a path"
+    info "        that is ALREADY mounted (e.g. /mnt/usb). Blank = same disk, autodetect."
+    local bootsrc=""; prompt "Boot source partition or mounted path (blank = pick): " bootsrc
+
+    local MNT="" own_mount=false
+    if [[ -z "$bootsrc" ]]; then
+        ask_part "Partition holding /boot/grub (e.g. $(part_name "$target_disk" 1)): " bootsrc
+        [[ -z "$bootsrc" ]] && { warn "No boot source. Aborting job."; return; }
+    fi
+    if [[ -b "$bootsrc" ]]; then
+        MNT=$(mount_tmp "$bootsrc") || { err "Could not mount $bootsrc"; return; }
+        own_mount=true
+    elif [[ -d "$bootsrc" ]]; then
+        MNT="$bootsrc"
+    else
+        err "'$bootsrc' is neither a block device nor a directory."
+        return
+    fi
+
+    [[ -d "$MNT/boot/grub" ]] || warn "$MNT/boot/grub does not exist yet - grub-install will create it."
+
+    # Decide flags
+    local flags="--force"
+    if [[ "$PTTYPE" == "gpt" ]] && sgdisk -p "$target_disk" 2>/dev/null | grep -qi "EF02"; then
+        flags=""
+        ok "Using BIOS Boot partition (ef02) - no --force needed"
+    else
+        info "No ef02 found - embedding into MBR gap with --force"
+    fi
+
+    local mods="$BIOS_EMBED_MODS" custom=""
+    prompt "Override embedded modules? (blank = default) : " custom
+    [[ -n "$custom" ]] && mods="$custom"
+
+    echo ""
+    echo -e "  ${WHT}Install target:${RST} $target_disk ($PTTYPE)"
+    echo -e "  ${WHT}Boot dir:${RST}       $MNT/boot"
+    echo -e "  ${WHT}Flags:${RST}          ${flags:-<none>}"
+    confirm "Write BIOS core.img now? No filesystem will be formatted." || { [[ "$own_mount" == true ]] && umount_tmp "$MNT"; warn "Skipped."; return; }
+
+    grub-install --target=i386-pc --boot-directory="$MNT/boot" \
+        --modules="$mods" --recheck --no-floppy $flags "$target_disk" 2>&1 \
+        && ok "BIOS GRUB installed to $target_disk" \
+        || err "grub-install reported an error (job continues)."
+
+    [[ "$own_mount" == true ]] && umount_tmp "$MNT"
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 3 - (Re)compile EFI GRUB image with an ARBITRARY search UUID.
+#          Writes alongside existing files (append-friendly).
+# ═══════════════════════════════════════════════════════════════════
+job_efi() {
+    box "${CYN}  Job 3: Compile EFI GRUB image (grub-mkimage)  ${RST}"
+    need grub-mkimage || return
+    [[ "$HAS_EFI" == false ]] && { warn "No x86_64-efi modules at $GRUB_EFI_DIR."; confirm "Continue anyway?" || return; }
+
+    echo -e "  ${DIM}The embedded UUID can point anywhere - even a partition on${RST}"
+    echo -e "  ${DIM}another machine. It is embedded on trust.${RST}"
+    echo ""
+
+    local uuid=""; ask_uuid "search.fs_uuid to embed: " uuid
+    [[ -z "$uuid" ]] && { warn "No UUID given. Aborting job."; return; }
+
+    local prefix="/boot/grub"; prompt "Embedded prefix path (blank = /boot/grub): " prefix
+    [[ -z "$prefix" ]] && prefix="/boot/grub"
+
+    echo ""
+    info "Where to write the .efi ? Give a mounted dir or a partition to mount."
+    local dst=""; prompt "Output dir or partition: " dst
+    local MNT="" own_mount=false
+    if [[ -b "$dst" ]]; then
+        MNT=$(mount_tmp "$dst") || { err "Could not mount $dst"; return; }
+        own_mount=true; MNT="$MNT/EFI/BOOT"
+    elif [[ -d "$dst" ]]; then
+        MNT="$dst"
+    else
+        warn "'$dst' not found."
+        confirm "Create directory '$dst' ?" && mkdir -p "$dst" && MNT="$dst" || { warn "Aborting."; return; }
+    fi
+    mkdir -p "$MNT"
+
+    local outname="BOOTX64.EFI"
+    prompt "Output filename (blank = BOOTX64.EFI; use a new name to keep existing): " outname
+    [[ -z "$outname" ]] && outname="BOOTX64.EFI"
+    local out="$MNT/$outname"
+
+    local mods="$EFI_IMAGE_MODS" custom=""
+    prompt "Override embedded modules? (blank = default) : " custom
+    [[ -n "$custom" ]] && mods="$custom"
+
+    local early; early=$(mktemp /tmp/grub-early.XXXXXX)
+    cat > "$early" <<EOF
+search.fs_uuid ${uuid} root
+set prefix=(\$root)${prefix}
+configfile \$prefix/grub.cfg
+EOF
+
+    echo ""
+    echo -e "  ${WHT}Output:${RST}  $out"
+    echo -e "  ${WHT}UUID:${RST}    $uuid"
+    echo -e "  ${WHT}Prefix:${RST}  $prefix"
+    confirm "Compile EFI image now?" || { rm -f "$early"; [[ "$own_mount" == true ]] && umount_tmp "${MNT%/EFI/BOOT}"; warn "Skipped."; return; }
+
+    if grub-mkimage --format=x86_64-efi --output="$out" --config="$early" --prefix="$prefix" $mods 2>&1; then
+        local kb=$(( $(stat -c%s "$out" 2>/dev/null || echo 0) / 1024 ))
+        ok "Built $out (${kb} KiB)"
+        # convenience copy if we wrote the canonical name
+        [[ "$outname" == "BOOTX64.EFI" ]] && cp "$out" "$MNT/grubx64.efi" 2>/dev/null && info "also copied to grubx64.efi"
+    else
+        err "grub-mkimage failed (job continues)."
+    fi
+
+    rm -f "$early"
+    [[ "$own_mount" == true ]] && umount_tmp "${MNT%/EFI/BOOT}"
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 4 - Build a STANDALONE .efi (embeds grub.cfg). Self-contained,
+#          needs no /boot/grub on the target. Ideal cross-system.
+# ═══════════════════════════════════════════════════════════════════
+job_standalone() {
+    box "${CYN}  Job 4: Build standalone .efi (grub-mkstandalone)  ${RST}"
+    need grub-mkstandalone || return
+
+    echo -e "  ${DIM}A standalone image carries grub.cfg inside it. It will boot${RST}"
+    echo -e "  ${DIM}with zero external module/config dependencies.${RST}"
+    echo ""
+
+    local cfg=""; prompt "Path to grub.cfg to embed (blank = generate a minimal one): " cfg
+    local tmpcfg=""
+    if [[ -z "$cfg" ]]; then
+        tmpcfg=$(mktemp /tmp/standalone-cfg.XXXXXX)
+        local tgt=""; ask_uuid "UUID of the partition to chainload/boot from: " tgt
+        cat > "$tmpcfg" <<EOF
+set timeout=5
+insmod part_gpt
+insmod part_msdos
+insmod fat
+insmod ext2
+insmod search_fs_uuid
+menuentry "Standalone GRUB - search ${tgt:-<unset>}" {
+    search --no-floppy --fs-uuid --set=root ${tgt}
+    configfile (\$root)/boot/grub/grub.cfg
+}
+menuentry "GRUB command line" { }
+EOF
+        cfg="$tmpcfg"
+        info "Generated minimal cfg embedding UUID ${tgt:-<unset>}"
+    elif [[ ! -f "$cfg" ]]; then
+        warn "'$cfg' not found."
+        confirm "Continue anyway (grub-mkstandalone will likely fail)?" || { return; }
+    fi
+
+    local out=""; prompt "Output .efi path (e.g. /tmp/BOOTX64.EFI): " out
+    [[ -z "$out" ]] && { warn "No output path. Aborting."; rm -f "$tmpcfg"; return; }
+
+    confirm "Build standalone image -> $out ?" || { rm -f "$tmpcfg"; warn "Skipped."; return; }
+
+    if grub-mkstandalone --format=x86_64-efi --modules="$EFI_IMAGE_MODS" \
+        --output="$out" "boot/grub/grub.cfg=$cfg" 2>&1; then
+        local kb=$(( $(stat -c%s "$out" 2>/dev/null || echo 0) / 1024 ))
+        ok "Built standalone $out (${kb} KiB)"
+    else
+        err "grub-mkstandalone failed (job continues)."
+    fi
+    rm -f "$tmpcfg"
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 5 - Refresh GRUB modules on a partition (no format)
+# ═══════════════════════════════════════════════════════════════════
+job_refresh_mods() {
+    box "${CYN}  Job 5: Refresh GRUB modules on a partition  ${RST}"
+    local part=""; ask_part "Partition that holds /boot/grub: " part
+    [[ -z "$part" ]] && { warn "Aborting."; return; }
+    local MNT; MNT=$(mount_tmp "$part") || { err "Could not mount $part"; return; }
+
+    mkdir -p "$MNT/boot/grub"
+    confirm "Refresh i386-pc and x86_64-efi modules under $MNT/boot/grub ?" || { umount_tmp "$MNT"; warn "Skipped."; return; }
+
+    if [[ "$HAS_BIOS" == true ]]; then
+        mkdir -p "$MNT/boot/grub/i386-pc"
+        rm -f "$MNT/boot/grub/i386-pc/"*.mod "$MNT/boot/grub/i386-pc/"*.lst 2>/dev/null
+        cp "$GRUB_BIOS_DIR"/*.mod "$GRUB_BIOS_DIR"/*.lst "$MNT/boot/grub/i386-pc/" 2>/dev/null \
+            && ok "i386-pc modules refreshed" || warn "i386-pc copy had issues"
+    else
+        warn "No i386-pc source modules on this host - skipped BIOS"
+    fi
+
+    if [[ "$HAS_EFI" == true ]]; then
+        mkdir -p "$MNT/boot/grub/x86_64-efi"
+        rm -f "$MNT/boot/grub/x86_64-efi/"*.mod "$MNT/boot/grub/x86_64-efi/"*.lst 2>/dev/null
+        cp "$GRUB_EFI_DIR"/*.mod "$GRUB_EFI_DIR"/*.lst "$MNT/boot/grub/x86_64-efi/" 2>/dev/null \
+            && ok "x86_64-efi modules refreshed" || warn "x86_64-efi copy had issues"
+    else
+        warn "No x86_64-efi source modules on this host - skipped EFI"
+    fi
+
+    mkdir -p "$MNT/boot/grub/fonts"
+    [[ -f /usr/share/grub/unicode.pf2 ]] && cp /usr/share/grub/unicode.pf2 "$MNT/boot/grub/fonts/" && ok "font copied"
+
+    umount_tmp "$MNT"
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 6 - Install / regenerate grub.cfg
+# ═══════════════════════════════════════════════════════════════════
+job_grubcfg() {
+    box "${CYN}  Job 6: Install / regenerate grub.cfg  ${RST}"
+    local part=""; ask_part "Partition holding /boot/grub: " part
+    [[ -z "$part" ]] && { warn "Aborting."; return; }
+    local MNT; MNT=$(mount_tmp "$part") || { err "Could not mount $part"; return; }
+    mkdir -p "$MNT/boot/grub"
+
+    echo ""
+    echo -e "    ${CYN}1)${RST} Generate default multiboot template"
+    echo -e "    ${CYN}2)${RST} Copy a custom grub.cfg"
+    local c=""; prompt "Select [1/2]: " c
+
+    if [[ "$c" == "2" ]]; then
+        local src=""; prompt "Path to your grub.cfg: " src
+        if [[ -f "$src" ]]; then
+            confirm "Overwrite $MNT/boot/grub/grub.cfg ?" \
+                && cp "$src" "$MNT/boot/grub/grub.cfg" && ok "Custom grub.cfg installed" \
+                || warn "Skipped."
+        else
+            err "'$src' not found."
+        fi
+    else
+        local uuid=""; ask_uuid "EFI search UUID for the chainload entries (blank = placeholder): " uuid
+        [[ -z "$uuid" ]] && uuid="<TARGET-EFI-UUID>"
+        confirm "Write default template to $MNT/boot/grub/grub.cfg ?" || { umount_tmp "$MNT"; warn "Skipped."; return; }
+        cat > "$MNT/boot/grub/grub.cfg" <<'GRUBCFG'
+#===========================================================
+#  gLiTcH GRUB - grub.cfg (BIOS + EFI)
+#  Edit on the partition: /boot/grub/grub.cfg
+#===========================================================
+set timeout=10
+set default=0
+
+insmod fat
+insmod part_gpt
+insmod part_msdos
+insmod all_video
+insmod gfxterm
+insmod png
+insmod iso9660
+insmod loopback
+insmod search_fs_uuid
+
+if loadfont /boot/grub/fonts/unicode.pf2; then
+    set gfxmode=auto
+    terminal_output gfxterm
+fi
+
+set menu_color_normal=white/black
+set menu_color_highlight=black/cyan
+
+menuentry "-- gLiTcH Multiboot --" { true }
+
+menuentry "Boot first hard disk (BIOS)" --class disk {
+    set root=(hd1)
+    chainloader +1
+}
+
+menuentry "Boot first hard disk (EFI)" --class disk {
+    search --no-floppy --fs-uuid --set=efiroot __EFI_UUID__
+    chainloader ($efiroot)/EFI/BOOT/BOOTX64.EFI
+}
+
+menuentry "Reboot"    --class restart  { reboot }
+menuentry "Power Off" --class shutdown { halt }
+GRUBCFG
+        sed -i "s|__EFI_UUID__|$uuid|g" "$MNT/boot/grub/grub.cfg"
+        ok "Default grub.cfg installed (UUID: $uuid)"
+    fi
+    umount_tmp "$MNT"
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 7 - Append a chainload menuentry to an existing grub.cfg
+# ═══════════════════════════════════════════════════════════════════
+job_chainentry() {
+    box "${CYN}  Job 7: Append a chainload menuentry  ${RST}"
+    local cfg=""; prompt "Path to a mounted grub.cfg to append to: " cfg
+    if [[ ! -f "$cfg" ]]; then
+        warn "'$cfg' not found."
+        confirm "Create it as a new file?" && touch "$cfg" || { warn "Aborting."; return; }
+    fi
+
+    local title=""; prompt "Menu entry title: " title
+    local uuid=""; ask_uuid "Target partition UUID to search: " uuid
+    local path=""; prompt "EFI/loader path to chainload (e.g. /EFI/BOOT/BOOTX64.EFI): " path
+    [[ -z "$title" ]] && title="Chainload target"
+    [[ -z "$path"  ]] && path="/EFI/BOOT/BOOTX64.EFI"
+
+    confirm "Append this entry to $cfg ?" || { warn "Skipped."; return; }
+    cat >> "$cfg" <<EOF
+
+menuentry "${title}" --class chainload {
+    insmod search_fs_uuid
+    insmod chain
+    search --no-floppy --fs-uuid --set=root ${uuid}
+    chainloader (\$root)${path}
+}
+EOF
+    ok "Appended chainload entry to $cfg"
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 8 - Rewrite filesystem UUID (ext via tune2fs, vfat serial)
+# ═══════════════════════════════════════════════════════════════════
+job_fs_uuid() {
+    box "${CYN}  Job 8: Rewrite filesystem UUID / serial  ${RST}"
+    local part=""; ask_part "Partition: " part
+    [[ -z "$part" ]] && { warn "Aborting."; return; }
+
+    local fstype; fstype=$(blkid -o value -s TYPE "$part" 2>/dev/null)
+    local cur;    cur=$(blkid -o value -s UUID "$part" 2>/dev/null)
+    info "FS type: ${fstype:-unknown}   current UUID: ${cur:-none}"
+    is_mounted "$part" && warn "$part appears mounted - changing UUID while mounted is risky."
+
+    case "$fstype" in
+        ext2|ext3|ext4)
+            need tune2fs || return
+            local newu=""; prompt "New UUID (blank = random): " newu
+            [[ -z "$newu" ]] && newu="random"
+            confirm "Run tune2fs -U $newu $part ? (run e2fsck first if it refuses)" || { warn "Skipped."; return; }
+            tune2fs -U "$newu" "$part" 2>&1 && ok "ext UUID changed" || err "tune2fs failed - try: e2fsck -f $part"
+            ;;
+        vfat)
+            echo -e "  ${DIM}FAT 'UUID' is a 4-byte volume serial shown as XXXX-XXXX.${RST}"
+            local newu=""; prompt "New serial as 8 hex digits (blank = random): " newu
+            if [[ -z "$newu" ]]; then
+                newu=$(head -c4 /dev/urandom | od -An -tx1 | tr -d ' \n' | tr 'a-f' 'A-F')
+            fi
+            newu="${newu//-/}"
+            if command -v mlabel &>/dev/null; then
+                confirm "Set FAT serial to $newu via mtools mlabel?" || { warn "Skipped."; return; }
+                mlabel -N "$newu" -i "$part" :: 2>&1 && ok "FAT serial set to $newu" || err "mlabel failed"
+            else
+                warn "mtools (mlabel) not installed."
+                info "Install: apt install mtools   (cleanest way to set a FAT serial)"
+            fi
+            ;;
+        *)
+            warn "FS type '${fstype:-unknown}' has no safe UUID rewrite path here."
+            info "ext/vfat are supported. For others use the native tool manually."
+            ;;
+    esac
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 9 - Rewrite GPT disk GUID / MBR disk identifier
+# ═══════════════════════════════════════════════════════════════════
+job_disk_id() {
+    box "${CYN}  Job 9: Rewrite disk identifier  ${RST}"
+    select_disk || { warn "Cancelled."; return; }
+
+    if [[ "$PTTYPE" == "gpt" ]]; then
+        need sgdisk || return
+        echo -e "    ${CYN}1)${RST} Randomize ALL GUIDs (disk + every partition)  [sgdisk -G]"
+        echo -e "    ${CYN}2)${RST} Set a specific disk GUID"
+        local c=""; prompt "Select [1/2]: " c
+        if [[ "$c" == "1" ]]; then
+            confirm "Randomize all GPT GUIDs on $DISK ?" \
+                && { sgdisk -G "$DISK" 2>&1 && ok "All GUIDs randomized"; } || warn "Skipped."
+        else
+            local g=""; prompt "New disk GUID: " g
+            [[ -z "$g" ]] && { warn "No GUID. Skipped."; return; }
+            confirm "Set disk GUID of $DISK to $g ?" \
+                && { sgdisk -U "$g" "$DISK" 2>&1 && ok "Disk GUID set"; } || warn "Skipped."
+        fi
+    elif [[ "$PTTYPE" == "dos" ]]; then
+        need sfdisk || return
+        echo -e "  ${DIM}MBR disk identifier is a 32-bit signature, e.g. 0x1A2B3C4D${RST}"
+        local id=""; prompt "New disk id (blank = random): " id
+        [[ -z "$id" ]] && id="0x$(head -c4 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        confirm "Set MBR disk id of $DISK to $id ? (changes every PARTUUID)" \
+            && { sfdisk --disk-id "$DISK" "$id" 2>&1 && ok "MBR disk id set to $id"; } || warn "Skipped."
+    else
+        warn "Unknown/absent partition table ('$PTTYPE') - nothing to rewrite."
+    fi
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 10 - Rewrite a GPT partition GUID (PARTUUID)
+# ═══════════════════════════════════════════════════════════════════
+job_part_guid() {
+    box "${CYN}  Job 10: Rewrite GPT partition GUID (PARTUUID)  ${RST}"
+    select_disk || { warn "Cancelled."; return; }
+    [[ "$PTTYPE" != "gpt" ]] && { warn "Partition table is '$PTTYPE', not GPT. PARTUUID rewrite is GPT-specific."; confirm "Continue anyway (will likely fail)?" || { return; }; }
+    need sgdisk || return
+
+    sgdisk -p "$DISK" 2>/dev/null | sed 's/^/    /'
+    local num=""; prompt "Partition NUMBER to change: " num
+    [[ "$num" =~ ^[0-9]+$ ]] || { err "Not a number."; return; }
+    local g=""; prompt "New partition GUID (blank = random R): " g
+    [[ -z "$g" ]] && g="R"
+    confirm "Set partition $num GUID on $DISK to $g ?" \
+        && { sgdisk --partition-guid="${num}:${g}" "$DISK" 2>&1 && ok "PARTUUID updated"; } || warn "Skipped."
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 11 - Manage UEFI boot entries (efibootmgr)
+# ═══════════════════════════════════════════════════════════════════
+job_efibootmgr() {
+    box "${CYN}  Job 11: UEFI NVRAM boot entries (efibootmgr)  ${RST}"
+    need efibootmgr || return
+    [[ -d /sys/firmware/efi ]] || warn "Not booted in UEFI mode (/sys/firmware/efi absent) - changes may not stick."
+
+    echo -e "    ${CYN}1)${RST} List entries"
+    echo -e "    ${CYN}2)${RST} Create entry"
+    echo -e "    ${CYN}3)${RST} Delete entry"
+    echo -e "    ${CYN}4)${RST} Reorder boot order"
+    local c=""; prompt "Select [1-4]: " c
+    case "$c" in
+        1) efibootmgr -v 2>&1 | sed 's/^/    /' ;;
+        2)
+            local disk="" pnum="" label="" loader=""
+            prompt "ESP disk (e.g. /dev/sda): " disk
+            prompt "ESP partition number (e.g. 1): " pnum
+            prompt "Entry label: " label
+            prompt "Loader path (e.g. \\EFI\\BOOT\\BOOTX64.EFI): " loader
+            [[ -z "$loader" ]] && loader='\EFI\BOOT\BOOTX64.EFI'
+            confirm "Create NVRAM entry '$label' -> $disk part $pnum $loader ?" \
+                && { efibootmgr -c -d "$disk" -p "$pnum" -L "$label" -l "$loader" 2>&1 && ok "Entry created"; } || warn "Skipped."
+            ;;
+        3)
+            efibootmgr 2>&1 | sed 's/^/    /'
+            local b=""; prompt "Boot number to delete (e.g. 0003): " b
+            confirm "Delete BootMgr entry $b ?" \
+                && { efibootmgr -b "$b" -B 2>&1 && ok "Deleted $b"; } || warn "Skipped."
+            ;;
+        4)
+            efibootmgr 2>&1 | sed 's/^/    /'
+            local o=""; prompt "New order (comma list, e.g. 0002,0000,0001): " o
+            confirm "Set BootOrder to $o ?" \
+                && { efibootmgr -o "$o" 2>&1 && ok "Order set"; } || warn "Skipped."
+            ;;
+        *) warn "Unknown choice." ;;
+    esac
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 12 - Chroot repair of an INSTALLED system
+# ═══════════════════════════════════════════════════════════════════
+job_chroot() {
+    box "${CYN}  Job 12: Chroot repair (installed system)  ${RST}"
+    echo -e "  ${DIM}Mounts root, bind-mounts /dev /proc /sys /run, optional /boot + ESP,${RST}"
+    echo -e "  ${DIM}then drops you into a chroot to run grub-install / update-grub.${RST}"
+    echo ""
+
+    local rootp=""; ask_part "ROOT partition (e.g. /dev/sda2): " rootp
+    [[ -z "$rootp" ]] && { warn "No root partition. Aborting."; return; }
+    local R; R=$(mount_tmp "$rootp") || { err "Could not mount $rootp"; return; }
+    ok "Root mounted at $R"
+
+    local bootp=""; prompt "Separate /boot partition (blank = none): " bootp
+    [[ -n "$bootp" && -b "$bootp" ]] && { mount "$bootp" "$R/boot" 2>/dev/null && ok "/boot mounted"; }
+    local espp=""; prompt "ESP partition for /boot/efi (blank = none): " espp
+    if [[ -n "$espp" && -b "$espp" ]]; then mkdir -p "$R/boot/efi"; mount "$espp" "$R/boot/efi" 2>/dev/null && ok "ESP mounted"; fi
+
+    local m
+    for m in dev dev/pts proc sys run; do
+        mkdir -p "$R/$m"
+        mount --bind "/$m" "$R/$m" 2>/dev/null
+    done
+    ok "Pseudo-filesystems bound"
+
+    echo ""
+    echo -e "  ${WHT}Entering chroot.${RST} Typical commands:"
+    echo -e "    ${DIM}grub-install /dev/sdX        update-grub${RST}"
+    echo -e "    ${DIM}grub-install --target=x86_64-efi --efi-directory=/boot/efi${RST}"
+    echo -e "    ${DIM}type 'exit' to leave the chroot.${RST}"
+    echo ""
+    chroot "$R" /bin/bash || warn "chroot exited non-zero"
+
+    # teardown (reverse, lazy where needed)
+    for m in run sys proc dev/pts dev; do umount -l "$R/$m" 2>/dev/null; done
+    [[ -n "$espp" ]] && umount -l "$R/boot/efi" 2>/dev/null
+    [[ -n "$bootp" ]] && umount -l "$R/boot" 2>/dev/null
+    umount_tmp "$R"
+    ok "Chroot cleaned up"
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 13 - Set / clear boot (active) flag on a partition
+# ═══════════════════════════════════════════════════════════════════
+job_bootflag() {
+    box "${CYN}  Job 13: Set / clear boot flag  ${RST}"
+    select_disk || { warn "Cancelled."; return; }
+    need parted || return
+    parted "$DISK" print 2>/dev/null | sed 's/^/    /'
+    local num=""; prompt "Partition number: " num
+    [[ "$num" =~ ^[0-9]+$ ]] || { err "Not a number."; return; }
+    echo -e "    ${CYN}1)${RST} Set boot ON    ${CYN}2)${RST} Set boot OFF"
+    local c=""; prompt "Select [1/2]: " c
+    local state="on"; [[ "$c" == "2" ]] && state="off"
+    confirm "parted $DISK set $num boot $state ?" \
+        && { parted "$DISK" set "$num" boot "$state" 2>&1 && ok "boot flag $state on partition $num"; } || warn "Skipped."
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 14 - Backup first 2048 sectors (MBR + gap)
+# ═══════════════════════════════════════════════════════════════════
+job_backup_mbr() {
+    box "${CYN}  Job 14: Backup MBR + gap (first 2048 sectors)  ${RST}"
+    select_disk || { warn "Cancelled."; return; }
+    local out=""; prompt "Backup file path (e.g. /tmp/$(basename "$DISK").mbr): " out
+    [[ -z "$out" ]] && out="/tmp/$(basename "$DISK").mbr.bak"
+    confirm "Dump first 1 MiB of $DISK to $out ?" || { warn "Skipped."; return; }
+    dd if="$DISK" of="$out" bs=512 count=2048 2>&1 | tail -1 \
+        && ok "Saved $out" || err "dd failed"
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 15 - Restore MBR + gap from a backup file
+# ═══════════════════════════════════════════════════════════════════
+job_restore_mbr() {
+    box "${CYN}  Job 15: Restore MBR + gap from file  ${RST}"
+    select_disk || { warn "Cancelled."; return; }
+    local in=""; prompt "Backup file to restore: " in
+    [[ -f "$in" ]] || { err "'$in' not found."; return; }
+    local sectors=$(( $(stat -c%s "$in") / 512 ))
+    confirm "Write $in ($sectors sectors) back to $DISK ? This overwrites the partition table region." || { warn "Skipped."; return; }
+    dd if="$in" of="$DISK" bs=512 conv=notrunc 2>&1 | tail -1 \
+        && { ok "Restored"; rescan "$DISK"; } || err "dd failed"
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  JOB 16 - Wipe MBR boot code only (preserve partition table)
+# ═══════════════════════════════════════════════════════════════════
+job_wipe_bootcode() {
+    box "${CYN}  Job 16: Wipe MBR boot code (keep partition table)  ${RST}"
+    select_disk || { warn "Cancelled."; return; }
+    echo -e "  ${DIM}Zeroes the first 446 bytes (boot code) only. The 64-byte${RST}"
+    echo -e "  ${DIM}partition table and 0x55AA signature are left intact.${RST}"
+    confirm "Zero boot code on $DISK ? Partition table is preserved." || { warn "Skipped."; return; }
+    dd if=/dev/zero of="$DISK" bs=446 count=1 conv=notrunc 2>&1 | tail -1 \
+        && ok "Boot code cleared" || err "dd failed"
+    pause
+}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  MAIN MENU
+# ═══════════════════════════════════════════════════════════════════
+main_menu() {
+    while true; do
+        clear 2>/dev/null || true
+        echo ""
+        box "${WHT}  gLiTcH GRUB Repair  -  freeform toolkit  ${RST}"
+        echo ""
+        echo -e "  Platforms: BIOS $([[ "$HAS_BIOS" == true ]] && echo -e "${GRN}ok${RST}" || echo -e "${RED}--${RST}")   EFI $([[ "$HAS_EFI" == true ]] && echo -e "${GRN}ok${RST}" || echo -e "${RED}--${RST}")"
+        echo ""
+        echo -e "  ${MAG}DIAGNOSE${RST}"
+        echo -e "     ${CYN}1)${RST} Diagnose disk / dump boot info ${DIM}(read-only)${RST}"
+        echo ""
+        echo -e "  ${MAG}GRUB CORE / IMAGE${RST}"
+        echo -e "     ${CYN}2)${RST} Reinstall BIOS GRUB ${DIM}(core.img; target + boot dir decoupled)${RST}"
+        echo -e "     ${CYN}3)${RST} Compile EFI image ${DIM}(grub-mkimage, arbitrary search UUID)${RST}"
+        echo -e "     ${CYN}4)${RST} Build standalone .efi ${DIM}(embeds grub.cfg, points anywhere)${RST}"
+        echo -e "     ${CYN}5)${RST} Refresh GRUB modules on a partition ${DIM}(no format)${RST}"
+        echo ""
+        echo -e "  ${MAG}CONFIG${RST}"
+        echo -e "     ${CYN}6)${RST} Install / regenerate grub.cfg"
+        echo -e "     ${CYN}7)${RST} Append a chainload menuentry ${DIM}(arbitrary UUID/path)${RST}"
+        echo ""
+        echo -e "  ${MAG}IDENTIFIERS${RST}"
+        echo -e "     ${CYN}8)${RST} Rewrite filesystem UUID ${DIM}(ext via tune2fs, vfat serial)${RST}"
+        echo -e "     ${CYN}9)${RST} Rewrite disk GUID / MBR disk id"
+        echo -e "    ${CYN}10)${RST} Rewrite GPT partition GUID ${DIM}(PARTUUID)${RST}"
+        echo ""
+        echo -e "  ${MAG}FIRMWARE / SYSTEM${RST}"
+        echo -e "    ${CYN}11)${RST} UEFI boot entries ${DIM}(efibootmgr: list/create/delete/reorder)${RST}"
+        echo -e "    ${CYN}12)${RST} Chroot repair ${DIM}(installed system: grub-install/update-grub)${RST}"
+        echo ""
+        echo -e "  ${MAG}LOW-LEVEL / MBR${RST}"
+        echo -e "    ${CYN}13)${RST} Set / clear boot flag on a partition"
+        echo -e "    ${CYN}14)${RST} Backup MBR + gap to file"
+        echo -e "    ${CYN}15)${RST} Restore MBR + gap from file"
+        echo -e "    ${CYN}16)${RST} Wipe MBR boot code only ${DIM}(keep partition table)${RST}"
+        echo ""
+        echo -e "     ${CYN}q)${RST} Quit"
+        echo ""
+        local choice=""; prompt "Select a job: " choice
+        echo ""
+        case "$choice" in
+            1)  job_diagnose ;;
+            2)  job_bios ;;
+            3)  job_efi ;;
+            4)  job_standalone ;;
+            5)  job_refresh_mods ;;
+            6)  job_grubcfg ;;
+            7)  job_chainentry ;;
+            8)  job_fs_uuid ;;
+            9)  job_disk_id ;;
+            10) job_part_guid ;;
+            11) job_efibootmgr ;;
+            12) job_chroot ;;
+            13) job_bootflag ;;
+            14) job_backup_mbr ;;
+            15) job_restore_mbr ;;
+            16) job_wipe_bootcode ;;
+            q|Q) echo "  Bye."; cleanup; exit 0 ;;
+            *)  warn "Unknown selection: '$choice'"; sleep 1 ;;
+        esac
+    done
+}
+
+main_menu
