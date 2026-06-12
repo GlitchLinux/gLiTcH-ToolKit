@@ -11,8 +11,8 @@ VENTOY_TARBALL="ventoy-1.1.12-linux.tar.gz"
 VENTOY_DIR="ventoy-1.1.12"
 
 # G-Disk variants
-GDISK_MINI_URL="https://glitchlinux.wtf/FILES/G-Drive/G-DISK-MINI.zip"
-GDISK_FULL_URL="https://glitchlinux.wtf/FILES/G-Drive/G-DISK-VENTOY.zip"
+GDISK_MINI_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-MIXED-FILES/G-DISK-MINI.zip"
+GDISK_FULL_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-MIXED-FILES/G-DISK-VENTOY.zip"
 
 # Minimum required target-disk sizes (in bytes)
 #   MINI  zip ~44 MB  -> require >= 256 MB
