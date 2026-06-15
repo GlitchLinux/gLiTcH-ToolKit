@@ -32,16 +32,16 @@ case $VERSION_SELECT in
         echo -e "${GREEN}Selected: Minimal (100MB)${NC}\n"
         ;;
     2)
-        IMAGE_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-ext4-3.2GB.img"
+        IMAGE_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-fat32/Gdisk-fat32-3.2GB.img"
         IMAGE_FILE="$HOME/.temp/Gdisk-ext4-3.2GB.img"
         IMAGE_NAME="Gdisk-ext4-3.2GB.img"
         CLEANUP=true
         echo -e "${GREEN}Selected: Regular (3.2GB)${NC}\n"
         ;;
     3)
-        IMAGE_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-ext4-prepper-6GB.img"
-        IMAGE_FILE="$HOME/.temp/Gdisk-ext4-prepper-6GB.img"
-        IMAGE_NAME="Gdisk-ext4-prepper-6GB.img"
+        IMAGE_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-fat32/Gdisk-fat32-6GB.img"
+        IMAGE_FILE="$HOME/.temp/Gdisk-fat32-6GB.img"
+        IMAGE_NAME="Gdisk-fat32-6GB.img"
         CLEANUP=true
         echo -e "${GREEN}Selected: Prepper (7.8GB)${NC}\n"
         ;;
