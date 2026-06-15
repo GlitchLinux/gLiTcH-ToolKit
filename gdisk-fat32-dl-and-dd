@@ -25,9 +25,9 @@ read -p "Enter selection (1-3): " VERSION_SELECT
 
 case $VERSION_SELECT in
     1)
-        IMAGE_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-ext4-100MB.img"
-        IMAGE_FILE="/tmp/Gdisk-ext4-100MB.img"
-        IMAGE_NAME="Gdisk-ext4-100MB.img"
+        IMAGE_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-fat32/Gdisk-fat32-100MB.img"
+        IMAGE_FILE="/tmp/Gdisk-fat32-100MB.img"
+        IMAGE_NAME="Gdisk-fat32-100MB.img"
         CLEANUP=false
         echo -e "${GREEN}Selected: Minimal (100MB)${NC}\n"
         ;;
