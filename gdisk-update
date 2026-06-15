@@ -1,0 +1,18 @@
+wget glitchlinux.wtf/FILES/G-Drive/Gdisk-fat32/GDISK-FAT32.zip
+
+sudo unzip GDISK-FAT32.zip 
+
+sudo rm GDISK-FAT32.zip 
+
+sudo mv GDISK-FAT322/* .
+
+sudo rm -r GDISK-FAT322/
+
+cd ..
+
+xterm -geometry 100x30 -e grub-multiboot & 
+
+sleep 3
+
+sudo pkill xfce4-terminal
+
