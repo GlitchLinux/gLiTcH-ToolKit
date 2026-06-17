@@ -4,6 +4,9 @@ sudo apt update && sudo apt install xorriso wget rsync squashfs-tools live-boot 
 cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/Live-System-Builder-CLI.py
 sudo mv Live-System-Builder-CLI.py /usr/local/bin/.Live-System-Builder-CLI.py
 echo '#!/bin/bash' > /tmp/live-system-builder-cli
+echo "clear" >> /tmp/live-system-builder-cli
+echo "sudo mkdir -p /var/tmp/" >> /tmp/live-system-builder-cli
+echo "sudo mkdir -p /var/tmp/mkinitramfs_XXXXXX" >> /tmp/live-system-builder-cli
 echo "sudo python3 /usr/local/bin/.Live-System-Builder-CLI.py" >> /tmp/live-system-builder-cli
 sudo mv /tmp/live-system-builder-cli /usr/local/bin/live-system-builder-cli
 sudo chmod +x /usr/local/bin/live-system-builder-cli
