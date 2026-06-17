@@ -378,6 +378,58 @@ def get_root_used():
     return 0
 
 
+def get_current_username():
+    """Get the primary non-root user (UID >= 1000)."""
+    try:
+        with open("/etc/passwd") as f:
+            for line in f:
+                parts = line.strip().split(":")
+                if len(parts) >= 7:
+                    uid = int(parts[2])
+                    shell = parts[6]
+                    if 1000 <= uid < 60000 and "/nologin" not in shell and "/false" not in shell:
+                        return parts[0]
+    except Exception:
+        pass
+    return None
+
+
+def get_writable_mountpoints():
+    """Get a list of writable mount points suitable for building."""
+    candidates = ["/tmp"]
+    try:
+        with open("/proc/mounts") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                dev, mnt, fstype = parts[0], parts[1], parts[2]
+                if fstype in ("proc", "sysfs", "devtmpfs", "tmpfs", "cgroup", "cgroup2",
+                              "securityfs", "devpts", "pstore", "debugfs", "tracefs",
+                              "configfs", "fusectl", "hugetlbfs", "mqueue", "binfmt_misc",
+                              "autofs", "efivarfs", "fuse.gvfsd-fuse", "overlay", "squashfs",
+                              "iso9660", "udf"):
+                    continue
+                if not dev.startswith("/dev/") and not dev.startswith("//") and ":" not in dev:
+                    continue
+                if mnt == "/":
+                    continue
+                if mnt.startswith(("/proc", "/sys", "/dev", "/run", "/snap")):
+                    continue
+                if os.path.isdir(mnt) and os.access(mnt, os.W_OK):
+                    candidates.append(mnt)
+    except Exception:
+        pass
+
+    for extra in ["/mnt", "/home"]:
+        if extra not in candidates and os.path.isdir(extra) and os.access(extra, os.W_OK):
+            free = get_disk_free(extra)
+            if free > 2 * 1024**3:
+                candidates.append(extra)
+
+    return candidates
+
+
 def confirm(prompt):
     """Ask y/n confirmation. Returns True if yes."""
     while True:
@@ -386,6 +438,95 @@ def confirm(prompt):
             return True
         if resp in ("n", "no", ""):
             return False
+
+
+def interactive_setup(args):
+    """Interactive setup wizard - prompts for build location, hostname, username."""
+    print(f"\n{C.BOLD}{'=' * 56}{C.RESET}")
+    print(f"{C.BOLD}  Glitch Linux Live System Builder - Setup{C.RESET}")
+    print(f"{'=' * 56}\n")
+
+    current_host = get_current_hostname()
+    current_user = get_current_username()
+
+    rc, kernel_ver, _ = run_cmd("uname -r")
+    kernel = kernel_ver if rc == 0 else "Unknown"
+    root_used = get_root_used()
+    print(f"  {C.DIM}Hostname: {current_host}  |  Kernel: {kernel}  |  Root: ~{human_size(root_used)}{C.RESET}")
+    if current_user:
+        print(f"  {C.DIM}Primary user: {current_user}{C.RESET}")
+    print()
+
+    # --- 1. Build location ---
+    if not args.workdir_set:
+        mounts = get_writable_mountpoints()
+        print(f"{C.BOLD}  Select build location:{C.RESET}")
+        for i, mnt in enumerate(mounts, 1):
+            free = get_disk_free(mnt)
+            print(f"    {C.CYAN}{i}{C.RESET}) {mnt}  ({human_size(free)} free)")
+        print(f"    {C.CYAN}c{C.RESET}) Custom path")
+        print()
+
+        while True:
+            choice = input(f"  {C.BOLD}Choose [1]: {C.RESET}").strip()
+            if choice == "":
+                args.workdir = mounts[0]
+                break
+            elif choice.lower() == "c":
+                custom = input(f"  {C.BOLD}Enter path: {C.RESET}").strip()
+                if custom and os.path.isdir(custom) and os.access(custom, os.W_OK):
+                    args.workdir = custom
+                    break
+                else:
+                    log_err("Invalid or non-writable path. Try again.")
+            else:
+                try:
+                    idx = int(choice)
+                    if 1 <= idx <= len(mounts):
+                        args.workdir = mounts[idx - 1]
+                        break
+                except ValueError:
+                    pass
+                log_err("Invalid selection. Try again.")
+
+        print(f"  {C.GREEN}>{C.RESET} Build location: {args.workdir}\n")
+
+    # --- 2. Distro name ---
+    if args.name == "glitch-live":
+        resp = input(f"  {C.BOLD}Live OS name [{args.name}]: {C.RESET}").strip()
+        if resp:
+            args.name = resp
+        print(f"  {C.GREEN}>{C.RESET} OS name: {args.name}\n")
+
+    # --- 3. Hostname ---
+    if not args.hostname:
+        resp = input(f"  {C.BOLD}Change hostname? (enter = keep '{current_host}'): {C.RESET}").strip()
+        if resp:
+            args.hostname = resp
+            print(f"  {C.GREEN}>{C.RESET} Hostname: {args.hostname}\n")
+        else:
+            args.hostname = current_host
+            print(f"  {C.GREEN}>{C.RESET} Hostname: {current_host} (unchanged)\n")
+
+    # --- 4. Username ---
+    if not args.username:
+        if current_user:
+            resp = input(f"  {C.BOLD}Change username? (enter = keep '{current_user}'): {C.RESET}").strip()
+            if resp:
+                if re.match(r'^[a-z_][a-z0-9_-]*$', resp) and len(resp) <= 32:
+                    args.username = resp
+                    print(f"  {C.GREEN}>{C.RESET} Username: {current_user} -> {args.username}\n")
+                else:
+                    log_err("Invalid username (lowercase, a-z 0-9 _ - only). Keeping original.")
+                    args.username = None
+                    print(f"  {C.GREEN}>{C.RESET} Username: {current_user} (unchanged)\n")
+            else:
+                print(f"  {C.GREEN}>{C.RESET} Username: {current_user} (unchanged)\n")
+        else:
+            print(f"  {C.DIM}  No regular user detected, skipping username prompt.{C.RESET}\n")
+
+    print(f"{'=' * 56}\n")
+    return args
 
 
 # ---------------------------------------------------------------
@@ -795,6 +936,99 @@ def step_regenerate_initramfs(remastered):
     unmount_chroot(remastered)
 
 
+def step_rename_user(remastered, old_user, new_user):
+    """Rename a user account inside the remastered chroot.
+
+    Renames:
+      - /etc/passwd, /etc/shadow, /etc/group, /etc/gshadow entries
+      - Home directory /home/old -> /home/new
+      - /etc/sudoers.d/ references
+    """
+    log_progress(f"Renaming user '{old_user}' -> '{new_user}' in remastered system...")
+
+    passwd_path = os.path.join(remastered, "etc", "passwd")
+    shadow_path = os.path.join(remastered, "etc", "shadow")
+    group_path  = os.path.join(remastered, "etc", "group")
+    gshadow_path = os.path.join(remastered, "etc", "gshadow")
+
+    def sed_replace(filepath, old, new):
+        """Replace username at start-of-line in passwd/shadow/group style files."""
+        if not os.path.exists(filepath):
+            return
+        with open(filepath, 'r') as f:
+            content = f.read()
+        # Replace the username field (first field before colon)
+        content = re.sub(
+            rf'^{re.escape(old)}:',
+            f'{new}:',
+            content,
+            flags=re.MULTILINE
+        )
+        # Also replace in group member lists (after last colon)
+        content = re.sub(
+            rf'([:,]){re.escape(old)}([,\n])',
+            rf'\1{new}\2',
+            content
+        )
+        content = re.sub(
+            rf'([:,]){re.escape(old)}$',
+            rf'\1{new}',
+            content,
+            flags=re.MULTILINE
+        )
+        with open(filepath, 'w') as f:
+            f.write(content)
+
+    # Update account files
+    for fpath in [passwd_path, shadow_path, group_path, gshadow_path]:
+        sed_replace(fpath, old_user, new_user)
+
+    # Update home directory path in passwd
+    if os.path.exists(passwd_path):
+        with open(passwd_path, 'r') as f:
+            content = f.read()
+        content = content.replace(f'/home/{old_user}', f'/home/{new_user}')
+        with open(passwd_path, 'w') as f:
+            f.write(content)
+
+    # Rename home directory
+    old_home = os.path.join(remastered, "home", old_user)
+    new_home = os.path.join(remastered, "home", new_user)
+    if os.path.isdir(old_home) and not os.path.exists(new_home):
+        os.rename(old_home, new_home)
+        log_ok(f"Home directory renamed: /home/{old_user} -> /home/{new_user}")
+    elif os.path.isdir(old_home):
+        log_warn(f"/home/{new_user} already exists, skipping home rename.")
+
+    # Update sudoers.d if the old user has a sudoers file
+    sudoers_dir = os.path.join(remastered, "etc", "sudoers.d")
+    if os.path.isdir(sudoers_dir):
+        old_sudoer = os.path.join(sudoers_dir, old_user)
+        new_sudoer = os.path.join(sudoers_dir, new_user)
+        if os.path.isfile(old_sudoer):
+            with open(old_sudoer, 'r') as f:
+                content = f.read()
+            content = content.replace(old_user, new_user)
+            with open(new_sudoer, 'w') as f:
+                f.write(content)
+            os.remove(old_sudoer)
+            log_ok(f"Sudoers file renamed: {old_user} -> {new_user}")
+
+    # Update /etc/lightdm, /etc/sddm.conf, /etc/gdm if they reference the user
+    for conf in ["etc/lightdm/lightdm.conf", "etc/sddm.conf", "etc/sddm.conf.d/autologin.conf"]:
+        conf_path = os.path.join(remastered, conf)
+        if os.path.isfile(conf_path):
+            with open(conf_path, 'r') as f:
+                content = f.read()
+            if old_user in content:
+                content = content.replace(old_user, new_user)
+                with open(conf_path, 'w') as f:
+                    f.write(content)
+                log_ok(f"Updated user reference in {conf}")
+
+    log_ok(f"User rename complete: {old_user} -> {new_user}")
+
+
 def step_squashfs(remastered, squashfs_out):
     """Step 8: Create filesystem.squashfs."""
     if os.path.exists(squashfs_out):
@@ -930,6 +1164,8 @@ def build(args):
     iso_name    = args.iso or f"{distro_name}.iso"
     system_name = args.system_name or distro_name
     volume_name = args.volume or coerce_volume(iso_name)
+    new_user    = getattr(args, 'username', None)
+    old_user    = get_current_username() if new_user else None
 
     if not iso_name.lower().endswith(".iso"):
         iso_name += ".iso"
@@ -939,7 +1175,8 @@ def build(args):
     squashfs_out = os.path.join(live_dir, "filesystem.squashfs")
     iso_output   = os.path.join(work_dir, iso_name)
 
-    total = 10
+    do_rename = bool(new_user and old_user and new_user != old_user)
+    total = 11 if do_rename else 10
 
     # -- Validate --
     if not os.path.isdir(work_dir):
@@ -962,6 +1199,8 @@ def build(args):
     print(f"  Working directory : {work_dir}")
     print(f"  Live OS name      : {distro_name}")
     print(f"  Hostname          : {hostname}")
+    if do_rename:
+        print(f"  Username          : {old_user} -> {new_user}")
     print(f"  ISO filename      : {iso_name}")
     print(f"  Boot menu name    : {system_name}")
     print(f"  Volume label      : {volume_name}")
@@ -987,40 +1226,56 @@ def build(args):
 
     # -- Pipeline --
     t0 = time.time()
+    s = 0  # step counter
 
-    log_step(1, total, "Checking and installing dependencies...")
+    s += 1
+    log_step(s, total, "Checking and installing dependencies...")
     step_install_deps()
     check_cancelled()
 
-    log_step(2, total, "Preparing working directories...")
+    s += 1
+    log_step(s, total, "Preparing working directories...")
     remastered, live_dir = step_prepare_dirs(work_dir, distro_name)
     check_cancelled()
 
-    log_step(3, total, "Rsyncing system (this may take a while)...")
+    s += 1
+    log_step(s, total, "Rsyncing system (this may take a while)...")
     step_rsync(remastered, work_dir)
     check_cancelled()
 
-    log_step(4, total, "Configuring systemd for live boot...")
+    s += 1
+    log_step(s, total, "Configuring systemd for live boot...")
     step_fix_systemd(remastered, hostname)
     check_cancelled()
 
-    log_step(5, total, "Ensuring live-boot packages are functional...")
+    if do_rename:
+        s += 1
+        log_step(s, total, f"Renaming user '{old_user}' -> '{new_user}'...")
+        step_rename_user(remastered, old_user, new_user)
+        check_cancelled()
+
+    s += 1
+    log_step(s, total, "Ensuring live-boot packages are functional...")
     step_ensure_live_boot(remastered)
     check_cancelled()
 
-    log_step(6, total, "Cleaning up remastered system...")
+    s += 1
+    log_step(s, total, "Cleaning up remastered system...")
     step_cleanup(remastered)
     check_cancelled()
 
-    log_step(7, total, "Regenerating initramfs in chroot...")
+    s += 1
+    log_step(s, total, "Regenerating initramfs in chroot...")
     step_regenerate_initramfs(remastered)
     check_cancelled()
 
-    log_step(8, total, "Creating filesystem.squashfs...")
+    s += 1
+    log_step(s, total, "Creating filesystem.squashfs...")
     sq_size = step_squashfs(remastered, squashfs_out)
     check_cancelled()
 
-    log_step(9, total, "Copying kernel and initrd to live/ directory...")
+    s += 1
+    log_step(s, total, "Copying kernel and initrd to live/ directory...")
     step_copy_boot_files(remastered, live_dir)
 
     if cleanup:
@@ -1030,7 +1285,8 @@ def build(args):
     else:
         log_info(f"Remastered directory preserved at: {remastered}")
 
-    log_step(10, total, "Building bootable ISO...")
+    s += 1
+    log_step(s, total, "Building bootable ISO...")
     iso_path, iso_size = step_build_iso(
         parent_dir=os.path.join(work_dir, distro_name),
         iso_output=iso_output,
@@ -1089,15 +1345,18 @@ def main():
             "  sudo python3 Live-System-Builder-CLI.py\n"
             "  sudo python3 Live-System-Builder-CLI.py -w /mnt/build -n my-distro\n"
             "  sudo python3 Live-System-Builder-CLI.py -w /tmp -n glitch-live --iso glitch.iso -y\n"
+            "  sudo python3 Live-System-Builder-CLI.py -u liveuser -H live-box -y\n"
         )
     )
 
     parser.add_argument("-w", "--workdir", default="/tmp",
-                        help="Working directory for the build (default: /tmp)")
+                        help="Working directory for the build (default: interactive)")
     parser.add_argument("-n", "--name", default="glitch-live",
                         help="Name of live boot OS / output directory (default: glitch-live)")
     parser.add_argument("-H", "--hostname",
                         help="Hostname for the live system (default: current hostname)")
+    parser.add_argument("-u", "--username",
+                        help="Rename primary user to this in the live system (default: unchanged)")
     parser.add_argument("--iso",
                         help="ISO filename (default: <name>.iso)")
     parser.add_argument("--system-name",
@@ -1107,9 +1366,17 @@ def main():
     parser.add_argument("--keep-remastered", action="store_true",
                         help="Keep the remastered directory after build")
     parser.add_argument("-y", "--yes", action="store_true",
-                        help="Skip confirmation prompt")
+                        help="Skip interactive setup and confirmation prompts")
 
     args = parser.parse_args()
+
+    # Track whether workdir was explicitly set via CLI
+    args.workdir_set = "-w" in sys.argv or "--workdir" in sys.argv
+
+    # Run interactive setup unless -y was passed with all needed args
+    if not args.yes:
+        args = interactive_setup(args)
+
     build(args)
 
 
