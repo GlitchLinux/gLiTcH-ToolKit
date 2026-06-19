@@ -6,78 +6,163 @@ Browse, search, run, copy, and export scripts with a compact dark UI.
 
 import sys
 import os
+import json
 import subprocess
 import threading
+import shutil
 from pathlib import Path
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QListWidget, QListWidgetItem, QLabel, QPushButton,
-    QFileDialog, QMessageBox, QStatusBar, QCheckBox, QMenu, QAction,
-    QAbstractItemView, QSizePolicy
+    QFileDialog, QMessageBox, QStatusBar, QMenu, QAction,
+    QAbstractItemView, QDialog, QFormLayout, QComboBox, QCheckBox,
+    QSpinBox, QDialogButtonBox, QGroupBox, QColorDialog, QGridLayout
 )
 from PyQt5.QtCore import Qt, QSize, pyqtSignal, QObject, QTimer
 from PyQt5.QtGui import QIcon, QPixmap, QFont, QPalette, QColor, QKeySequence
 
 # ---------------------------------------------------------------------------
-#  Config
+#  Constants
 # ---------------------------------------------------------------------------
-REPO_URL = "https://github.com/GlitchLinux/gLiTcH-ToolKit.git"
-REPO_DIR = Path("/tmp/gLiTcH-ToolKit")
-ICON_DIR = Path("/tmp/toolkit-icons")
-ICON_BASE_URL = "https://glitchlinux.wtf/FILES/toolkit-icons"
-ICON_FILES = [
+REPO_URL  = "https://github.com/GlitchLinux/gLiTcH-ToolKit.git"
+REPO_DIR  = Path("/tmp/gLiTcH-ToolKit")
+ICON_DIR  = Path("/tmp/toolkit-icons")
+ICON_URL  = "https://glitchlinux.wtf/FILES/toolkit-icons"
+ICON_LIST = [
     "txt.png", "terminal-w.png", "sh.png", "py.png", "pf2.png",
     "iso_file.png", "file.png", "exe.png", "cfg.png", "c.png", "bin.png",
 ]
-TERMINAL = None  # auto-detected
+CONFIG_FILE = Path.home() / ".config" / "glitch-toolkit-gui.json"
 
-# Extension -> icon filename mapping
 EXT_ICON_MAP = {
-    ".sh":       "sh.png",
-    ".py":       "py.png",
-    ".txt":      "txt.png",
-    ".c":        "c.png",
-    ".cfg":      "cfg.png",
-    ".conf":     "cfg.png",
-    ".bin":      "bin.png",
-    ".exe":      "exe.png",
-    ".iso":      "iso_file.png",
-    ".pf2":      "pf2.png",
-    ".deb":      "file.png",
-    ".desktop":  "file.png",
+    ".sh": "sh.png", ".py": "py.png", ".txt": "txt.png", ".c": "c.png",
+    ".cfg": "cfg.png", ".conf": "cfg.png", ".bin": "bin.png",
+    ".exe": "exe.png", ".iso": "iso_file.png", ".pf2": "pf2.png",
+    ".deb": "file.png", ".desktop": "file.png",
 }
 DEFAULT_ICON = "terminal-w.png"
 
-# Colors
-C_BG        = "#0e0e18"
-C_BG_ALT    = "#141424"
-C_FG        = "#c8c8d4"
-C_GREEN     = "#00ff0b"
-C_MAGENTA   = "#db00b9"
-C_CYAN      = "#00b4d8"
-C_BORDER    = "#2a2a3a"
-C_SEARCH_BG = "#16162a"
-C_SELECT    = "#1e3a1e"
-C_SELECT_SUDO = "#3a1e36"
-C_HOVER     = "#1a1a30"
+# Available terminals (display name -> binary)
+TERMINALS = {
+    "xfce4-terminal": "xfce4-terminal",
+    "gnome-terminal": "gnome-terminal",
+    "konsole":        "konsole",
+    "mate-terminal":  "mate-terminal",
+    "lxterminal":     "lxterminal",
+    "alacritty":      "alacritty",
+    "kitty":          "kitty",
+    "xterm":          "xterm",
+}
+
+# Preset color themes: name -> (bg, bg_alt, search_bg, border, hover, accent_normal, accent_sudo, sel_normal, sel_sudo)
+COLOR_PRESETS = {
+    "Default Dark": {
+        "bg": "#0e0e18", "bg_alt": "#141424", "search_bg": "#16162a",
+        "border": "#2a2a3a", "hover": "#1a1a30", "fg": "#c8c8d4",
+        "accent": "#00ff0b", "accent_sudo": "#db00b9",
+        "sel": "#1e3a1e", "sel_sudo": "#3a1e36",
+    },
+    "Charcoal": {
+        "bg": "#1a1a1a", "bg_alt": "#222222", "search_bg": "#1e1e1e",
+        "border": "#3a3a3a", "hover": "#2a2a2a", "fg": "#d0d0d0",
+        "accent": "#4fc3f7", "accent_sudo": "#ff5252",
+        "sel": "#1a2e3e", "sel_sudo": "#3e1a1a",
+    },
+    "Midnight Blue": {
+        "bg": "#0a0e1a", "bg_alt": "#101828", "search_bg": "#0e1424",
+        "border": "#1e2e4a", "hover": "#141e34", "fg": "#b8c4d8",
+        "accent": "#64ffda", "accent_sudo": "#ff6ec7",
+        "sel": "#0e2e2e", "sel_sudo": "#2e0e28",
+    },
+    "Forest": {
+        "bg": "#0a120a", "bg_alt": "#101a10", "search_bg": "#0e160e",
+        "border": "#1e3a1e", "hover": "#142414", "fg": "#b8d4b8",
+        "accent": "#a0ff60", "accent_sudo": "#ffa040",
+        "sel": "#1a3a1a", "sel_sudo": "#3a2a1a",
+    },
+    "Crimson": {
+        "bg": "#140a0a", "bg_alt": "#1c1010", "search_bg": "#180e0e",
+        "border": "#3a1e1e", "hover": "#241414", "fg": "#d4b8b8",
+        "accent": "#ff4060", "accent_sudo": "#40c0ff",
+        "sel": "#3a1a1a", "sel_sudo": "#1a2a3a",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+#  Settings manager
+# ---------------------------------------------------------------------------
+class Settings:
+    DEFAULTS = {
+        "terminal":    "auto",
+        "font_size":   15,
+        "show_icons":  True,
+        "color_theme": "Default Dark",
+        "custom_accent": "",
+        "custom_accent_sudo": "",
+    }
+
+    def __init__(self):
+        self.data = dict(self.DEFAULTS)
+        self.load()
+
+    def load(self):
+        try:
+            if CONFIG_FILE.exists():
+                with open(CONFIG_FILE) as f:
+                    saved = json.load(f)
+                self.data.update(saved)
+        except Exception:
+            pass
+
+    def save(self):
+        try:
+            CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(self.data, f, indent=2)
+        except Exception:
+            pass
+
+    def __getitem__(self, key):
+        return self.data.get(key, self.DEFAULTS.get(key))
+
+    def __setitem__(self, key, val):
+        self.data[key] = val
+
+    def theme(self):
+        """Return the active color dict."""
+        name = self.data.get("color_theme", "Default Dark")
+        t = COLOR_PRESETS.get(name, COLOR_PRESETS["Default Dark"]).copy()
+        # Apply custom accent overrides if set
+        if self.data.get("custom_accent"):
+            t["accent"] = self.data["custom_accent"]
+        if self.data.get("custom_accent_sudo"):
+            t["accent_sudo"] = self.data["custom_accent_sudo"]
+        return t
 
 
 # ---------------------------------------------------------------------------
 #  Helpers
 # ---------------------------------------------------------------------------
 def detect_terminal():
-    """Find the best available terminal emulator."""
-    for term in ["xfce4-terminal", "gnome-terminal", "konsole",
-                 "mate-terminal", "lxterminal", "alacritty",
-                 "kitty", "xterm"]:
+    for term in TERMINALS.values():
         if subprocess.run(["which", term], capture_output=True).returncode == 0:
             return term
     return "xterm"
 
 
+def resolve_terminal(settings):
+    t = settings["terminal"]
+    if t == "auto":
+        return detect_terminal()
+    # Verify it exists
+    if subprocess.run(["which", t], capture_output=True).returncode == 0:
+        return t
+    return detect_terminal()
+
+
 def icon_for_file(filename):
-    """Return the icon path for a given filename."""
     ext = Path(filename).suffix.lower()
     icon_name = EXT_ICON_MAP.get(ext, DEFAULT_ICON)
     icon_path = ICON_DIR / icon_name
@@ -86,20 +171,146 @@ def icon_for_file(filename):
     return None
 
 
-def ext_label(filename):
-    """Short extension tag for display."""
-    ext = Path(filename).suffix.lower()
-    if ext:
-        return ext.lstrip(".")
-    return "bin"
-
-
 # ---------------------------------------------------------------------------
-#  Background worker signals
+#  Settings Dialog
 # ---------------------------------------------------------------------------
-class WorkerSignals(QObject):
-    finished = pyqtSignal(bool, str)  # success, message
-    progress = pyqtSignal(str)
+class SettingsDialog(QDialog):
+    def __init__(self, settings, parent=None):
+        super().__init__(parent)
+        self.settings = settings
+        self.setWindowTitle("Settings")
+        self.setMinimumWidth(360)
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        # -- Terminal
+        grp_term = QGroupBox("Terminal")
+        gl = QFormLayout(grp_term)
+        self.term_combo = QComboBox()
+        self.term_combo.addItem("Auto-detect", "auto")
+        for name, binary in TERMINALS.items():
+            self.term_combo.addItem(name, binary)
+        # Set current
+        cur = self.settings["terminal"]
+        idx = self.term_combo.findData(cur)
+        if idx >= 0:
+            self.term_combo.setCurrentIndex(idx)
+        gl.addRow("Preferred:", self.term_combo)
+        layout.addWidget(grp_term)
+
+        # -- Appearance
+        grp_look = QGroupBox("Appearance")
+        al = QFormLayout(grp_look)
+
+        self.font_spin = QSpinBox()
+        self.font_spin.setRange(10, 28)
+        self.font_spin.setValue(self.settings["font_size"])
+        self.font_spin.setSuffix(" px")
+        al.addRow("Font size:", self.font_spin)
+
+        self.icons_chk = QCheckBox("Show file-type icons")
+        self.icons_chk.setChecked(self.settings["show_icons"])
+        al.addRow(self.icons_chk)
+
+        layout.addWidget(grp_look)
+
+        # -- Colors
+        grp_color = QGroupBox("Color Theme")
+        cl = QVBoxLayout(grp_color)
+
+        self.theme_combo = QComboBox()
+        for name in COLOR_PRESETS:
+            self.theme_combo.addItem(name)
+        cur_theme = self.settings["color_theme"]
+        idx = self.theme_combo.findText(cur_theme)
+        if idx >= 0:
+            self.theme_combo.setCurrentIndex(idx)
+        cl.addWidget(self.theme_combo)
+
+        # Custom accent overrides
+        accent_row = QHBoxLayout()
+        accent_row.setSpacing(6)
+
+        self.accent_btn = QPushButton("Normal accent")
+        self.accent_btn.setToolTip("Override normal-mode highlight color")
+        self.accent_btn.clicked.connect(self._pick_accent)
+        self._accent_color = self.settings["custom_accent"] or ""
+        self._update_accent_preview()
+        accent_row.addWidget(self.accent_btn)
+
+        self.accent_sudo_btn = QPushButton("Sudo accent")
+        self.accent_sudo_btn.setToolTip("Override sudo-mode highlight color")
+        self.accent_sudo_btn.clicked.connect(self._pick_accent_sudo)
+        self._accent_sudo_color = self.settings["custom_accent_sudo"] or ""
+        self._update_accent_sudo_preview()
+        accent_row.addWidget(self.accent_sudo_btn)
+
+        self.reset_accent_btn = QPushButton("Reset")
+        self.reset_accent_btn.setFixedWidth(60)
+        self.reset_accent_btn.clicked.connect(self._reset_accents)
+        accent_row.addWidget(self.reset_accent_btn)
+
+        cl.addLayout(accent_row)
+        layout.addWidget(grp_color)
+
+        # -- Buttons
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self._save_and_close)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    def _pick_accent(self):
+        c = QColorDialog.getColor(
+            QColor(self._accent_color) if self._accent_color else QColor("#00ff0b"),
+            self, "Normal mode accent"
+        )
+        if c.isValid():
+            self._accent_color = c.name()
+            self._update_accent_preview()
+
+    def _pick_accent_sudo(self):
+        c = QColorDialog.getColor(
+            QColor(self._accent_sudo_color) if self._accent_sudo_color else QColor("#db00b9"),
+            self, "Sudo mode accent"
+        )
+        if c.isValid():
+            self._accent_sudo_color = c.name()
+            self._update_accent_sudo_preview()
+
+    def _reset_accents(self):
+        self._accent_color = ""
+        self._accent_sudo_color = ""
+        self._update_accent_preview()
+        self._update_accent_sudo_preview()
+
+    def _update_accent_preview(self):
+        if self._accent_color:
+            self.accent_btn.setStyleSheet(
+                f"QPushButton {{ border-left: 4px solid {self._accent_color}; }}"
+            )
+        else:
+            self.accent_btn.setStyleSheet("")
+
+    def _update_accent_sudo_preview(self):
+        if self._accent_sudo_color:
+            self.accent_sudo_btn.setStyleSheet(
+                f"QPushButton {{ border-left: 4px solid {self._accent_sudo_color}; }}"
+            )
+        else:
+            self.accent_sudo_btn.setStyleSheet("")
+
+    def _save_and_close(self):
+        self.settings["terminal"] = self.term_combo.currentData()
+        self.settings["font_size"] = self.font_spin.value()
+        self.settings["show_icons"] = self.icons_chk.isChecked()
+        self.settings["color_theme"] = self.theme_combo.currentText()
+        self.settings["custom_accent"] = self._accent_color
+        self.settings["custom_accent_sudo"] = self._accent_sudo_color
+        self.settings.save()
+        self.accept()
 
 
 # ---------------------------------------------------------------------------
@@ -108,10 +319,8 @@ class WorkerSignals(QObject):
 class ToolKitWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        global TERMINAL
-        TERMINAL = detect_terminal()
-
-        self.tools = []           # list of filenames
+        self.settings = Settings()
+        self.tools = []
         self.sudo_mode = False
 
         self.setWindowTitle("gLiTcH-ToolKit")
@@ -121,8 +330,6 @@ class ToolKitWindow(QMainWindow):
         self._build_ui()
         self._apply_theme()
         self._setup_shortcuts()
-
-        # Ensure icons exist, then sync repo
         self._ensure_icons()
         self._sync_repo_bg()
 
@@ -131,8 +338,8 @@ class ToolKitWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(6, 6, 6, 0)
-        layout.setSpacing(4)
+        layout.setContentsMargins(8, 8, 8, 2)
+        layout.setSpacing(6)
 
         # -- Top bar: search + buttons
         top = QHBoxLayout()
@@ -146,14 +353,20 @@ class ToolKitWindow(QMainWindow):
         top.addWidget(self.search, 1)
 
         self.sudo_btn = QPushButton("USER")
-        self.sudo_btn.setFixedWidth(52)
+        self.sudo_btn.setFixedWidth(68)
         self.sudo_btn.setCheckable(True)
         self.sudo_btn.setToolTip("Toggle sudo mode  [Ctrl+S]")
         self.sudo_btn.clicked.connect(self._toggle_sudo)
         top.addWidget(self.sudo_btn)
 
+        self.settings_btn = QPushButton("\u2699")
+        self.settings_btn.setFixedWidth(36)
+        self.settings_btn.setToolTip("Settings  [Ctrl+,]")
+        self.settings_btn.clicked.connect(self._open_settings)
+        top.addWidget(self.settings_btn)
+
         self.refresh_btn = QPushButton("\u21bb")
-        self.refresh_btn.setFixedWidth(28)
+        self.refresh_btn.setFixedWidth(36)
         self.refresh_btn.setToolTip("Refresh repo  [Ctrl+R]")
         self.refresh_btn.clicked.connect(self._sync_repo_bg)
         top.addWidget(self.refresh_btn)
@@ -162,10 +375,11 @@ class ToolKitWindow(QMainWindow):
 
         # -- Tool list
         self.tool_list = QListWidget()
-        self.tool_list.setIconSize(QSize(20, 20))
-        self.tool_list.setSpacing(1)
+        self.tool_list.setIconSize(QSize(24, 24))
+        self.tool_list.setSpacing(2)
         self.tool_list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.tool_list.itemDoubleClicked.connect(self._run_selected)
+        self.tool_list.itemActivated.connect(self._run_selected)
         self.tool_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tool_list.customContextMenuRequested.connect(self._context_menu)
         self.tool_list.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -174,104 +388,134 @@ class ToolKitWindow(QMainWindow):
 
         # -- Status bar
         self.status = QStatusBar()
-        self.status.setFixedHeight(20)
+        self.status.setFixedHeight(26)
         self.setStatusBar(self.status)
         self.status_label = QLabel("Starting...")
         self.status.addWidget(self.status_label, 1)
+
+        # Font size +/- in status bar
+        self.font_down_btn = QPushButton("A-")
+        self.font_down_btn.setFixedSize(32, 22)
+        self.font_down_btn.setToolTip("Decrease font  [Ctrl+-]")
+        self.font_down_btn.clicked.connect(lambda: self._adjust_font(-1))
+        self.status.addPermanentWidget(self.font_down_btn)
+
+        self.font_up_btn = QPushButton("A+")
+        self.font_up_btn.setFixedSize(32, 22)
+        self.font_up_btn.setToolTip("Increase font  [Ctrl++]")
+        self.font_up_btn.clicked.connect(lambda: self._adjust_font(1))
+        self.status.addPermanentWidget(self.font_up_btn)
+
         self.count_label = QLabel("")
         self.status.addPermanentWidget(self.count_label)
 
     # ----- Theme -----------------------------------------------------------
     def _apply_theme(self):
-        accent = C_GREEN
-        sel_bg = C_SELECT
-        self._current_accent = accent
+        t = self.settings.theme()
+        fs = self.settings["font_size"]
+        fs_search = fs + 1
+        fs_status = max(fs - 2, 10)
+
+        accent = t["accent"] if not self.sudo_mode else t["accent_sudo"]
+        sel_bg = t["sel"] if not self.sudo_mode else t["sel_sudo"]
 
         self.setStyleSheet(f"""
             QMainWindow {{
-                background: {C_BG};
+                background: {t['bg']};
             }}
             QWidget {{
-                background: {C_BG};
-                color: {C_FG};
-                font-family: "Monospace", "Noto Sans Mono", "DejaVu Sans Mono", monospace;
-                font-size: 11px;
+                background: {t['bg']};
+                color: {t['fg']};
+                font-family: "Sans", "Noto Sans", "DejaVu Sans", sans-serif;
+                font-size: {fs}px;
+                font-weight: bold;
             }}
             QLineEdit {{
-                background: {C_SEARCH_BG};
-                color: {C_FG};
-                border: 1px solid {C_BORDER};
-                border-radius: 3px;
-                padding: 4px 6px;
-                font-size: 12px;
+                background: {t['search_bg']};
+                color: {t['fg']};
+                border: 2px solid {t['border']};
+                border-radius: 4px;
+                padding: 6px 8px;
+                font-size: {fs_search}px;
+                font-weight: bold;
                 selection-background-color: {accent};
             }}
             QLineEdit:focus {{
                 border-color: {accent};
             }}
             QListWidget {{
-                background: {C_BG_ALT};
-                border: 1px solid {C_BORDER};
-                border-radius: 3px;
+                background: {t['bg_alt']};
+                border: 2px solid {t['border']};
+                border-radius: 4px;
                 outline: none;
             }}
             QListWidget::item {{
-                padding: 2px 4px;
-                border-radius: 2px;
+                padding: 4px 6px;
+                border-radius: 3px;
             }}
             QListWidget::item:selected {{
                 background: {sel_bg};
                 color: {accent};
             }}
             QListWidget::item:hover:!selected {{
-                background: {C_HOVER};
+                background: {t['hover']};
             }}
             QPushButton {{
-                background: {C_BORDER};
-                color: {C_FG};
-                border: 1px solid {C_BORDER};
-                border-radius: 3px;
-                padding: 3px 6px;
-                font-size: 11px;
+                background: {t['border']};
+                color: {t['fg']};
+                border: 2px solid {t['border']};
+                border-radius: 4px;
+                padding: 5px 8px;
+                font-size: {max(fs - 1, 10)}px;
+                font-weight: bold;
             }}
             QPushButton:hover {{
-                background: {C_HOVER};
+                background: {t['hover']};
                 border-color: {accent};
             }}
             QPushButton:checked {{
-                background: #2a1030;
-                color: {C_MAGENTA};
-                border-color: {C_MAGENTA};
+                background: {t['sel_sudo']};
+                color: {t['accent_sudo']};
+                border-color: {t['accent_sudo']};
             }}
             QStatusBar {{
-                background: {C_BG};
+                background: {t['bg']};
                 color: #666680;
-                font-size: 10px;
+                font-size: {fs_status}px;
+                font-weight: bold;
             }}
             QStatusBar QLabel {{
                 color: #666680;
-                font-size: 10px;
+                font-size: {fs_status}px;
+                font-weight: bold;
+            }}
+            QStatusBar QPushButton {{
+                font-size: {max(fs_status, 10)}px;
+                padding: 1px 4px;
+                min-height: 0;
             }}
             QMenu {{
-                background: {C_BG_ALT};
-                color: {C_FG};
-                border: 1px solid {C_BORDER};
-                padding: 2px;
+                background: {t['bg_alt']};
+                color: {t['fg']};
+                border: 2px solid {t['border']};
+                padding: 4px;
+                font-size: {max(fs - 1, 10)}px;
+                font-weight: bold;
             }}
             QMenu::item {{
-                padding: 4px 20px 4px 8px;
+                padding: 6px 24px 6px 10px;
             }}
             QMenu::item:selected {{
                 background: {sel_bg};
                 color: {accent};
             }}
             QScrollBar:vertical {{
-                background: {C_BG_ALT};
+                background: {t['bg_alt']};
                 width: 8px;
                 border: none;
             }}
             QScrollBar::handle:vertical {{
-                background: {C_BORDER};
+                background: {t['border']};
                 border-radius: 4px;
                 min-height: 20px;
             }}
@@ -279,97 +523,47 @@ class ToolKitWindow(QMainWindow):
                 height: 0;
             }}
         """)
+        self._update_sudo_visuals()
 
-    def _update_sudo_theme(self):
-        """Swap accent colors for sudo mode."""
+    def _update_sudo_visuals(self):
+        t = self.settings.theme()
         if self.sudo_mode:
-            accent = C_MAGENTA
-            sel_bg = C_SELECT_SUDO
             self.sudo_btn.setText("ROOT")
+            self.sudo_btn.setChecked(True)
         else:
-            accent = C_GREEN
-            sel_bg = C_SELECT
             self.sudo_btn.setText("USER")
-
-        self._current_accent = accent
-
-        # Targeted updates - only restyle what changes
-        self.search.setStyleSheet(f"""
-            QLineEdit {{
-                background: {C_SEARCH_BG};
-                color: {C_FG};
-                border: 1px solid {C_BORDER};
-                border-radius: 3px;
-                padding: 4px 6px;
-                font-size: 12px;
-                selection-background-color: {accent};
-            }}
-            QLineEdit:focus {{
-                border-color: {accent};
-            }}
-        """)
-        self.tool_list.setStyleSheet(f"""
-            QListWidget {{
-                background: {C_BG_ALT};
-                border: 1px solid {C_BORDER};
-                border-radius: 3px;
-                outline: none;
-            }}
-            QListWidget::item {{
-                padding: 2px 4px;
-                border-radius: 2px;
-            }}
-            QListWidget::item:selected {{
-                background: {sel_bg};
-                color: {accent};
-            }}
-            QListWidget::item:hover:!selected {{
-                background: {C_HOVER};
-            }}
-        """)
+            self.sudo_btn.setChecked(False)
         self._update_status()
 
     # ----- Shortcuts -------------------------------------------------------
     def _setup_shortcuts(self):
-        # Ctrl+S = toggle sudo
-        self.sudo_shortcut = self.search.addAction(QIcon(), QLineEdit.LeadingPosition) if False else None
-        # Use QAction-based shortcuts instead
-        act_sudo = QAction(self)
-        act_sudo.setShortcut(QKeySequence("Ctrl+S"))
-        act_sudo.triggered.connect(self._toggle_sudo)
-        self.addAction(act_sudo)
+        for key, fn in [
+            ("Ctrl+S",     self._toggle_sudo),
+            ("Ctrl+R",     self._sync_repo_bg),
+            ("Ctrl+E",     self._export_selected),
+            ("F11",        self._toggle_fullscreen),
+            ("Escape",     self._escape_handler),
+            ("Ctrl+,",     self._open_settings),
+            ("Ctrl++",     lambda: self._adjust_font(1)),
+            ("Ctrl+=",     lambda: self._adjust_font(1)),
+            ("Ctrl+-",     lambda: self._adjust_font(-1)),
+        ]:
+            act = QAction(self)
+            act.setShortcut(QKeySequence(key))
+            act.triggered.connect(fn)
+            self.addAction(act)
 
-        act_refresh = QAction(self)
-        act_refresh.setShortcut(QKeySequence("Ctrl+R"))
-        act_refresh.triggered.connect(self._sync_repo_bg)
-        self.addAction(act_refresh)
-
-        act_copy = QAction(self)
-        act_copy.setShortcut(QKeySequence("Ctrl+E"))
-        act_copy.triggered.connect(self._export_selected)
-        self.addAction(act_copy)
-
-        act_fullscreen = QAction(self)
-        act_fullscreen.setShortcut(QKeySequence("F11"))
-        act_fullscreen.triggered.connect(self._toggle_fullscreen)
-        self.addAction(act_fullscreen)
-
-        act_focus = QAction(self)
-        act_focus.setShortcut(QKeySequence("Escape"))
-        act_focus.triggered.connect(self._escape_handler)
-        self.addAction(act_focus)
-
-    # ----- Icon download ---------------------------------------------------
+    # ----- Icons -----------------------------------------------------------
     def _ensure_icons(self):
         ICON_DIR.mkdir(parents=True, exist_ok=True)
-        missing = [f for f in ICON_FILES if not (ICON_DIR / f).exists()]
+        missing = [f for f in ICON_LIST if not (ICON_DIR / f).exists()]
         if missing:
             def dl():
                 for f in missing:
-                    url = f"{ICON_BASE_URL}/{f}"
                     try:
                         subprocess.run(
-                            ["wget", "-q", "-O", str(ICON_DIR / f), url],
+                            ["wget", "-q", "-O", str(ICON_DIR / f),
+                             f"{ICON_URL}/{f}"],
                             timeout=10, capture_output=True
                         )
                     except Exception:
@@ -389,31 +583,30 @@ class ToolKitWindow(QMainWindow):
                         capture_output=True, timeout=30
                     )
                     if r.returncode != 0:
-                        subprocess.run(["rm", "-rf", str(REPO_DIR)], capture_output=True)
+                        subprocess.run(["rm", "-rf", str(REPO_DIR)],
+                                       capture_output=True)
                         subprocess.run(
                             ["git", "clone", "--quiet", REPO_URL, str(REPO_DIR)],
                             capture_output=True, timeout=60
                         )
                 else:
-                    subprocess.run(["rm", "-rf", str(REPO_DIR)], capture_output=True)
+                    subprocess.run(["rm", "-rf", str(REPO_DIR)],
+                                   capture_output=True)
                     subprocess.run(
                         ["git", "clone", "--quiet", REPO_URL, str(REPO_DIR)],
                         capture_output=True, timeout=60
                     )
-                # Signal UI update on main thread
                 QTimer.singleShot(0, self._load_tools)
             except Exception as e:
-                QTimer.singleShot(0, lambda: self._sync_done(False, str(e)))
+                QTimer.singleShot(0, lambda: self._sync_fail(str(e)))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _sync_done(self, ok, msg=""):
+    def _sync_fail(self, msg):
         self.refresh_btn.setEnabled(True)
-        if not ok:
-            self.status_label.setText(f"Sync failed: {msg}")
+        self.status_label.setText(f"Sync failed: {msg}")
 
     def _load_tools(self):
-        """Scan repo dir and populate tool list."""
         self.refresh_btn.setEnabled(True)
         if not REPO_DIR.is_dir():
             self.status_label.setText("Repo not found")
@@ -434,10 +627,10 @@ class ToolKitWindow(QMainWindow):
     def _filter(self):
         query = self.search.text().strip().lower()
         self.tool_list.clear()
+        show_icons = self.settings["show_icons"]
 
         for idx, name in enumerate(self.tools, 1):
             if query:
-                # Match by number or substring
                 if query.isdigit():
                     if str(idx) != query and query not in name.lower():
                         continue
@@ -445,20 +638,18 @@ class ToolKitWindow(QMainWindow):
                     continue
 
             item = QListWidgetItem()
-            # Number prefix + name
             display = f" {idx:>3}.  {name}"
             item.setText(display)
-            item.setData(Qt.UserRole, name)         # store real filename
-            item.setData(Qt.UserRole + 1, idx)      # store original index
+            item.setData(Qt.UserRole, name)
+            item.setData(Qt.UserRole + 1, idx)
 
-            # Icon
-            icon_path = icon_for_file(name)
-            if icon_path:
-                item.setIcon(QIcon(icon_path))
+            if show_icons:
+                icon_path = icon_for_file(name)
+                if icon_path:
+                    item.setIcon(QIcon(icon_path))
 
             self.tool_list.addItem(item)
 
-        # Auto-select first result
         if self.tool_list.count() > 0:
             self.tool_list.setCurrentRow(0)
 
@@ -471,13 +662,12 @@ class ToolKitWindow(QMainWindow):
 
     def _update_status(self):
         mode = "ROOT" if self.sudo_mode else "USER"
-        self.status_label.setText(f"[{mode}]  {TERMINAL}")
+        term = resolve_terminal(self.settings)
+        self.status_label.setText(f"[{mode}]  {term}")
 
-    # ----- Actions ---------------------------------------------------------
+    # ----- Run scripts -----------------------------------------------------
     def _on_enter(self):
-        """Enter pressed in search - run the top match."""
         if self.tool_list.count() > 0:
-            # Use currently selected row, or first if none selected
             current = self.tool_list.currentItem()
             if current is None:
                 current = self.tool_list.item(0)
@@ -495,6 +685,7 @@ class ToolKitWindow(QMainWindow):
             return
 
         self.status_label.setText(f"Running: {name}")
+        term = resolve_terminal(self.settings)
 
         # Build the command
         cmd_parts = []
@@ -507,29 +698,47 @@ class ToolKitWindow(QMainWindow):
             cmd_parts.append("bash")
             cmd_parts.append(str(script_path))
 
-        # Wrap in a shell that pauses after execution
         shell_cmd = " ".join(cmd_parts)
-        wrapped = f'{shell_cmd}; echo ""; echo -e "\\033[0;36mPress Enter to close...\\033[0m"; read'
+        wrapped = (f'{shell_cmd}; echo ""; '
+                   f'echo -e "\\033[0;36mPress Enter to close...\\033[0m"; read')
 
-        # Launch in detected terminal
+        # Launch minimized in preferred terminal
         try:
-            if TERMINAL == "xfce4-terminal":
-                subprocess.Popen([TERMINAL, "--hold", "-e", f"bash -c '{wrapped}'"])
-            elif TERMINAL == "gnome-terminal":
-                subprocess.Popen([TERMINAL, "--", "bash", "-c", wrapped])
-            elif TERMINAL == "konsole":
-                subprocess.Popen([TERMINAL, "--hold", "-e", "bash", "-c", wrapped])
-            elif TERMINAL in ("alacritty", "kitty"):
-                subprocess.Popen([TERMINAL, "-e", "bash", "-c", wrapped])
+            env = os.environ.copy()
+
+            if term == "xfce4-terminal":
+                subprocess.Popen(
+                    [term, "--minimize", "--hold",
+                     "-e", f"bash -c '{wrapped}'"],
+                    env=env
+                )
+            elif term == "gnome-terminal":
+                subprocess.Popen(
+                    [term, "--", "bash", "-c", wrapped],
+                    env=env
+                )
+            elif term == "konsole":
+                subprocess.Popen(
+                    [term, "--hold", "-e", "bash", "-c", wrapped],
+                    env=env
+                )
+            elif term in ("alacritty", "kitty"):
+                subprocess.Popen(
+                    [term, "-e", "bash", "-c", wrapped],
+                    env=env
+                )
             else:
-                subprocess.Popen([TERMINAL, "-e", f"bash -c '{wrapped}'"])
+                subprocess.Popen(
+                    [term, "-iconic", "-e", f"bash -c '{wrapped}'"],
+                    env=env
+                )
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to launch:\n{e}")
 
+    # ----- Toggles ---------------------------------------------------------
     def _toggle_sudo(self):
         self.sudo_mode = not self.sudo_mode
-        self.sudo_btn.setChecked(self.sudo_mode)
-        self._update_sudo_theme()
+        self._apply_theme()
 
     def _toggle_fullscreen(self):
         if self.isFullScreen():
@@ -543,6 +752,21 @@ class ToolKitWindow(QMainWindow):
         elif self.search.text():
             self.search.clear()
         self.search.setFocus()
+
+    def _adjust_font(self, delta):
+        cur = self.settings["font_size"]
+        new = max(10, min(28, cur + delta))
+        if new != cur:
+            self.settings["font_size"] = new
+            self.settings.save()
+            self._apply_theme()
+
+    # ----- Settings dialog -------------------------------------------------
+    def _open_settings(self):
+        dlg = SettingsDialog(self.settings, self)
+        if dlg.exec_() == QDialog.Accepted:
+            self._apply_theme()
+            self._filter()  # refresh icons on/off
 
     # ----- Context menu ----------------------------------------------------
     def _context_menu(self, pos):
@@ -558,10 +782,10 @@ class ToolKitWindow(QMainWindow):
 
         act_sudo_run = menu.addAction("Run as Root")
         def run_as_root():
-            was_sudo = self.sudo_mode
+            was = self.sudo_mode
             self.sudo_mode = True
             self._run_item(item)
-            self.sudo_mode = was_sudo
+            self.sudo_mode = was
         act_sudo_run.triggered.connect(run_as_root)
 
         menu.addSeparator()
@@ -574,7 +798,7 @@ class ToolKitWindow(QMainWindow):
 
         menu.exec_(self.tool_list.mapToGlobal(pos))
 
-    # ----- Export / Copy ---------------------------------------------------
+    # ----- Export ----------------------------------------------------------
     def _export_selected(self):
         item = self.tool_list.currentItem()
         if item:
@@ -593,9 +817,7 @@ class ToolKitWindow(QMainWindow):
             return
 
         try:
-            import shutil
             shutil.copy2(str(src), dest)
-            # Ask about making executable
             reply = QMessageBox.question(
                 self, "Make executable?",
                 f"Make {Path(dest).name} executable?",
@@ -612,23 +834,17 @@ class ToolKitWindow(QMainWindow):
         script_path = REPO_DIR / name
         if not script_path.exists():
             return
+        term = resolve_terminal(self.settings)
         try:
-            if TERMINAL == "xfce4-terminal":
-                subprocess.Popen([
-                    TERMINAL, "-e",
-                    f"bash -c 'less \"{script_path}\"; read'"
-                ])
-            else:
-                subprocess.Popen([
-                    TERMINAL, "-e",
-                    f"bash -c 'less \"{script_path}\"; read'"
-                ])
+            subprocess.Popen([
+                term, "-e",
+                f"bash -c 'less \"{script_path}\"; read'"
+            ])
         except Exception as e:
             QMessageBox.warning(self, "Error", str(e))
 
-    # ----- Key handling on list --------------------------------------------
+    # ----- Key handling ----------------------------------------------------
     def keyPressEvent(self, event):
-        # Forward typing to search bar if list has focus
         if (self.tool_list.hasFocus()
                 and event.text()
                 and event.text().isprintable()
@@ -645,19 +861,6 @@ class ToolKitWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("gLiTcH-ToolKit")
-
-    # Force dark palette as fallback
-    palette = QPalette()
-    palette.setColor(QPalette.Window, QColor(C_BG))
-    palette.setColor(QPalette.WindowText, QColor(C_FG))
-    palette.setColor(QPalette.Base, QColor(C_BG_ALT))
-    palette.setColor(QPalette.Text, QColor(C_FG))
-    palette.setColor(QPalette.Button, QColor(C_BORDER))
-    palette.setColor(QPalette.ButtonText, QColor(C_FG))
-    palette.setColor(QPalette.Highlight, QColor(C_GREEN))
-    palette.setColor(QPalette.HighlightedText, QColor("#000000"))
-    app.setPalette(palette)
-
     win = ToolKitWindow()
     win.show()
     sys.exit(app.exec_())
