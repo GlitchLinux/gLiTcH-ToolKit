@@ -7,8 +7,6 @@ sudo rm -f /tmp/glitch-toolkit-gui.py
 sudo rm -f /tmp/toolkit-launcher.sh
 
 sudo rm -f /usr/share/applications/Glitch-Toolkit.desktop
-sudo rm -f /usr/share/icons/grey-glitch.png
-sudo rm -f /home/x/.local/share/plasma_icons/*
 
 sudo cp -f /usr/local/bin/apps /usr/local/bin/apps-cli
 
@@ -21,6 +19,8 @@ sudo mv gui-toolkit.png /usr/share/icons/git-toolkit-gui.png
 wget https://raw.githubusercontent.com/GlitchLinux/git-toolkit-gui/refs/heads/main/git-toolkit-gui.desktop
 sudo mv git-toolkit-gui.desktop /usr/share/applications/git-toolkit-gui.desktop
 sudo chmod +x /usr/share/applications/git-toolkit-gui.desktop
+
+sudo mv /usr/share/icons/grey-glitch.png /usr/share/icons/git-toolkit-gui.png
 
 echo '#!/bin/bash' > /tmp/apps-gui
 echo "python3 /usr/local/bin/glitch-toolkit-gui.py 2>&1 &" >> /tmp/apps-gui
@@ -42,11 +42,8 @@ sudo cp /tmp/apps-gui-restore /usr/local/bin/apps-gui-restore
 sudo chmod +x /usr/local/bin/apps-gui-restore
 
 echo "Glitch CLI-toolkit changed to 'apps-cli' shortcut" > /tmp/finished
-echo "" >> /tmp/finished
 echo "Glitch GUI-toolkit can now be launched with \"apps\" & \"apps-gui\" commands" >> /tmp/finished
-echo "" >> /tmp/finished
 echo "To change back \"apps\" shortcut to execute CLI toolkit run \"apps-cli-restore\"" >> /tmp/finished
-echo "" >> /tmp/finished
 echo "OR change back \"apps\" shortcut to execute GUI toolkit with \"apps-gui-restore\"" >> /tmp/finished
 
 cat /tmp/finished | borderize
