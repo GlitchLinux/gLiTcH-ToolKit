@@ -1,4 +1,55 @@
-cd /tmp
-mkdir .install && cd .install
-wget https://raw.githubusercontent.com/GlitchLinux/git-toolkit-gui/refs/heads/main/installer.sh
-bash installer.sh
+#!/bin/bash
+
+sudo rm -f /tmp/apps-gui 
+sudo rm -f /tmp/apps-cli-restore 
+sudo rm -f /tmp/apps-gui-restore 
+sudo rm -f /tmp/glitch-toolkit-gui.py 
+sudo rm -f /tmp/toolkit-launcher.sh
+
+sudo cp -f /usr/local/bin/apps /usr/local/bin/apps-cli
+
+cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/git-toolkit-gui/refs/heads/main/glitch-toolkit-gui.py
+sudo cp glitch-toolkit-gui.py /usr/local/bin/glitch-toolkit-gui.py
+wget https://raw.githubusercontent.com/GlitchLinux/git-toolkit-gui/refs/heads/main/toolkit-launcher.sh
+sudo cp toolkit-launcher.sh /usr/local/bin/toolkit-launcher.sh
+wget https://raw.githubusercontent.com/GlitchLinux/git-toolkit-gui/refs/heads/main/git-toolkit-gui.png
+sudo mv git-toolkit-gui.png /usr/share/icons/git-toolkit-gui.png
+wget https://raw.githubusercontent.com/GlitchLinux/git-toolkit-gui/refs/heads/main/git-toolkit-gui.desktop
+sudo mv git-toolkit-gui.desktop /usr/share/applications/git-toolkit-gui.desktop
+sudo chmod +x /usr/share/applications/git-toolkit-gui.desktop
+
+echo '#!/bin/bash' > /tmp/apps-gui
+echo "python3 /usr/local/bin/glitch-toolkit-gui.py 2>&1 &" >> /tmp/apps-gui
+sudo mv /tmp/apps-gui /usr/local/bin/ && sudo cp /usr/local/bin/apps-gui /usr/local/bin/apps
+sudo chmod +x /usr/local/bin/glitch-toolkit-gui.py
+sudo chmod +x /usr/local/bin/toolkit-launcher.sh
+sudo chmod +x /usr/local/bin/apps && sudo chmod +x /usr/local/bin/apps-gui
+
+echo '#!/bin/bash' > /tmp/apps-cli-restore
+echo "sudo cp /usr/local/bin/apps-cli /usr/local/bin/apps" >> /tmp/apps-cli-restore
+echo "echo 'apps' shortcut restored to CLI toolkit" >> /tmp/apps-cli-restore
+sudo cp /tmp/apps-cli-restore /usr/local/bin/apps-cli-restore
+sudo chmod +x /usr/local/bin/apps-cli-restore
+
+echo '#!/bin/bash' > /tmp/apps-gui-restore
+echo "sudo cp /usr/local/bin/apps-gui /usr/local/bin/apps" >> /tmp/apps-gui-restore
+echo "echo 'apps' shortcut restored to GUI toolkit" >> /tmp/apps-gui-restore
+sudo cp /tmp/apps-gui-restore /usr/local/bin/apps-gui-restore
+sudo chmod +x /usr/local/bin/apps-gui-restore
+
+echo "Glitch CLI-toolkit changed to 'apps-cli' shortcut" > /tmp/finished
+echo "" >> /tmp/finished
+echo "Glitch GUI-toolkit can now be launched with \"apps\" & \"apps-gui\" commands" >> /tmp/finished
+echo "" >> /tmp/finished
+echo "To change back \"apps\" shortcut to execute CLI toolkit run \"apps-cli-restore\"" >> /tmp/finished
+echo "" >> /tmp/finished
+echo "OR change back \"apps\" shortcut to execute GUI toolkit with \"apps-gui-restore\"" >> /tmp/finished
+
+cat /tmp/finished | borderize
+sudo rm /tmp/finished
+
+sudo rm -f /tmp/apps-gui 
+sudo rm -f /tmp/apps-cli-restore 
+sudo rm -f /tmp/apps-gui-restore 
+sudo rm -f /tmp/glitch-toolkit-gui.py 
+sudo rm -f /tmp/toolkit-launcher.sh
