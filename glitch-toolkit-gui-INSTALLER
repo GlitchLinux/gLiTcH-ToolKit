@@ -47,7 +47,6 @@ echo "OR change back \"apps\" shortcut to execute GUI toolkit with \"apps-gui-re
 
 cat /tmp/finished | borderize
 sudo rm /tmp/finished
-echo ""
 
 sudo rm -f /tmp/apps-gui 
 sudo rm -f /tmp/apps-cli-restore 
