@@ -12,8 +12,8 @@ cd /tmp && wget https://raw.githubusercontent.com/GlitchLinux/git-toolkit-gui/re
 sudo cp glitch-toolkit-gui.py /usr/local/bin/glitch-toolkit-gui.py
 wget https://raw.githubusercontent.com/GlitchLinux/git-toolkit-gui/refs/heads/main/toolkit-launcher.sh
 sudo cp toolkit-launcher.sh /usr/local/bin/toolkit-launcher.sh
-wget https://raw.githubusercontent.com/GlitchLinux/git-toolkit-gui/refs/heads/main/git-toolkit-gui.png
-sudo mv git-toolkit-gui.png /usr/share/icons/git-toolkit-gui.png
+wget https://raw.githubusercontent.com/GlitchLinux/git-toolkit-gui/refs/heads/main/gui-toolkit.png
+sudo mv gui-toolkit.png /usr/share/icons/git-toolkit-gui.png
 wget https://raw.githubusercontent.com/GlitchLinux/git-toolkit-gui/refs/heads/main/git-toolkit-gui.desktop
 sudo mv git-toolkit-gui.desktop /usr/share/applications/git-toolkit-gui.desktop
 sudo chmod +x /usr/share/applications/git-toolkit-gui.desktop
