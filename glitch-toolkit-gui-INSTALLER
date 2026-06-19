@@ -1,4 +1,4 @@
 cd /tmp
+mkdir .install && cd .install
 wget https://raw.githubusercontent.com/GlitchLinux/git-toolkit-gui/refs/heads/main/installer.sh
-sudo mv installer.sh .installer.sh
-sudo bash .installer.sh
+bash installer.sh
