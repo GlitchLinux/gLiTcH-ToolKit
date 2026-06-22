@@ -23,6 +23,9 @@
 
 set -uo pipefail
 
+# Ensure system sbin dirs are on PATH (parted, mkfs.vfat, wipefs etc. live there)
+export PATH="/usr/local/sbin:/usr/sbin:/sbin:$PATH"
+
 # -------------------- config --------------------
 BASE_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-v2"
 ZIP_NAME="Gdisk-v2-Patched.zip"
@@ -63,12 +66,13 @@ trap cleanup EXIT
 
 # -------------------- tool checks --------------------
 need() {
-    local t p
+    local t p found
     for t in "$@"; do
+        found=0
         for p in "$t" "/sbin/$t" "/usr/sbin/$t" "/usr/local/sbin/$t"; do
-            command -v "$p" >/dev/null 2>&1 && { eval "PATH_${t//-/_}=\"\$p\""; continue 2; }
+            if command -v "$p" >/dev/null 2>&1; then found=1; break; fi
         done
-        die "missing required tool: $t"
+        [ "$found" -eq 1 ] || die "missing required tool: $t"
     done
 }
 need parted mkfs.vfat unzip tar dd lsblk blkid partprobe wipefs sync
@@ -362,7 +366,7 @@ finalize() {
 # ====================================================================
 banner
 echo
-echo "          ${BOLD}Select Gdisk Operation [1-3]:${NC}"
+echo "  ${BOLD}Select Gdisk Operation [1-3]:${NC}"
 echo
 echo "  ${BOLD}1.${NC} Create Gdisk - Make a new Gdisk Device"
 echo "  ${BOLD}2.${NC} Update Gdisk - Update or Install on existing partition."
