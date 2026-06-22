@@ -75,7 +75,7 @@ need() {
         [ "$found" -eq 1 ] || die "missing required tool: $t"
     done
 }
-need parted mkfs.vfat unzip tar dd lsblk blkid partprobe wipefs sync
+need parted mkfs.vfat unzip tar dd lsblk blkid partprobe wipefs sync losetup
 # grub-bios-setup resolved on demand (may be grub2-bios-setup)
 BIOS_SETUP=""
 for t in grub-bios-setup grub2-bios-setup; do
@@ -132,19 +132,26 @@ extract_patch() {
 pick_disk() {
     echo >&2
     echo "${BOLD}Available disks:${NC}" >&2
-    lsblk -dpno NAME,SIZE,MODEL,TRAN | grep -vE 'loop|/dev/ram' >&2
+    lsblk -dpno NAME,SIZE,MODEL,TRAN | grep -vE '/dev/ram' >&2
+    # also surface backing-file loop devices (e.g. mounted .img for testing)
+    local lhdr=0 ln
+    while read -r ln; do
+        [ -z "$ln" ] && continue
+        [ "$lhdr" -eq 0 ] && { echo "${DIM}loop devices:${NC}" >&2; lhdr=1; }
+        echo "  $ln" >&2
+    done < <(losetup -ln -O NAME,SIZE,BACK-FILE 2>/dev/null)
     echo >&2
     local d
-    read -rp "Enter target DISK (e.g. /dev/sdf): " d
+    read -rp "Enter target DISK (e.g. /dev/sdf or /dev/loop5): " d
     [ -b "$d" ] || die "not a block device: $d"
-    case "$d" in *[0-9]) warn "That looks like a partition, not a whole disk.";; esac
+    case "$d" in *[0-9]) [[ "$d" =~ loop[0-9]+$ ]] || warn "That looks like a partition, not a whole disk.";; esac
     REPLY_DISK="$d"
 }
 
 pick_partition() {
     echo >&2
     echo "${BOLD}Available partitions:${NC}" >&2
-    lsblk -pno NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT | grep -vE 'loop|/dev/ram' >&2
+    lsblk -pno NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT | grep -vE '/dev/ram' >&2
     echo >&2
     local p
     read -rp "Enter target PARTITION (e.g. /dev/sdf1): " p
@@ -219,7 +226,21 @@ extract_files() {
     mkdir -p "$MNT"
     mount "$part" "$MNT" || die "mount $part failed"
     msg "Extracting Gdisk files to $part"
-    unzip -oq "$ZIP" -d "$MNT" || die "unzip failed"
+
+    # The zip wraps everything in a top-level "Gdisk-v2-Patched/" folder.
+    # Extract to a staging dir, then move the INNER contents to the FS root.
+    local stage="$WORK_DIR/zip-stage"
+    rm -rf "$stage"; mkdir -p "$stage"
+    unzip -oq "$ZIP" -d "$stage" || die "unzip failed"
+
+    # find the single wrapper dir (fallback: stage itself if already flat)
+    local src="$stage"
+    local entries; entries=$(ls -A "$stage")
+    if [ "$(echo "$entries" | wc -l)" -eq 1 ] && [ -d "$stage/$entries" ]; then
+        src="$stage/$entries"
+    fi
+
+    cp -a "$src"/. "$MNT"/ || die "copy to partition failed"
     sync
 }
 
@@ -236,14 +257,16 @@ install_bios_boot() {
     for img in boot.img diskboot.img kernel.img lnxboot.img; do
         [ -f "$PATCH_I386/$img" ] && cp -f "$PATCH_I386/$img" "$moddir/"
     done
+    # grub-bios-setup reads boot.img + core.img FROM --directory. Install the
+    # PATCHED core under that name so the custom modules are what gets embedded.
+    cp -f "$PATCH_CORE" "$moddir/core.img"
     sync
 
-    # write the 446-byte MBR boot code from patched boot.img (preserve table+sig)
-    msg "Writing MBR boot code"
-    dd if="$PATCH_BOOTIMG" of="$disk" bs=446 count=1 conv=fsync status=none
-
     msg "Installing patched core.img to post-MBR gap via $(basename "$BIOS_SETUP")"
-    "$BIOS_SETUP" --directory="$moddir" --core-image="$PATCH_CORE" "$disk" \
+    # Standard grub-bios-setup syntax: --directory holds boot.img + core.img,
+    # last positional arg is the target disk. The --core-image flag is NOT
+    # portable (absent in mainline grub) - it caused the path-concat error.
+    "$BIOS_SETUP" --directory="$moddir" "$disk" \
         || die "grub-bios-setup failed"
     msg "BIOS boot chain installed"
 }
@@ -366,7 +389,7 @@ finalize() {
 # ====================================================================
 banner
 echo
-echo "  ${BOLD}Select Gdisk Operation [1-3]:${NC}"
+echo "          ${BOLD}Select Gdisk Operation [1-3]:${NC}"
 echo
 echo "  ${BOLD}1.${NC} Create Gdisk - Make a new Gdisk Device"
 echo "  ${BOLD}2.${NC} Update Gdisk - Update or Install on existing partition."
