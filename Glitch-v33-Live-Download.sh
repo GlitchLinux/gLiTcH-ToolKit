@@ -5,6 +5,7 @@ sudo rm -f vmlinuz* filesystem.squashfs* initrd.img* wget-log
 sudo rm -f /tmp/.glitch-live.sh
 
 set PWD=pwd
+
 echo "tree $PWD" > /tmp/path
 
 cat > "/tmp/.glitch-live.sh" << 'EOF'
@@ -23,10 +24,10 @@ sudo wget -q --show-progress "https://glitchlinux.wtf/ipxe/Glitch-Linux-v33/live
 
 echo " Downloaded Files: " | borderize > /tmp/wget-result
 echo "" >> /tmp/wget-result
-mv Glitch-Linux-Download.sh /tmp/
+mv -f Glitch-v33-Live-Download.sh /tmp/
 rm -f .ventoyignore
 bash /tmp/path >> /tmp/wget-result
-cp /tmp/glitch-live.sh .
+cp /tmp/Glitch-v33-Live-Download.sh .
 touch .ventoyignore
 clear
 echo "" 
