@@ -128,7 +128,7 @@ acquire_sources() {
             mv -f "$DL_DIR/$f.part" "$DL_DIR/$f"
             msg "Downloaded: ${HL}$f${NC}"
         fi
-    don
+    done
     ZIP="$DL_DIR/$ZIP_NAME"
     TAR="$DL_DIR/$TAR_NAME"
     [ -s "$ZIP" ] || die "zip missing/empty: $ZIP"
