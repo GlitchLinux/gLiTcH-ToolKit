@@ -32,7 +32,7 @@ export PATH="/usr/local/sbin:/usr/sbin:/sbin:$PATH"
 BASE_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-v2"
 ZIP_NAME="Gdisk-v2-Patched.zip"
 TAR_NAME="grub-patch.tar.gz"
-FAT_LABEL="GDISK-V2"
+FAT_LABEL="Gdisk-v3"
 WORK_DIR="/tmp/gdisk-v2-$$"
 DL_DIR="/tmp/gdisk-v2-dl"
 MNT="/tmp/gdisk-v2-mnt-$$"
@@ -128,7 +128,7 @@ acquire_sources() {
             mv -f "$DL_DIR/$f.part" "$DL_DIR/$f"
             msg "Downloaded: ${HL}$f${NC}"
         fi
-    done
+    don
     ZIP="$DL_DIR/$ZIP_NAME"
     TAR="$DL_DIR/$TAR_NAME"
     [ -s "$ZIP" ] || die "zip missing/empty: $ZIP"
