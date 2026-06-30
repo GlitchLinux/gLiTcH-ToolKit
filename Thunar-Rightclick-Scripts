@@ -59,5 +59,6 @@ sudo rm -rf /usr/share/icons/filetype-icons/
 sudo cp -r filetype-icons/ /usr/share/icons/
 
 echo "Deployment complete. You may need to restart Thunar for changes to take effect:"
-thunar -q && thunar &
+thunar -q && cd && thunar 2>&1 &
+exit
 exit
