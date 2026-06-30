@@ -6,7 +6,7 @@
 set -e  # Exit on any error
 
 # Configuration
-APPIMAGE_URL="https://glitchlinux.wtf/FILES/APPIMAGES/firefox-esr-128.13.r20250714124554-x86_64.AppImage"
+APPIMAGE_URL="https://glitchlinux.wtf/FILES/Linux-Software/APPIMAGES/firefox-esr-128.13.r20250714124554-x86_64.AppImage"
 APPIMAGE_NAME="firefox-esr-128.13.r20250714124554-x86_64.AppImage"
 WORK_DIR="/tmp/firefox-isolated"
 APPIMAGE_PATH="$WORK_DIR/$APPIMAGE_NAME"
