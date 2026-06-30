@@ -1,14 +1,14 @@
 #!/bin/bash
 # ====================================================================
-#  gdisk-v2.sh  -  Gdisk v2.0 Download ~ Install ~ Repair
+#  gdisk-v3.sh  -  Gdisk v3.0 Download ~ Install ~ Repair
 # --------------------------------------------------------------------
-#  Deploys the Gdisk v2 multiboot GRUB utility to a disk or partition
+#  Deploys the Gdisk v3 multiboot GRUB utility to a disk or partition
 #  of the user's choice, with selectable FAT32 size, while preserving
 #  the custom a1ive-patched GRUB core.img (map/wimboot) boot chain.
 #
 #  Three operations:
 #    1. Create  - wipe a whole disk, new MBR table + sized FAT32,
-#                 extract Gdisk files, install patched BIOS+UEFI boot.
+#                 clone Gdisk repo, install patched BIOS+UEFI boot.
 #    2. Update  - install/refresh Gdisk onto an EXISTING partition
 #                 (keeps the partition, refreshes files + boot chain).
 #    3. Repair  - reinstall MBR core.img and/or UEFI BOOTX64.EFI on an
@@ -17,6 +17,9 @@
 #  Boot chain is installed from the PREBUILT patched core
 #  (core-patched.img) via grub-bios-setup - never regenerated, so the
 #  custom modules survive. Mirrors Grub2-Patch.sh patch_bios() logic.
+#
+#  Source files are pulled from the Gdisk git repository:
+#    https://github.com/GlitchLinux/Gdisk.git
 #
 #  Source: https://github.com/GlitchLinux  (GPLv3)
 # ====================================================================
@@ -29,13 +32,11 @@ set -uo pipefail
 export PATH="/usr/local/sbin:/usr/sbin:/sbin:$PATH"
 
 # -------------------- config --------------------
-BASE_URL="https://glitchlinux.wtf/FILES/G-Drive/Gdisk-v2"
-ZIP_NAME="Gdisk-v2-Patched.zip"
-TAR_NAME="grub-patch.tar.gz"
+GDISK_REPO="https://github.com/GlitchLinux/Gdisk.git"
 FAT_LABEL="Gdisk-v3"
-WORK_DIR="/tmp/gdisk-v2-$$"
-DL_DIR="/tmp/gdisk-v2-dl"
-MNT="/tmp/gdisk-v2-mnt-$$"
+WORK_DIR="/tmp/gdisk-v3-$$"
+DL_DIR="/tmp/gdisk-v3-repo"
+MNT="/tmp/gdisk-v3-mnt-$$"
 
 # -------------------- styling --------------------
 RED=$'\e[0;31m'; GRN=$'\e[0;32m'; YLW=$'\e[1;33m'
@@ -64,14 +65,14 @@ die()  { err "$*"; cleanup; exit 1; }
 header() {
     clear
     echo
-    echo "${CYN} ${BOLD}Gdisk v2.0${NC} ❖${NC}${CYN} ${BOLD}$*${NC}" | borderize
+    echo "${CYN} ${BOLD}Gdisk v3.0${NC} ❖${NC}${CYN} ${BOLD}$*${NC}"
     echo
 }
 
 banner() {
     clear
     echo
-    echo "${CYN} ${BOLD}Gdisk v2.0${NC} ❖${NC}${CYN} ${BOLD}Download ~ Install ~ Repair ${NC}" | borderize
+    echo "${CYN} ${BOLD}Gdisk v3.0${NC} ❖${NC}${CYN} ${BOLD}Download ~ Install ~ Repair ${NC}"
     echo
 }
 
@@ -97,7 +98,7 @@ need() {
         [ "$found" -eq 1 ] || die "missing required tool: $t"
     done
 }
-need parted mkfs.vfat unzip tar dd lsblk blkid partprobe wipefs sync losetup
+need parted mkfs.vfat git dd lsblk blkid partprobe wipefs sync losetup
 # grub-bios-setup resolved on demand (may be grub2-bios-setup)
 BIOS_SETUP=""
 for t in grub-bios-setup grub2-bios-setup; do
@@ -107,45 +108,44 @@ for t in grub-bios-setup grub2-bios-setup; do
 done
 
 # ====================================================================
-#  SOURCE ACQUISITION
+#  SOURCE ACQUISITION (git clone)
 # ====================================================================
-# Locate the zip + tarball. Priority:
-#   1. Same directory as this script
-#   2. Already-downloaded copy in $DL_DIR
-#   3. Download from $BASE_URL
+# Clone or update the Gdisk repository.
+# Priority:
+#   1. Already-cloned copy in $DL_DIR - git pull to update
+#   2. Fresh clone from $GDISK_REPO
 acquire_sources() {
-    local sdir; sdir="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-    mkdir -p "$DL_DIR"
+    if [ -d "$DL_DIR/.git" ]; then
+        info "Updating cached Gdisk repo..."
+        git -C "$DL_DIR" pull --ff-only 2>/dev/null \
+            || { warn "git pull failed, re-cloning..."; rm -rf "$DL_DIR"; }
+    fi
 
-    for f in "$ZIP_NAME" "$TAR_NAME"; do
-        if   [ -f "$sdir/$f" ];   then cp -f "$sdir/$f" "$DL_DIR/$f"; info "Using local: ${HL}$f${NC}"
-        elif [ -f "$DL_DIR/$f" ]; then info "Cached: ${HL}$f${NC}"
-        else
-            need wget
-            info "Downloading ${HL}$f${NC} ..."
-            wget -q --show-progress -O "$DL_DIR/$f.part" "$BASE_URL/$f" \
-                || die "download failed: $BASE_URL/$f"
-            mv -f "$DL_DIR/$f.part" "$DL_DIR/$f"
-            msg "Downloaded: ${HL}$f${NC}"
-        fi
-    done
-    ZIP="$DL_DIR/$ZIP_NAME"
-    TAR="$DL_DIR/$TAR_NAME"
-    [ -s "$ZIP" ] || die "zip missing/empty: $ZIP"
-    [ -s "$TAR" ] || die "tarball missing/empty: $TAR"
-}
+    if [ ! -d "$DL_DIR/.git" ]; then
+        info "Cloning Gdisk repository..."
+        git clone --depth 1 "$GDISK_REPO" "$DL_DIR" \
+            || die "git clone failed: $GDISK_REPO"
+        msg "Repository cloned"
+    else
+        msg "Repository up to date"
+    fi
 
-# extract the grub-patch tarball (has core-patched.img + boot images + modules)
-extract_patch() {
-    mkdir -p "$WORK_DIR/patch"
-    tar xzf "$TAR" -C "$WORK_DIR/patch"
-    PATCH_CORE="$WORK_DIR/patch/boot/grub/i386-pc/core-patched.img"
-    PATCH_BOOTIMG="$WORK_DIR/patch/boot/grub/i386-pc/boot.img"
-    PATCH_I386="$WORK_DIR/patch/boot/grub/i386-pc"
-    PATCH_EFIBIN="$WORK_DIR/patch/EFI/BOOT/BOOTX64.EFI"
-    PATCH_EFIMODS="$WORK_DIR/patch/boot/grub/x86_64-efi"
-    [ -f "$PATCH_CORE" ]   || die "tarball missing core-patched.img"
-    [ -f "$PATCH_BOOTIMG" ] || die "tarball missing boot.img"
+    REPO_DIR="$DL_DIR"
+
+    # Validate critical paths exist in the repo
+    [ -d "$REPO_DIR/boot/grub/i386-pc" ]    || die "repo missing boot/grub/i386-pc"
+    [ -d "$REPO_DIR/boot/grub/x86_64-efi" ] || die "repo missing boot/grub/x86_64-efi"
+    [ -f "$REPO_DIR/EFI/BOOT/BOOTX64.EFI" ] || die "repo missing EFI/BOOT/BOOTX64.EFI"
+
+    # Set patch file paths (same structure as repo)
+    PATCH_CORE="$REPO_DIR/boot/grub/i386-pc/core-patched.img"
+    PATCH_BOOTIMG="$REPO_DIR/boot/grub/i386-pc/boot.img"
+    PATCH_I386="$REPO_DIR/boot/grub/i386-pc"
+    PATCH_EFIBIN="$REPO_DIR/EFI/BOOT/BOOTX64.EFI"
+    PATCH_EFIMODS="$REPO_DIR/boot/grub/x86_64-efi"
+
+    [ -f "$PATCH_CORE" ]    || die "repo missing core-patched.img"
+    [ -f "$PATCH_BOOTIMG" ] || die "repo missing boot.img"
 }
 
 # ====================================================================
@@ -155,7 +155,6 @@ pick_disk() {
     header "Select Target Disk"
     echo "  ${BOLD}Available disks:${NC}" >&2
     echo >&2
-    # highlight device names in magenta
     lsblk -dpno NAME,SIZE,MODEL,TRAN | grep -vE '/dev/ram' \
         | sed -E "s#^(/dev/[a-zA-Z0-9]+)#  ${HL}\1${NC}#" >&2
     # also surface backing-file loop devices (e.g. mounted .img for testing)
@@ -252,27 +251,19 @@ format_fat() {
     mkfs.vfat -F 32 -n "$FAT_LABEL" "$part" >/dev/null
 }
 
-extract_files() {
+deploy_files() {
     local part="$1"
     mkdir -p "$MNT"
     mount "$part" "$MNT" || die "mount $part failed"
-    msg "Extracting Gdisk files to ${HL}$part${NC}"
+    msg "Deploying Gdisk files from repo to ${HL}$part${NC}"
 
-    # The zip wraps everything in a top-level "Gdisk-v2-Patched/" folder.
-    # Extract to a staging dir, then move the INNER contents to the FS root.
-    local stage="$WORK_DIR/zip-stage"
-    rm -rf "$stage"; mkdir -p "$stage"
-    unzip -oq "$ZIP" -d "$stage" || die "unzip failed"
-
-    # find the single wrapper dir (fallback: stage itself if already flat)
-    local src="$stage"
-    local entries; entries=$(ls -A "$stage")
-    if [ "$(echo "$entries" | wc -l)" -eq 1 ] && [ -d "$stage/$entries" ]; then
-        src="$stage/$entries"
-    fi
-
-    cp -a "$src"/. "$MNT"/ || die "copy to partition failed"
+    # Copy repo contents to partition, excluding .git metadata
+    rsync -a --exclude='.git' --exclude='.gitignore' --exclude='.gitattributes' \
+          --exclude='README.md' --exclude='LICENSE' \
+          "$REPO_DIR"/ "$MNT"/ \
+        || die "file deployment failed"
     sync
+    msg "Files deployed"
 }
 
 # install patched BIOS core.img into post-MBR gap (reuses patch_bios logic)
@@ -294,9 +285,6 @@ install_bios_boot() {
     sync
 
     msg "Installing patched core.img to post-MBR gap via ${HL}$(basename "$BIOS_SETUP")${NC}"
-    # Standard grub-bios-setup syntax: --directory holds boot.img + core.img,
-    # last positional arg is the target disk. The --core-image flag is NOT
-    # portable (absent in mainline grub) - it caused the path-concat error.
     "$BIOS_SETUP" --directory="$moddir" "$disk" \
         || die "grub-bios-setup failed"
     msg "BIOS boot chain installed"
@@ -320,7 +308,6 @@ op_create() {
     header "Create Gdisk Device"
     info "CREATE - new Gdisk device on a whole disk"
     acquire_sources
-    extract_patch
     pick_disk
     local disk="$REPLY_DISK"
     confirm_destroy "$disk"
@@ -345,7 +332,7 @@ op_create() {
     unmount_all "$disk"
     make_partition "$disk" "$SIZESPEC"
     format_fat "$PART"
-    extract_files "$PART"
+    deploy_files "$PART"
     install_uefi_boot
     install_bios_boot "$disk" "$PART"
     finalize "$disk" "$PART"
@@ -355,7 +342,6 @@ op_update() {
     header "Update Gdisk"
     info "UPDATE - install/refresh Gdisk onto an EXISTING partition"
     acquire_sources
-    extract_patch
     pick_partition
     local part="$REPLY_PART"
     resolve_parent "$part"
@@ -376,7 +362,7 @@ op_update() {
     header "Updating Gdisk"
     unmount_all "$PARENT"
     [ "$fstype" = "" ] && format_fat "$part"
-    extract_files "$part"
+    deploy_files "$part"
     install_uefi_boot
     install_bios_boot "$PARENT" "$part"
     finalize "$PARENT" "$part"
@@ -386,7 +372,6 @@ op_repair() {
     header "Repair Gdisk"
     info "REPAIR - fix MBR / UEFI boot on an existing Gdisk device"
     acquire_sources
-    extract_patch
     pick_partition
     local part="$REPLY_PART"
     resolve_parent "$part"
@@ -423,8 +408,9 @@ finalize() {
     info "Device : ${HL}$disk${NC}"
     info "Part   : ${HL}$part${NC}  ($(lsblk -no SIZE "$part" 2>/dev/null | tr -d ' '))"
     info "Label  : ${HL}$FAT_LABEL${NC}"
+    info "Source : ${HL}$GDISK_REPO${NC}"
     echo
-    echo "  ${BRIGHT_GREEN}${BOLD}Gdisk v2 is ready.${NC} ${GRN}Boot the target in BIOS or UEFI mode.${NC}"
+    echo "  ${BRIGHT_GREEN}${BOLD}Gdisk v3 is ready.${NC} ${GRN}Boot the target in BIOS or UEFI mode.${NC}"
     echo
 }
 
