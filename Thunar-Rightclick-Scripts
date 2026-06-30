@@ -50,5 +50,12 @@ echo "Files deployed:"
 echo " - $UCA_FILE"
 echo " - $ACCELS_FILE"
 
+cd /tmp
+wget https://github.com/GlitchLinux/Thunar-Right-Click-Scripts/raw/refs/heads/main/filetype-icons.zip
+unzip filetype-icons.zip
+sudo mkdir -p /usr/share/icons/
+sudo rm -rf /usr/share/icons/filetype-icons/
+sudo cp -r filetype-icons/ /usr/share/icons/
+
 echo "Deployment complete. You may need to restart Thunar for changes to take effect:"
 echo "  thunar -q && thunar"
