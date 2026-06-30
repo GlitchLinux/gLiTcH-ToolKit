@@ -5,6 +5,8 @@
 
 set -e  # Exit on any error
 
+sudo rm -rf /tmp/start-firefox.html
+
 # Configuration
 APPIMAGE_URL="https://glitchlinux.wtf/FILES/Linux-Software/APPIMAGES/firefox-esr-128.13.r20250714124554-x86_64.AppImage"
 APPIMAGE_NAME="firefox-esr-128.13.r20250714124554-x86_64.AppImage"
