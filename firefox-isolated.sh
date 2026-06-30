@@ -270,8 +270,8 @@ launch_firefox() {
 
 # Function to show welcome dialog
 show_welcome_dialog() {
-    print_info_box "🦊 Welcome to Firefox Isolated Instance!" "This script will:" "• Download Firefox AppImage (if needed)" "• Create a temporary, isolated profile" "• Launch Firefox with no data persist" "• Clean up when you're done"
-    echo ""
+    print_info_box "Welcome to Firefox Isolated Instance!" "This script will:" "• Download Firefox AppImage (if needed)" "• Create a temporary, isolated profile" "• Launch Firefox with no data persist" "• Clean up when you're done"
+    echo "🦊"
     
     echo "Autostarting in 5 seconds"
     sleep 5
