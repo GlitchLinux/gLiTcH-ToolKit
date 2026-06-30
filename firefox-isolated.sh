@@ -233,11 +233,11 @@ show_cleanup_dialog() {
 
 # Function to show startup notification
 show_startup_notification() {
-    print_info_box "🦊 Starting Firefox in isolated mode..." "⚠️  Important Notes:" "• This session will NOT save any data" "• Cookies, history, downloads temporary" "• All data deleted when Firefox closes"
+    print_info_box "Starting Firefox in isolated mode..." "Important Notes:" "• This session will NOT save any data" "• Cookies, history, downloads temporary" "• All data deleted when Firefox closes"
     echo ""
     
-    echo "Firefox will launch in a few seconds..."
-    sleep 3
+    echo "Firefox is launching"
+    sleep 1
 }
 
 # Function to launch Firefox
@@ -260,7 +260,7 @@ launch_firefox() {
     
     mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME"
     
-    "$APPIMAGE_PATH" --profile "$temp_profile" --new-instance /tmp/start-firefox.html
+    "$APPIMAGE_PATH" --profile "$temp_profile" --new-instance /tmp/start-firefox.html &
     
     export HOME="$original_home"
     unset XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME
@@ -271,9 +271,9 @@ launch_firefox() {
 # Function to show welcome dialog
 show_welcome_dialog() {
     print_info_box "Welcome to Firefox Isolated Instance!" "This script will:" "• Download Firefox AppImage (if needed)" "• Create a temporary, isolated profile" "• Launch Firefox with no data persist" "• Clean up when you're done"
-    echo "🦊"
+    echo ""
     
-    echo "Autostarting in 5 seconds"
+    echo "Autostarting in 5 seconds 🦊"
     sleep 5
 }
 
@@ -308,7 +308,7 @@ create_start_page() {
     <style>
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            background: linear-gradient(135deg, #515151 0%, #4d4d4d 100%); 
             color: #ffffff; 
             text-align: center; 
             padding: 50px;
