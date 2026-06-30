@@ -6,6 +6,7 @@
 set -e  # Exit on any error
 
 sudo rm -rf /tmp/start-firefox.html
+sudo rm -rf /tmp/firefox-isolated/
 
 # Configuration
 APPIMAGE_URL="https://glitchlinux.wtf/FILES/Linux-Software/APPIMAGES/firefox-esr-128.13.r20250714124554-x86_64.AppImage"
@@ -272,8 +273,8 @@ show_welcome_dialog() {
     print_info_box "🦊 Welcome to Firefox Isolated Instance!" "This script will:" "• Download Firefox AppImage (if needed)" "• Create a temporary, isolated profile" "• Launch Firefox with no data persist" "• Clean up when you're done"
     echo ""
     
-    echo "Press Enter to continue..."
-    read
+    echo "Autostarting in 5 seconds"
+    sleep 5
 }
 
 # Main execution
@@ -381,7 +382,7 @@ create_start_page() {
 </html>
 EOF
     
-    chmod 644 /tmp/start-firefox.html
+    chmod 777 /tmp/start-firefox.html
 }
 
 # Help function
