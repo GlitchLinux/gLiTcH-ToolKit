@@ -1,0 +1,4 @@
+echo "sudo systemctl restart sddm" > /tmp/sddm-restart
+echo "sleep 1 && sudo bash /tmp/sddm-restart && sleep 1 && sudo bash /tmp/sddm-restart" > /tmp/sddm-restart2
+bash /tmp/sddm-restart2 2>&1 &
+exit
