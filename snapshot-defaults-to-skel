@@ -1,0 +1,86 @@
+#!/bin/bash
+# Snapshot all user x configs and set as system-wide defaults
+# Run this on the reference installation (the one you've perfected)
+
+set -e
+
+SOURCE_USER="x"
+SOURCE_HOME="/home/$SOURCE_USER"
+SKEL_DIR="/etc/skel"
+
+echo ""
+echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
+echo "SNAPSHOTTING GLITCH LINUX USER CONFIGURATION"
+echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
+echo ""
+
+if [ ! -d "$SOURCE_HOME" ]; then
+    echo "[ERROR] User home not found: $SOURCE_HOME"
+    exit 1
+fi
+
+echo "[1/5] Backing up current /etc/skel..."
+sudo cp -r "$SKEL_DIR" "/etc/skel.backup.$(date +%s)"
+
+echo "[2/5] Copying dotfiles from $SOURCE_HOME to /etc/skel..."
+
+# Core shell configs
+sudo cp "$SOURCE_HOME/.bashrc" "$SKEL_DIR/" 2>/dev/null || true
+sudo cp "$SOURCE_HOME/.bash_profile" "$SKEL_DIR/" 2>/dev/null || true
+sudo cp "$SOURCE_HOME/.bash_logout" "$SKEL_DIR/" 2>/dev/null || true
+sudo cp "$SOURCE_HOME/.profile" "$SKEL_DIR/" 2>/dev/null || true
+sudo cp "$SOURCE_HOME/.zshrc" "$SKEL_DIR/" 2>/dev/null || true
+
+# X11/Desktop environment
+sudo cp "$SOURCE_HOME/.xinitrc" "$SKEL_DIR/" 2>/dev/null || true
+sudo cp "$SOURCE_HOME/.xprofile" "$SKEL_DIR/" 2>/dev/null || true
+
+# Application configs
+echo "[3/5] Copying .config directory..."
+sudo cp -r "$SOURCE_HOME/.config" "$SKEL_DIR/" 2>/dev/null || true
+
+# Local data (themes, icons, applications)
+echo "[4/5] Copying .local directory..."
+sudo cp -r "$SOURCE_HOME/.local" "$SKEL_DIR/" 2>/dev/null || true
+
+# Optional: Copy other common dotfiles
+sudo cp "$SOURCE_HOME/.screenrc" "$SKEL_DIR/" 2>/dev/null || true
+sudo cp "$SOURCE_HOME/.inputrc" "$SKEL_DIR/" 2>/dev/null || true
+sudo cp "$SOURCE_HOME/.gitconfig" "$SKEL_DIR/" 2>/dev/null || true
+sudo cp "$SOURCE_HOME/.vimrc" "$SKEL_DIR/" 2>/dev/null || true
+
+# SSH config (optional - be careful with keys)
+sudo cp -r "$SOURCE_HOME/.ssh" "$SKEL_DIR/" 2>/dev/null || true
+sudo chmod 700 "$SKEL_DIR/.ssh" 2>/dev/null || true
+
+echo "[5/5] Setting correct permissions..."
+sudo chown -R root:root "$SKEL_DIR"
+sudo chmod 755 "$SKEL_DIR"
+sudo chmod -R 644 "$SKEL_DIR/".* "$SKEL_DIR"/*
+sudo find "$SKEL_DIR" -type d -exec chmod 755 {} \;
+
+# Make shell scripts executable
+sudo find "$SKEL_DIR/.local/bin" -type f -exec chmod 755 {} \; 2>/dev/null || true
+sudo find "$SKEL_DIR/.config" -name "*.sh" -exec chmod 755 {} \; 2>/dev/null || true
+
+echo ""
+echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
+echo "[âœ“] SNAPSHOT COMPLETE"
+echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
+echo ""
+echo "Summary:"
+echo "  Source: $SOURCE_HOME"
+echo "  Destination: $SKEL_DIR"
+echo ""
+echo "Copied:"
+echo "  â€¢ Shell configs (.bashrc, .profile, etc)"
+echo "  â€¢ Desktop environment settings (.config/)"
+echo "  â€¢ Local data (.local/)"
+echo "  â€¢ Application configs"
+echo ""
+echo "New users will now get:"
+sudo du -sh "$SKEL_DIR" | awk '{print "  â€¢ " $1 " of default configuration"}'
+echo ""
+echo "Test with:"
+echo "  sudo useradd -m testuser"
+echo "  # Login as testuser - should have all Glitch Linux defaults"
