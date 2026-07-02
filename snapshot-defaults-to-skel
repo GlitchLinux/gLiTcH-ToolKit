@@ -1,6 +1,5 @@
 #!/bin/bash
-# Snapshot all user x configs and set as system-wide defaults
-# Run this on the reference installation (the one you've perfected)
+# Snapshot EVERYTHING from user x to /etc/skel (except .cache, .ssh, .bash_history)
 
 set -e
 
@@ -8,10 +7,9 @@ SOURCE_USER="x"
 SOURCE_HOME="/home/$SOURCE_USER"
 SKEL_DIR="/etc/skel"
 
-echo ""
-echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
+echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
 echo "SNAPSHOTTING GLITCH LINUX USER CONFIGURATION"
-echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
+echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
 echo ""
 
 if [ ! -d "$SOURCE_HOME" ]; then
@@ -19,49 +17,54 @@ if [ ! -d "$SOURCE_HOME" ]; then
     exit 1
 fi
 
-echo "[1/5] Backing up current /etc/skel..."
-sudo cp -r "$SKEL_DIR" "/etc/skel.backup.$(date +%s)"
+if [ $EUID -ne 0 ]; then
+    echo "[ERROR] Must run as root (sudo)"
+    exit 1
+fi
 
-echo "[2/5] Copying dotfiles from $SOURCE_HOME to /etc/skel..."
+echo "[1/3] Backing up current /etc/skel..."
+if [ -d "$SKEL_DIR" ]; then
+    cp -r "$SKEL_DIR" "/etc/skel.backup.$(date +%s)"
+    rm -rf "$SKEL_DIR"
+fi
+mkdir -p "$SKEL_DIR"
 
-# Core shell configs
-sudo cp "$SOURCE_HOME/.bashrc" "$SKEL_DIR/" 2>/dev/null || true
-sudo cp "$SOURCE_HOME/.bash_profile" "$SKEL_DIR/" 2>/dev/null || true
-sudo cp "$SOURCE_HOME/.bash_logout" "$SKEL_DIR/" 2>/dev/null || true
-sudo cp "$SOURCE_HOME/.profile" "$SKEL_DIR/" 2>/dev/null || true
-sudo cp "$SOURCE_HOME/.zshrc" "$SKEL_DIR/" 2>/dev/null || true
+echo "[2/3] Copying ALL user configs from /home/$SOURCE_USER..."
 
-# X11/Desktop environment
-sudo cp "$SOURCE_HOME/.xinitrc" "$SKEL_DIR/" 2>/dev/null || true
-sudo cp "$SOURCE_HOME/.xprofile" "$SKEL_DIR/" 2>/dev/null || true
+# Copy everything from source home
+cp -r "$SOURCE_HOME"/* "$SKEL_DIR/" 2>/dev/null || true
+cp -r "$SOURCE_HOME"/.* "$SKEL_DIR/" 2>/dev/null || true
 
-# Application configs
-echo "[3/5] Copying .config directory..."
-sudo cp -r "$SOURCE_HOME/.config" "$SKEL_DIR/" 2>/dev/null || true
+# Remove only the per-user stuff
+echo "  Removing per-user runtime data..."
+rm -rf "$SKEL_DIR/.cache"              # Temporary cache
+rm -rf "$SKEL_DIR/.ssh"                # SSH keys (security!)
+rm -f "$SKEL_DIR/.bash_history"        # Per-user shell history
+rm -f "$SKEL_DIR/.Xauthority"          # X11 session auth (regenerated per login)
+rm -f "$SKEL_DIR/.viminfo"             # Vim runtime data
+rm -f "$SKEL_DIR/.lesshst"             # Less history
+rm -f "$SKEL_DIR/.recently-used.xbel"  # Recent files
 
-# Local data (themes, icons, applications)
-echo "[4/5] Copying .local directory..."
-sudo cp -r "$SOURCE_HOME/.local" "$SKEL_DIR/" 2>/dev/null || true
+# Keep everything else:
+# âœ“ .config/ (all application settings including KDE/Plasma)
+# âœ“ .local/ (themes, icons, fonts, application data)
+# âœ“ .bashrc, .profile (shell config)
+# âœ“ .gtkrc, .Xresources (theming)
+# âœ“ .themes, .icons, .fonts (system appearance)
+# âœ“ Desktop, Downloads (user folders - with Glitch structure)
+# âœ“ etc.
 
-# Optional: Copy other common dotfiles
-sudo cp "$SOURCE_HOME/.screenrc" "$SKEL_DIR/" 2>/dev/null || true
-sudo cp "$SOURCE_HOME/.inputrc" "$SKEL_DIR/" 2>/dev/null || true
-sudo cp "$SOURCE_HOME/.gitconfig" "$SKEL_DIR/" 2>/dev/null || true
-sudo cp "$SOURCE_HOME/.vimrc" "$SKEL_DIR/" 2>/dev/null || true
+echo "[3/3] Setting correct permissions..."
+chown -R root:root "$SKEL_DIR"
+chmod 755 "$SKEL_DIR"
 
-# SSH config (optional - be careful with keys)
-sudo cp -r "$SOURCE_HOME/.ssh" "$SKEL_DIR/" 2>/dev/null || true
-sudo chmod 700 "$SKEL_DIR/.ssh" 2>/dev/null || true
-
-echo "[5/5] Setting correct permissions..."
-sudo chown -R root:root "$SKEL_DIR"
-sudo chmod 755 "$SKEL_DIR"
-sudo chmod -R 644 "$SKEL_DIR/".* "$SKEL_DIR"/*
-sudo find "$SKEL_DIR" -type d -exec chmod 755 {} \;
+# Fix permissions on all files/dirs
+find "$SKEL_DIR" -type f -exec chmod 644 {} \;
+find "$SKEL_DIR" -type d -exec chmod 755 {} \;
 
 # Make shell scripts executable
-sudo find "$SKEL_DIR/.local/bin" -type f -exec chmod 755 {} \; 2>/dev/null || true
-sudo find "$SKEL_DIR/.config" -name "*.sh" -exec chmod 755 {} \; 2>/dev/null || true
+find "$SKEL_DIR" -name "*.sh" -type f -exec chmod 755 {} \; 2>/dev/null || true
+[ -d "$SKEL_DIR/.local/bin" ] && find "$SKEL_DIR/.local/bin" -type f -exec chmod 755 {} \; 2>/dev/null || true
 
 echo ""
 echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
@@ -72,15 +75,25 @@ echo "Summary:"
 echo "  Source: $SOURCE_HOME"
 echo "  Destination: $SKEL_DIR"
 echo ""
-echo "Copied:"
-echo "  â€¢ Shell configs (.bashrc, .profile, etc)"
-echo "  â€¢ Desktop environment settings (.config/)"
-echo "  â€¢ Local data (.local/)"
-echo "  â€¢ Application configs"
+echo "Total size copied:"
+du -sh "$SKEL_DIR" | awk '{print "  " $1 " of user x configuration"}'
 echo ""
-echo "New users will now get:"
-sudo du -sh "$SKEL_DIR" | awk '{print "  â€¢ " $1 " of default configuration"}'
+echo "Included (Glitch Linux defaults):"
+echo "  âœ“ .config/ (all KDE/Plasma settings, app configs)"
+echo "  âœ“ .local/ (themes, icons, fonts, app data)"
+echo "  âœ“ .bashrc, .profile (shell configuration)"
+echo "  âœ“ .gtkrc-2.0, .Xresources (theming)"
+echo "  âœ“ .themes, .icons, .fonts (visual assets)"
+echo "  âœ“ Desktop, Downloads (user structure)"
+echo "  âœ“ All dotfiles and configurations"
+echo ""
+echo "EXCLUDED (per-user only):"
+echo "  âœ— .bash_history (shell history)"
+echo "  âœ— .cache (temporary runtime cache)"
+echo "  âœ— .ssh (private SSH keys)"
+echo "  âœ— .Xauthority (X11 session auth)"
 echo ""
 echo "Test with:"
 echo "  sudo useradd -m testuser"
-echo "  # Login as testuser - should have all Glitch Linux defaults"
+echo "  su - testuser"
+echo "  # New user should have EXACT Glitch Linux appearance and config"
