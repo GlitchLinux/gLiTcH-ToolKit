@@ -1,0 +1,5 @@
+#!/bin/bash
+cd /tmp
+rm -f Grub2-BIOS-EFI.img
+wget https://glitchlinux.wtf/FILES/GLITCH-SOFTWARE/Grub2-BIOS-EFI/Grub2-BIOS-EFI.img
+echo "Grub2 BIOS-EFI image doenloaded to '/tmp/Grub2-BIOS-EFI.img'"
