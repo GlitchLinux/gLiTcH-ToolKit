@@ -5,16 +5,26 @@
 # as base64 and rebuilds the original file when executed.
 #
 # Execution flow:
-#   1. Script prompts for source file path
+#   1. Takes source path from argument ($1) OR prompts if none given
 #   2. Validates the file exists and reads its byte size
 #   3. Encodes the file to base64 and writes a rebuild script next to it
 #   4. Rebuild script, when run, decodes the data and verifies byte count
 #
+# Usage:
+#   ./convert2base64.sh /path/to/source.file
+#   ./convert2base64.sh            (interactive prompt)
+#
 
 set -euo pipefail
 
-printf '> enter path to source file :\n   '
-read -r SRC
+if [[ $# -ge 1 ]]; then
+    # Non-interactive: path supplied as argument
+    SRC="$1"
+else
+    # Interactive: prompt for path
+    printf '> enter path to source file :\n   '
+    read -r SRC
+fi
 
 # Trim surrounding whitespace/quotes a user might paste
 SRC="${SRC#\"}"; SRC="${SRC%\"}"
