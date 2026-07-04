@@ -1,0 +1,120 @@
+#!/bin/bash
+# persistent-wifi-setup.sh
+# Sets up persistent WiFi on grml/Debian minimal (headless)
+# Auto-connects to Telia-169757 or Telia5GHz-169757 on boot
+
+set -e
+
+if [ "$EUID" -ne 0 ]; then
+    echo "Run as root: sudo $0"
+    exit 1
+fi
+
+# --- CONFIG ---
+SSID_24="Telia-169757"
+SSID_5G="Telia5GHz-169757"
+PSK="C111A46E56"
+GATEWAY="192.168.1.1"
+
+# --- DETECT WIFI INTERFACE ---
+WIFI_IF=$(iw dev | awk '$1=="Interface"{print $2; exit}')
+if [ -z "$WIFI_IF" ]; then
+    echo "ERROR: No wireless interface detected. Is the driver loaded?"
+    exit 1
+fi
+echo "[+] Detected WiFi interface: $WIFI_IF"
+
+# --- DEPENDENCIES ---
+echo "[+] Installing dependencies..."
+apt-get update
+apt-get install -y wpasupplicant iw systemd rfkill wireless-regdb crda
+
+# --- UNBLOCK RADIO ---
+rfkill unblock wifi || true
+
+# --- STOP CONFLICTING SERVICES ---
+echo "[+] Disabling conflicting network services..."
+systemctl stop NetworkManager 2>/dev/null || true
+systemctl disable NetworkManager 2>/dev/null || true
+systemctl stop networking 2>/dev/null || true
+systemctl disable networking 2>/dev/null || true
+systemctl stop dhcpcd 2>/dev/null || true
+systemctl disable dhcpcd 2>/dev/null || true
+
+# --- BACKUP EXISTING CONFIG ---
+[ -f /etc/wpa_supplicant/wpa_supplicant-${WIFI_IF}.conf ] && \
+    cp /etc/wpa_supplicant/wpa_supplicant-${WIFI_IF}.conf \
+       /etc/wpa_supplicant/wpa_supplicant-${WIFI_IF}.conf.bak.$(date +%s)
+
+# --- WRITE WPA_SUPPLICANT CONFIG ---
+echo "[+] Writing wpa_supplicant config..."
+mkdir -p /etc/wpa_supplicant
+cat > /etc/wpa_supplicant/wpa_supplicant-${WIFI_IF}.conf <<EOF
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=root
+update_config=1
+country=SE
+
+# 5GHz network (preferred - higher priority)
+network={
+    ssid="${SSID_5G}"
+    psk="${PSK}"
+    key_mgmt=WPA-PSK
+    priority=10
+    scan_ssid=1
+}
+
+# 2.4GHz fallback
+network={
+    ssid="${SSID_24}"
+    psk="${PSK}"
+    key_mgmt=WPA-PSK
+    priority=5
+    scan_ssid=1
+}
+EOF
+chmod 600 /etc/wpa_supplicant/wpa_supplicant-${WIFI_IF}.conf
+
+# --- SYSTEMD-NETWORKD CONFIG (DHCP) ---
+echo "[+] Configuring systemd-networkd..."
+mkdir -p /etc/systemd/network
+cat > /etc/systemd/network/25-wireless.network <<EOF
+[Match]
+Name=${WIFI_IF}
+
+[Network]
+DHCP=yes
+IgnoreCarrierLoss=3s
+
+[DHCP]
+RouteMetric=20
+UseDNS=yes
+EOF
+
+# --- ENABLE SERVICES ---
+echo "[+] Enabling services..."
+systemctl enable systemd-networkd
+systemctl enable systemd-resolved
+systemctl enable wpa_supplicant@${WIFI_IF}.service
+
+# --- SYMLINK RESOLV.CONF ---
+ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+
+# --- START NOW ---
+echo "[+] Starting services..."
+systemctl restart systemd-networkd
+systemctl restart systemd-resolved
+systemctl restart wpa_supplicant@${WIFI_IF}.service
+
+echo ""
+echo "======================================"
+echo "[+] Setup complete on interface: $WIFI_IF"
+echo "[+] Waiting 10s for connection..."
+sleep 10
+echo ""
+echo "--- Connection status ---"
+iw dev ${WIFI_IF} link || true
+echo ""
+echo "--- IP address ---"
+ip -4 addr show ${WIFI_IF} | grep inet || echo "No IP yet - check: journalctl -u wpa_supplicant@${WIFI_IF}"
+echo ""
+echo "Reboot to verify persistence: sudo reboot"
