@@ -39,8 +39,8 @@ echo -e "${G}✓ Created /usr/local/bin/apps${N}"
 echo -e "${C}Installing: /usr/local/bin/gui-apps${N}"
 cat > /usr/local/bin/gui-apps << 'EOF'
 #!/bin/bash
-xterm -maximize -fs 14 -e 'bash /usr/local/bin/.apps' 2>&1 &
-sleep 1 && exit
+xfce4-terminal --maximize --font=14.5 -e '/bin/bash /usr/local/bin/.apps' 2>&1 &
+sleep 0.1 && exit
 EOF
 chmod 755 /usr/local/bin/gui-apps
 echo -e "${G}✓ Created /usr/local/bin/gui-apps${N}"
