@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+green() { printf "\033[32m%s\033[0m\n" "$*"; }
+yellow() { printf "\033[33m%s\033[0m\n" "$*"; }
+red() { printf "\033[31m%s\033[0m\n" "$*"; }
+
+echo "==== X11 SSH Diagnostic ===="
+echo
+
+echo "User        : $(whoami)"
+echo "Hostname    : $(hostname)"
+echo "DISPLAY     : ${DISPLAY:-<unset>}"
+echo "XAUTHORITY  : ${XAUTHORITY:-$HOME/.Xauthority}"
+echo
+
+if [[ -z "${SSH_CONNECTION:-}" ]]; then
+    yellow "Not running inside an SSH session."
+else
+    green "SSH session detected."
+fi
+
+if [[ -z "${DISPLAY:-}" ]]; then
+    red "DISPLAY is not set."
+    echo
+    echo "Reconnect using:"
+    echo "  ssh -Y user@host"
+    echo "or"
+    echo "  ssh -X user@host"
+    exit 1
+fi
+
+if ! command -v xauth >/dev/null 2>&1; then
+    red "xauth is not installed."
+    echo
+    echo "Install it:"
+    echo "  Debian/Ubuntu : sudo apt install xauth"
+    echo "  Fedora        : sudo dnf install xauth"
+    echo "  Arch          : sudo pacman -S xorg-xauth"
+    exit 1
+fi
+
+AUTHFILE="${XAUTHORITY:-$HOME/.Xauthority}"
+
+if [[ ! -f "$AUTHFILE" ]]; then
+    yellow "$AUTHFILE does not exist."
+    touch "$AUTHFILE"
+    chmod 600 "$AUTHFILE"
+fi
+
+COOKIE_COUNT=$(xauth -f "$AUTHFILE" list 2>/dev/null | wc -l)
+
+if [[ "$COOKIE_COUNT" -eq 0 ]]; then
+    yellow "No X11 authentication cookies found."
+
+    if xauth generate "$DISPLAY" . trusted >/dev/null 2>&1; then
+        green "Generated a new cookie."
+    else
+        yellow "Could not generate a cookie."
+    fi
+else
+    green "Found $COOKIE_COUNT X11 authentication cookie(s)."
+fi
+
+if [[ -n "${SUDO_USER:-}" ]]; then
+    yellow "Running under sudo."
+
+    USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+
+    if [[ -f "$USER_HOME/.Xauthority" ]]; then
+        cp "$USER_HOME/.Xauthority" /root/.Xauthority
+        chmod 600 /root/.Xauthority
+        green "Copied user's .Xauthority to root."
+    fi
+fi
+
+echo
+echo "Testing X11..."
+
+if command -v xdpyinfo >/dev/null 2>&1; then
+    if xdpyinfo >/dev/null 2>&1; then
+        green "SUCCESS: X11 connection works."
+        exit 0
+    fi
+fi
+
+red "X11 still isn't working."
+
+echo
+echo "Checking sshd configuration..."
+
+if [[ -r /etc/ssh/sshd_config ]]; then
+    grep -E '^(X11Forwarding|X11UseLocalhost|PermitRootLogin)' /etc/ssh/sshd_config || true
+fi
+
+echo
+echo "Recommended server settings:"
+echo
+cat <<EOF
+X11Forwarding yes
+X11UseLocalhost yes
+EOF
+
+echo
+echo "Recommended client settings (~/.ssh/config):"
+echo
+cat <<EOF
+Host *
+    ForwardX11 yes
+    ForwardX11Trusted yes
+EOF
+
+echo
+echo "Reconnect using:"
+echo
+echo "    ssh -Y user@host"
+echo
+echo "Then verify:"
+echo
+echo "    echo \$DISPLAY"
+echo "    xauth list"
+echo "    xdpyinfo"
