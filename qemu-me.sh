@@ -113,10 +113,13 @@ if [ "$1" = "--tui" ]; then
     SCRIPT_DIR="$2"
     while true; do
         clear
-        echo  "QemuBootMe" | borderize
-        printf  '   1. BIOS \n   2. UEFI \n' # | borderize | tail -n +2
-        echo ""
-        printf "   >  "
+	echo
+        echo " Qemu-Boot"
+        echo
+        echo " 1. BIOS"
+        echo " 2. UEFI"
+        echo
+        printf "  ~> "
         read -r ans
         case "$ans" in
             1|b|B) MODE="BIOS" ; break ;;
@@ -172,16 +175,16 @@ fi
 
 case "$TERM_CMD" in
     xfce4-terminal)
-        exec xfce4-terminal --geometry=15x8 --title="QEMU Boot" --disable-server \
+        exec xfce4-terminal --geometry=25x10 --title="Qemu-Boot" --disable-server \
             -x bash "$SCRIPT_PATH" --tui "$SCRIPT_DIR" ;;
     xterm|urxvt)
-        exec "$TERM_CMD" -geometry 18x7 -title "QEMU Boot" \
+        exec "$TERM_CMD" -geometry 25x10 -title "Qemu-Boot" \
             -e bash "$SCRIPT_PATH" --tui "$SCRIPT_DIR" ;;
     lxterminal)
-        exec lxterminal --geometry=25x10 --title="QEMU Boot" \
+        exec lxterminal --geometry=25x10 --title="Qemu-Boot" \
             -e bash "$SCRIPT_PATH" --tui "$SCRIPT_DIR" ;;
     mate-terminal|gnome-terminal)
-        exec "$TERM_CMD" --geometry=25x10 --title="QEMU Boot" \
+        exec "$TERM_CMD" --geometry=25x10 --title="Qemu-Boot" \
             -- bash "$SCRIPT_PATH" --tui "$SCRIPT_DIR" ;;
     konsole)
         exec konsole --geometry 25x10 -p tabtitle="QEMU Boot" \
