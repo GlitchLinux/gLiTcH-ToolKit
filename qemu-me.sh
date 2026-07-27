@@ -113,9 +113,10 @@ if [ "$1" = "--tui" ]; then
     SCRIPT_DIR="$2"
     while true; do
         clear
-        echo  "QemuBoot" | borderize
-        printf  '1: BIOS \n2: UEFI \n' | borderize | tail -n +2
-        printf "  >  "
+        echo  "QemuBootMe" | borderize
+        printf  '   1. BIOS \n   2. UEFI \n' # | borderize | tail -n +2
+        echo ""
+        printf "   >  "
         read -r ans
         case "$ans" in
             1|b|B) MODE="BIOS" ; break ;;
@@ -171,7 +172,7 @@ fi
 
 case "$TERM_CMD" in
     xfce4-terminal)
-        exec xfce4-terminal --geometry=12x7 --title="QEMU Boot" --disable-server \
+        exec xfce4-terminal --geometry=15x8 --title="QEMU Boot" --disable-server \
             -x bash "$SCRIPT_PATH" --tui "$SCRIPT_DIR" ;;
     xterm|urxvt)
         exec "$TERM_CMD" -geometry 18x7 -title "QEMU Boot" \
