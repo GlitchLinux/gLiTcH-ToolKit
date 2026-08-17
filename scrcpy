@@ -2,7 +2,23 @@
 cd /tmp
 wget https://github.com/Genymobile/scrcpy/releases/download/v4.1/scrcpy-linux-x86_64-v4.1.tar.gz
 tar -xvf scrcpy-linux-x86_64-v4.1.tar.gz
-sudo cp -r scrcpy-linux-x86_64-v4.1/ /home/x/
-cd /home/x/scrcpy-linux-x86_64-v4.1
+sudo cp -r scrcpy-linux-x86_64-v4.1/ /bin
+cd /bin/scrcpy-linux-x86_64-v4.1
 sudo chmod +x *
-./scrcpy
+echo '!#/bin/bash' > /tmp/scrcpy
+echo "cd /bin/scrcpy-linux-x86_64-v4.1" >> /tmp/scrcpy
+echo "./scrcpy &" >> /tmp/scrcpy
+echo "sleep 2 && exit" >> /tmp/scrcpy
+sudo cp /tmp/scrcpy /bin/scrcpy
+sudo chmod +x /bin/scrcpy
+clear
+echo ""
+echo "scrcpy installed to /bin"
+echo "run with 'scrcpy' command"
+echo ""
+echo "First launch of scrcpy starts in 10 seconds"
+echo "make sure to have your android usb connected"
+echo "in android enable developer settings and usb debugging"
+echo ""
+sleep 10
+/bin/scrcpy
