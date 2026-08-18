@@ -5,7 +5,7 @@ tar -xvf scrcpy-linux-x86_64-v4.1.tar.gz
 sudo cp -r scrcpy-linux-x86_64-v4.1/ /bin
 cd /bin/scrcpy-linux-x86_64-v4.1
 sudo chmod +x *
-echo '!#/bin/bash' > /tmp/scrcpy
+echo '#!/bin/bash' > /tmp/scrcpy
 echo "cd /bin/scrcpy-linux-x86_64-v4.1" >> /tmp/scrcpy
 echo "./scrcpy &" >> /tmp/scrcpy
 echo "sleep 2 && exit" >> /tmp/scrcpy
@@ -16,9 +16,10 @@ echo ""
 echo "scrcpy installed to /bin"
 echo "run with 'scrcpy' command"
 echo ""
-echo "First launch of scrcpy starts in 10 seconds"
+echo "First launch of scrcpy starts in 5 seconds"
 echo "make sure to have your android usb connected"
 echo "in android enable developer settings and usb debugging"
 echo ""
-sleep 10
-/bin/scrcpy
+sleep 5
+/bin/scrcpy &
+exit
