@@ -18,9 +18,8 @@ echo "run with 'scrcpy' command"
 echo ""
 echo "First launch of scrcpy starts in 10 seconds"
 echo "make sure to have your android usb connected"
-echo "in android enable developer settings and usb debugging"
+echo "In android enable developer settings and usb debugging"
 echo ""
 sleep 10
-clear
-/bin/scrcpy-linux-x86_64-v4.1/scrcpy &
+/bin/scrcpy-linux-x86_64-v4.1/scrcpy 2>&1 &
 exit
