@@ -1,25 +1,65 @@
 #!/bin/bash
-cd /tmp
-wget https://github.com/Genymobile/scrcpy/releases/download/v4.1/scrcpy-linux-x86_64-v4.1.tar.gz
-tar -xvf scrcpy-linux-x86_64-v4.1.tar.gz
-sudo cp -r scrcpy-linux-x86_64-v4.1/ /bin
-cd /bin/scrcpy-linux-x86_64-v4.1
-sudo chmod +x *
-echo '#!/bin/bash' > /tmp/scrcpy
-echo "cd /bin/scrcpy-linux-x86_64-v4.1" >> /tmp/scrcpy
-echo "./scrcpy &" >> /tmp/scrcpy
-echo "sleep 2 && exit" >> /tmp/scrcpy
-sudo cp /tmp/scrcpy /bin/scrcpy
-sudo chmod +x /bin/scrcpy
+# ============================================
+# scrcpy Installer for gLiTcH Linux
+# ============================================
+
+set -e
+
+URL="https://glitchlinux.wtf/FILES/GLITCH-SOFTWARE/Scrcpy-Win-Linux/scrcpy-x64.zip"
+INSTALL_DIR="/bin"
+DESKTOP_FILE="/usr/share/applications/Scrcpy.desktop"
+TMP="/tmp/scrcpy-install"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+[ "$EUID" -ne 0 ] && { echo -e "${RED}Run as root: sudo bash install-scrcpy.sh${NC}"; exit 1; }
+
+rm -rf "$TMP" && mkdir -p "$TMP" && cd "$TMP"
+
+echo -e "${CYAN}Downloading scrcpy...${NC}"
+wget -q --show-progress -O scrcpy-x64.zip "$URL"
+
+echo -e "${CYAN}Extracting to $INSTALL_DIR...${NC}"
+7z x -y -o"$TMP/out" scrcpy-x64.zip > /dev/null
+
+cp -f "$TMP/out/"* "$INSTALL_DIR/" 2>/dev/null || true
+chmod +x "$INSTALL_DIR/scrcpy"
+chmod +x "$INSTALL_DIR/adb"
+
+cat > "$DESKTOP_FILE" << 'EOF'
+[Desktop Entry]
+Name=Scrcpy
+Comment=Android screen mirror
+Exec=/bin/scrcpy
+Icon=/bin/scrcpy.png
+Terminal=false
+Type=Application
+Categories=Utility;
+EOF
+
+rm -rf "$TMP"
+
 clear
+
+echo -e "${GREEN}"
+echo "  =================================="
+echo "  scrcpy installed successfully"
+echo "  =================================="
 echo ""
-echo "scrcpy installed to /bin"
-echo "run with 'scrcpy' command"
+echo "  Binary:   /bin/scrcpy"
+echo "  ADB:      /bin/adb"
+echo "  Icon:     /bin/scrcpy.png"
+echo "  Launcher: $DESKTOP_FILE"
+echo "  =================================="
+echo -e "${NC}"
+
+for i in $(seq 10 -1 1); do
+    printf "\r  Scrcpy will autostart in: %2d " "$i"
+    sleep 1
+done
 echo ""
-echo "First launch of scrcpy starts in 10 seconds"
-echo "make sure to have your android usb connected"
-echo "In android enable developer settings and usb debugging"
-echo ""
-sleep 10
-/bin/scrcpy-linux-x86_64-v4.1/scrcpy 2>&1 &
-exit
+
+sudo -u "${SUDO_USER:-$USER}" scrcpy
