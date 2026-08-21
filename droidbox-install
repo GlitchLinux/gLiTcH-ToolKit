@@ -1,0 +1,6 @@
+#!/bin/bash
+
+sudo wget -qO /usr/local/bin/droidbox https://glitchlinux.com/droidbox.sh && sudo chmod +x /usr/local/bin/droidbox
+
+clear
+echo "Droidbox installed, start with 'droidbox'" | borderize
