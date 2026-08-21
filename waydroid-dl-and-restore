@@ -1,0 +1,18 @@
+#!/bin/bash
+cd /tmp
+wget "https://glitchlinux.wtf/FILES/Waydroid/droidbox"
+wget "https://glitchlinux.wtf/FILES/Waydroid/Droidbox.desktop"
+wget "https://glitchlinux.wtf/FILES/Waydroid/wayback.sh"
+wget "https://glitchlinux.wtf/FILES/Waydroid/.wayback.sh"
+wget "https://glitchlinux.wtf/FILES/Waydroid/Waydroid-Magisk-Root.sh"
+wget "https://glitchlinux.wtf/FILES/Waydroid/waydroid_backup_20260821_134643.tar.gz"
+sudo mv .wayback.sh wayback.sh droidbox Waydroid-Magisk-Root.sh /usr/local/bin/
+sudo mv Droidbox.desktop /usr/share/applications/Droidbox.desktop
+sudo chmod +x /usr/share/applications/Droidbox.desktop
+cd /usr/local/bin/ && sudo chmod +x .wayback.sh wayback.sh droidbox Waydroid-Magisk-Root.sh
+sudo mkdir -p /usr/local/bin/backups/
+sudo mv /tmp/waydroid_backup_20260821_134643.tar.gz /usr/local/bin/backups/
+clear
+bash /usr/local/bin/wayback.sh
+echo ""
+read -p 'Hit any key to finish'
