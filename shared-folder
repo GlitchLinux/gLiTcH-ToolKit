@@ -1,0 +1,3 @@
+#!/bin/bash
+sudo apt install davfs2 >/dev/null
+mkdir -p ~/shared && sudo mount -t davfs https://glitchserver.com/dav/ ~/shared && cd ~/shared && ls
