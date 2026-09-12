@@ -26,9 +26,9 @@ sudo chmod 777 /bin/free-screen /bin/FREE
 
 clear
 echo ''
-echo 'active screen clear enabled' > /tmp/banner123
-echo "run with 'free-screen' OR 'FREE'" >> /tmp/banner123
-echo 'Hit enter to run and free-screen' >> /tmp/banner123  
+echo 'The FREE-SCREEN session clean was installed' > /tmp/banner123
+echo "Usage: 'free-screen' & 'FREE' bash commands" >> /tmp/banner123
+echo 'Enter Key will 'FREE' & clean active Screen' >> /tmp/banner123  
 cat /tmp/banner123 | borderize | /usr/games/lolcat
 sudo rm /tmp/banner123
 echo ''
