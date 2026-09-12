@@ -1,14 +1,20 @@
 #!/bin/bash
 
-# Close all normal application windows gracefully
-wmctrl -l | while read -r id rest; do
-    wmctrl -ic "$id"
-done
+echo "wmctrl -l | while read -r id rest; do" > /tmp/free-screen
+    echo 'wmctrl -ic "$id"' >> /tmp/free-screen
+echo "done" >> /tmp/free-screen
 
-echo 'sleep 1 && sudo pkill x-terminal-emulator' > /tmp/eliminate-terminal
-echo 'sudo pkill xfce4-terminal' >> /tmp/eliminate-terminal
-echo 'sudo pkill xterm' >> /tmp/eliminate-terminal
-xterm -e 'xterm -e "nohup bash /tmp/eliminate-terminal"' &
+echo "echo 'sleep 1 && sudo pkill x-terminal-emulator' > /tmp/eliminate-terminal" >> /tmp/free-screen
+echo "echo 'sudo pkill xfce4-terminal' >> /tmp/eliminate-terminal" >> /tmp/free-screen
+echo "echo 'sudo pkill xterm' >> /tmp/eliminate-terminal" >> /tmp/free-screen
+echo "xterm -e 'xterm -e "nohup bash /tmp/eliminate-terminal"' &" >> /tmp/free-screen
 
-# Show desktop using KDE's built-in shortcut
-qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Show Desktop"
+echo 'qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Show Desktop"' >> /tmp/free-screen
+
+sudo cp /tmp/free-screen /bin/free-screen
+
+sudo chmod +x /bin/free-screen
+
+sudo chmod 777 /bin/free-screen
+
+xterm -e 'free-screen'
