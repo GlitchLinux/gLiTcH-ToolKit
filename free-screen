@@ -33,6 +33,5 @@ echo ''
 echo 'Hit enter to free-screen' | borderize | /usr/games/lolcat
 echo ''
 read p ''
-echo ''
 
 source /bin/free-screen
