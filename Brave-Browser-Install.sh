@@ -4,37 +4,37 @@ echo "Brave-Origin-Nightly - Installer" > /tmp/brave-banner
 
 clear
 
-cat /tmp/brave-banner | borderize | lolcat
+cat /tmp/brave-banner | borderize | /usr/games/lolcat
 
 sudo apt install curl -y
 
 clear
 
-cat /tmp/brave-banner | borderize | lolcat
+cat /tmp/brave-banner | borderize | /usr/games/lolcat
 
 sudo curl -fsSLo /usr/share/keyrings/brave-browser-nightly-archive-keyring.gpg https://brave-browser-apt-nightly.s3.brave.com/brave-browser-nightly-archive-keyring.gpg
 
 clear
 
-cat /tmp/brave-banner | borderize | lolcat
+cat /tmp/brave-banner | borderize | /usr/games/lolcat
 
 sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-nightly.sources https://brave-browser-apt-nightly.s3.brave.com/brave-browser.sources
 
 clear
 
-cat /tmp/brave-banner | borderize | lolcat
+cat /tmp/brave-banner | borderize | /usr/games/lolcat
 
 sudo apt update
 
 clear
 
-cat /tmp/brave-banner | borderize | lolcat
+cat /tmp/brave-banner | borderize | /usr/games/lolcat
 
 sudo apt install brave-origin-nightly -y
 
 clear
 
-cat /tmp/brave-banner | borderize | lolcat
+cat /tmp/brave-banner | borderize | /usr/games/lolcat
 
 xterm -e 'brave-origin' &
 
@@ -44,7 +44,7 @@ clear
 
 echo "Brave-Origin-Nightly - Installed to System!" > /tmp/brave-banner
 
-cat /tmp/brave-banner | borderize | lolcat
+cat /tmp/brave-banner | borderize | /usr/games/lolcat
 
 echo " " 
 
