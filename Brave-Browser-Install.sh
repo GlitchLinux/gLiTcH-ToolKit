@@ -1,9 +1,5 @@
 #!/bin/bash
 
-ROOT_UID=0
-PATH=$PATH
-lolcat=/usr/games/lolcat
-
 echo "Brave-Origin-Nightly - Installer" > /tmp/brave-banner
 
 clear
