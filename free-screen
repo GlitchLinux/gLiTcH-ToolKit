@@ -25,13 +25,14 @@ sudo chmod +x /bin/free-screen /bin/FREE
 sudo chmod 777 /bin/free-screen /bin/FREE
 
 clear
-echo " "
+echo ''
 echo 'active screen clear enabled' > /tmp/banner123
 echo "run with 'free-screen' OR 'FREE'" >> /tmp/banner123
 cat /tmp/banner123 | borderize | /usr/games/lolcat
-
-echo 'enter to FREE'
-
+echo ''
+echo 'Hit enter to free-screen' | borderize | /usr/games/lolcat
+echo ''
 read p ''
+echo ''
 
 source /bin/free-screen
