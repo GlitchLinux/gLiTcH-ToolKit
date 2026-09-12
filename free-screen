@@ -7,6 +7,13 @@
 echo "echo 'sleep 1 && sudo pkill x-terminal-emulator' > /tmp/eliminate-terminal" >> /tmp/free-screen
 echo "echo 'sudo pkill xfce4-terminal' >> /tmp/eliminate-terminal" >> /tmp/free-screen
 echo "echo 'sudo pkill xterm' >> /tmp/eliminate-terminal" >> /tmp/free-screen
+echo "echo 'sudo pkill thunar' >> /tmp/eliminate-terminal" >> /tmp/free-screen
+echo "echo 'sudo pkill pcmanfm' >> /tmp/eliminate-terminal" >> /tmp/free-screen
+echo "echo 'sudo pkill thorium-browser' >> /tmp/eliminate-terminal" >> /tmp/free-screen
+echo "echo 'sudo pkill brave-browser' >> /tmp/eliminate-terminal" >> /tmp/free-screen
+echo "echo 'sudo pkill firefox-browser' >> /tmp/eliminate-terminal" >> /tmp/free-screen
+echo "echo 'sudo pkill qemu' >> /tmp/eliminate-terminal" >> /tmp/free-screen
+echo "echo 'sudo pkill tigervnc' >> /tmp/eliminate-terminal" >> /tmp/free-screen
 echo "xterm -e 'xterm -e "nohup bash /tmp/eliminate-terminal"' &" >> /tmp/free-screen
 
 # echo 'qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Show Desktop"' >> /tmp/free-screen
