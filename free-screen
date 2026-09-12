@@ -1,8 +1,6 @@
 #!/bin/bash
 
-# echo "wmctrl -l | while read -r id rest; do" > /tmp/free-screen
-# echo '    wmctrl -ic "$id"' >> /tmp/free-screen
-# echo "done" >> /tmp/free-screen
+sudo rm -f /tmp/free-screen /tmp/eliminate-terminal
 
 echo "echo 'sleep 1 && sudo pkill x-terminal-emulator' > /tmp/eliminate-terminal" >> /tmp/free-screen
 echo "echo 'sudo pkill xfce4-terminal' >> /tmp/eliminate-terminal" >> /tmp/free-screen
@@ -20,10 +18,20 @@ echo "xterm -e 'xterm -e "nohup bash /tmp/eliminate-terminal"' &" >> /tmp/free-s
 
 sudo cp /tmp/free-screen /bin/free-screen
 
-sudo chmod +x /bin/free-screen
+sudo cp /bin/free-screen /bin/FREE
 
-sudo chmod 777 /bin/free-screen
+sudo chmod +x /bin/free-screen /bin/FREE
 
-/bin/free-screen
+sudo chmod 777 /bin/free-screen /bin/FREE
+
+clear
+echo " "
+echo 'active screen clear enabled' > /tmp/banner123
+echo "run with 'free-screen' OR 'FREE'" >> /tmp/banner123
+cat /tmp/banner123 | borderize | /usr/games/lolcat
+
+echo 'enter to FREE'
+
+read p ''
 
 source /bin/free-screen
