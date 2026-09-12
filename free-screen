@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Close all normal application windows gracefully
+wmctrl -l | while read -r id rest; do
+    wmctrl -ic "$id"
+done
+
+echo 'sleep 1 && sudo pkill x-terminal-emulator' > /tmp/eliminate-terminal
+echo 'sudo pkill xfce4-terminal' >> /tmp/eliminate-terminal
+echo 'sudo pkill xterm' >> /tmp/eliminate-terminal
+xterm -e 'xterm -e "nohup bash /tmp/eliminate-terminal"' &
+
+# Show desktop using KDE's built-in shortcut
+qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Show Desktop"
