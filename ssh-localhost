@@ -16,14 +16,16 @@ read -p " Select SSH Task [1-2]: " choice
 case $choice in
     1)
         clear
-	      ssh x@192.168.0.198
+	    ssh x@192.168.0.198
         ;;
     2)
         clear
         ssh -Y x@192.168.0.198 
         ;;
     *)
-        clear && echo "Invalid Choice, Retry..." | borderize
+        clear 
+        echo " "
+        echo "Invalid Choice, Retry..." | borderize
         sleep 2
         bash /bin/ssh-localhost
         ;;
