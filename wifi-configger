@@ -1,0 +1,7 @@
+#!/bin/bash
+
+cd /tmp
+mkdir wifi && cd wifi
+wget "glitchlinux.com/FILES/wifi-configger.tar.gz"
+sudo tar -xvf wifi-configger.tar.gz
+sudo cp -rf * /
