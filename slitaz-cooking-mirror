@@ -1,0 +1,2 @@
+#!/bin/bash
+wget -qO- https://glitchlinux.com/slitaz/cooking/setup-mirror.sh | sh
