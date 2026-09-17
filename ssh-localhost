@@ -11,7 +11,7 @@ echo "2. Glitch-Server x11" >> /tmp/ssh-local
 cat /tmp/ssh-local | borderize
 echo " "
 
-read -p "   Select SSH Task [1-2]: " choice
+read -p " Select SSH Task [1-2]: " choice
 
 case $choice in
     1)
