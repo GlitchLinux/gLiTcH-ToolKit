@@ -1,5 +1,9 @@
 #!/bin/bash
 
+cat > "/tmp/counter" << 'EOF'
+
+#!/bin/bash
+
 # Default configurations
 label=""
 use_minutes=false
@@ -132,3 +136,14 @@ tput cnorm
 if [ "$is_piped" = false ]; then
     echo ""
 fi
+
+EOF
+
+sudo cp /tmp/counter /bin/counter
+sudo chmod +x /bin/counter
+
+counter 5 -l 'Counter Timer Installed' 
+counter 5 -l 'usage - "counter --help"'
+counter 5 -l 'Closing in 5 Seconds'
+read -p
+exit
