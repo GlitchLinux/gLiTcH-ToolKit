@@ -1,0 +1,134 @@
+#!/bin/bash
+
+# Default configurations
+label=""
+use_minutes=false
+show_seconds_with_minutes=false
+block_char="■"
+
+# Help text function
+show_help() {
+    echo "Usage: $0 [options] <duration>"
+    echo ""
+    echo "Options:"
+    echo "  -l 'Label'     Add a custom prefix label (default: none)"
+    echo "  -m             Treat <duration> as minutes instead of seconds"
+    echo "  -s             Show a seconds counter alongside minutes (requires -m)"
+    echo "  -b             Use hollow blocks (□) instead of solid blocks (■)"
+    echo "  -h, --help     Show this help message"
+    exit 0
+}
+
+# Parse options using a loop
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -l) label="$2"; shift 2 ;;
+        -m) use_minutes=true; shift ;;
+        -s) show_seconds_with_minutes=true; shift ;;
+        -b) block_char="□"; shift ;;
+        -h|--help) show_help ;;
+        *) 
+            if [[ "$1" =~ ^[0-9]+$ ]]; then
+                input_duration=$1
+                shift
+            else
+                echo "Error: Unknown option $1"
+                echo "Run '$0 --help' for usage instructions."
+                exit 1
+            fi
+            ;;
+    esac
+done
+
+if [ -z "$input_duration" ]; then
+    echo "Error: Missing required argument <duration>."
+    echo "Usage: $0 [options] <duration>"
+    exit 1
+fi
+
+if [ "$input_duration" -gt 99 ]; then
+    bar_width=99
+else
+    bar_width=$input_duration
+fi
+
+if [ "$use_minutes" = true ]; then
+    total_seconds=$(( input_duration * 60 ))
+else
+    total_seconds=$input_duration
+fi
+
+tput civis
+cleanup() {
+    tput cnorm
+    echo ""
+    exit 1
+}
+trap cleanup SIGINT
+
+# Detect if stdout is a terminal or a pipe
+if [ -t 1 ]; then
+    is_piped=false
+else
+    is_piped=true
+fi
+
+for ((elapsed=0; elapsed<=total_seconds; elapsed++)); do
+    remaining_seconds=$(( total_seconds - elapsed ))
+    if [ "$remaining_seconds" -lt 0 ]; then break; fi
+
+    time_text=""
+    if [ "$use_minutes" = true ]; then
+        rem_min=$(( remaining_seconds / 60 ))
+        rem_sec=$(( remaining_seconds % 60 ))
+        
+        if [ "$show_seconds_with_minutes" = true ]; then
+            time_text="${rem_min}min ${rem_sec}sec"
+        else
+            if [ "$rem_sec" -gt 0 ] && [ "$elapsed" -gt 0 ]; then
+                time_text="$(( rem_min + 1 ))min"
+            else
+                time_text="${rem_min}min"
+            fi
+        fi
+    else
+        time_text="${remaining_seconds}s"
+    fi
+
+    prefix=""
+    if [ -n "$label" ]; then
+        prefix=" ${label}: ${time_text}"
+    else
+        prefix=" ${time_text}"
+    fi
+
+    if [ "$total_seconds" -eq 0 ]; then
+        filled_blocks=$bar_width
+    else
+        filled_blocks=$(( elapsed * bar_width / total_seconds ))
+    fi
+    empty_blocks=$(( bar_width - filled_blocks ))
+
+    bar=""
+    for ((b=0; b<filled_blocks; b++)); do bar+="$block_char"; done
+    space=""
+    for ((s=0; s<empty_blocks; s++)); do space+="-"; done
+
+    # Output adjustments based on environment
+    if [ "$is_piped" = true ]; then
+        # When piping, output a clean trailing line with newline
+        echo "${prefix} [${bar}${space}]"
+    else
+        # Standard interactive execution
+        echo -ne "${prefix} [${bar}${space}] \r"
+    fi
+
+    if [ "$elapsed" -lt "$total_seconds" ]; then
+        sleep 1
+    fi
+done
+
+tput cnorm
+if [ "$is_piped" = false ]; then
+    echo ""
+fi
