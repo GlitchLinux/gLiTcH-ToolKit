@@ -142,8 +142,10 @@ EOF
 sudo cp /tmp/counter /bin/counter
 sudo chmod +x /bin/counter
 
-counter 5 -l 'Counter Timer Installed' 
-counter 5 -l 'usage - "counter --help"'
-counter 5 -l 'Closing in 5 Seconds'
+counter 10 -l 'Counter Timer Installed'
+echo ""
+counter 10 -l 'counter --help for assitance'
+echo ""
+counter 10 -l 'Closing installer in 10 Seconds' -b
 read -p
 exit
