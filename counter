@@ -147,5 +147,5 @@ echo ""
 counter 10 -l 'counter --help for assitance'
 echo ""
 counter 10 -l 'Closing installer in 10 Seconds' -b
-read -p
+read -p ' '
 exit
