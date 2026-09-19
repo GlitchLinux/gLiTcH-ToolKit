@@ -7,4 +7,11 @@ sudo dpkg -i virtualbox-7.2_7.2.14-174565~Debian~trixie_amd64.deb
 sudo apt install -f -y
 sudo apt install linux-headers-amd64 -y
 sudo '/sbin/vboxconfig'
-sudo adduser $USER vboxusers
+sudo adduser x vboxusers
+clear
+echo ''
+echo 'Virtualbox v.7.2 Installed Sucessfully!' | borderize
+echo ''
+sleep 15
+read p ''
+exit
