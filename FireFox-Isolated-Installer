@@ -405,6 +405,6 @@ sudo mv firefox-isolated.png /usr/share/icons/firefox-isolated.png
 
 clear
 
-echo 'Firefox Isolated Was installed sucessfully!' | borderize
-echoClosing
+echo 'Firefox Isolated Was installed sucessfully!'
+echo
 counter 30 -l "Autoclosing Installer in" -b
