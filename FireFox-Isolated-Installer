@@ -1,8 +1,10 @@
 #!/bin/bash
 
-sudo wget -O "firefox-isolated" "https://glitchlinux.wtf/FILES/GLITCH-SOFTWARE/FireFox-Isolated/linux-version/GCC-executable/firefox-isolated"
+sudo wget -O firefox-isolated "https://glitchlinux.wtf/FILES/GLITCH-SOFTWARE/FireFox-Isolated/linux-version/GCC-executable/firefox-isolated"
 sudo mv firefox-isolated /usr/bin/firefox-isolated
 sudo chmod +x /usr/bin/firefox-isolated
+sudo wget -O /bin/counter https://raw.githubusercontent.com/GlitchLinux/gLiTcH-ToolKit/refs/heads/main/counter
+sudo chmod +x /bin/counter 
 
 cat > "/tmp/firefox-isolated.desktop" << 'EOF'
 [Desktop Entry]
