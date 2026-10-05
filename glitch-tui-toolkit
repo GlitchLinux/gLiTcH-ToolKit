@@ -1,0 +1,941 @@
+#!/usr/bin/env bash
+#
+# gLiTcH-ToolKit TUI launcher v2
+#
+# Layout (tmux, private server - never touches your own tmux sessions):
+#
+#   +------------------+--------------------------------------+
+#   | [1] SEARCH/MENU  | [2] SHELL / TASKS                    |
+#   |  search bar      |  running tool (live output + input)  |
+#   |  categories      |  idle: task monitor (top processes)  |
+#   |  tool lists      +--------------------------------------+
+#   |                  | [3] SYSTEM: resources, F-keys, tips  |
+#   +------------------+--------------------------------------+
+#
+# Usage:  glitch-tui-toolkit            start / re-attach
+#         glitch-tui-toolkit --help     show help
+#
+
+set -uo pipefail
+
+VERSION="2.0"
+
+# --- Paths / names ------------------------------------------------------------
+TARBALL_URL="https://github.com/GlitchLinux/gLiTcH-ToolKit/archive/refs/heads/main.tar.gz"
+TARBALL="/tmp/gLiTcH-ToolKit.tar.gz"
+DIR="/tmp/gLiTcH-ToolKit"
+RUNDIR="/tmp/glitch-tui-$UID"          # state shared between the 3 panes
+SOCK="glitch-toolkit-$UID"             # dedicated tmux socket
+SES="glitch-toolkit"
+USER_CATS="$HOME/.config/glitch-toolkit/categories.conf"
+REPO_CATS="$DIR/categories.conf"
+
+MIN_COLS=100
+MIN_LINES=26
+
+# --- Colors (truecolor) -------------------------------------------------------
+GRN=$'\033[38;2;0;255;11m'             # #00ff0b normal mode
+MAG=$'\033[38;2;219;0;185m'            # #db00b9 sudo mode / accents
+PNK=$'\033[1;35m'
+CYN=$'\033[0;36m'
+RED=$'\033[0;31m'
+YEL=$'\033[0;33m'
+DIM=$'\033[2m'
+BLD=$'\033[1m'
+N=$'\033[0m'
+EL=$'\033[K'                           # erase to end of line
+
+# --- Built-in categories: "Name|regex" (first match wins, case-insensitive) --
+# Override: $HOME/.config/glitch-toolkit/categories.conf or categories.conf in
+# the repo root, same format, one category per line.
+BUILTIN_CATS=(
+    "System & Utilities|^reboot$|process-killer|cleanup|monitor|hardware-test|toolkit|^glitch$|slitaz"
+    "Virtualization & Containers|qemu|qboot|virtualbox|vmware|docker|minideb|minitrixie|hypervisor|qcow|ipxe-rapid-vm"
+    "Android & Mobile|android|waydroid|droidbox|scrcpy|apk"
+    "Security & Privacy|luks-token|(^|[^n])crypt|token|tor-|anonsurf|firewall|hardening|password|vault|port-scanner|kali-linux|parrot|isolated"
+    "ISO, Live & Remaster|iso([^l]|$)|live|persist|remaster|squash|systemback|calamares|glitchinstall|glitch-v33|debootstrap|chroot|snapshot|new-system|mx-linux|install-live"
+    "Boot, GRUB & EFI|grub|efi|refind|agfm|ventoy|vtoy|netboot|ipxe|vdiskchain|boot"
+    "Disk, Images & Files|(^|[-_])dd|disk|img|image|vhd|wim|fakeloop|vfat|uuid|fstab|etcher|rsync|archiv|tar-wsl|symlink|size|list-dir|tree|mount|shared-folder|glitch-convert|convert2|quick-convert|png-to|counter"
+    "Network & Remote|ssh|vnc|x11|network|wifi|cable|resolv|free-screen"
+    "Desktop & Theming|font|icon|theme|wallpaper|fetch|nerdfont|xresources|bashrc|motd|sddm|autologin|keyboard|locale|tty|thunar|borderize|xfce|titus|gui-installer"
+    "Packages & Updates|apt|dpkg|deb|kernel|update|upgrade|nala|flatpak|packages|sources|essentials|apps"
+    "Apps & Installers|install|browser|firefox|brave|thorium|sublime|libreoffice|peazip|bleachbit|claude|hazi|vdl"
+)
+OTHER_CAT="System & Utilities"
+
+# --- Rotating footer tips ("no dumb questions") -------------------------------
+TIPS=(
+    "Type part of a name in [1] and press Enter. One hit = it starts right away."
+    "Several hits? Type the number, or just type a new word to search again."
+    "Tools run in [2]. You can type into them there - answer prompts, press y/n."
+    "Click a pane with the mouse to focus it, or press F7 to jump between [1] and [2]."
+    "Scroll back through tool output with the mouse wheel in [2]. Press q to leave scroll mode."
+    "Ctrl-C stops the running tool. The launcher itself keeps running."
+    "F8 force-stops whatever runs in [2] and brings back the monitor."
+    "Type s in [1] to toggle SUDO mode. Numbers turn magenta when tools run as root."
+    "Type r in [1] to download the newest toolkit from GitHub."
+    "Type c in [1] to copy a script to your system, e.g. into /usr/local/bin."
+    "Type b in [1] to go back to the category list, a to list every tool."
+    "Long list? n and p flip pages in [1]."
+    "F5 opens a normal shell in [2]. Type exit to come back."
+    "F2 = process viewer (htop or top). Press q to close it."
+    "F3 = disks and partitions (lsblk + df). Handy before flashing an image."
+    "F4 = network overview: IP addresses, routes and listening ports."
+    "F6 = live system log. Ctrl-C returns to the monitor."
+    "F10 or q quits. Closing the terminal window also quits."
+)
+
+# ==============================================================================
+#  Helpers
+# ==============================================================================
+
+tmx() { tmux -L "$SOCK" "$@"; }
+
+# Terminal size without depending on tput (BusyBox systems like SliTaz lack it)
+# Order: stty -> tput -> tmux pane size -> $COLUMNS/$LINES -> 80x24
+term_size() {
+    local r="" c=""
+    read -r r c < <(stty size </dev/tty 2>/dev/null)
+    if ! [[ "$r" =~ ^[0-9]+$ && "$c" =~ ^[0-9]+$ ]] && command -v tput >/dev/null 2>&1; then
+        r=$(tput lines 2>/dev/null); c=$(tput cols 2>/dev/null)
+    fi
+    if ! [[ "$r" =~ ^[0-9]+$ && "$c" =~ ^[0-9]+$ ]] && [ -n "${TMUX_PANE:-}" ]; then
+        read -r c r < <(tmux display -p -t "$TMUX_PANE" '#{pane_width} #{pane_height}' 2>/dev/null)
+    fi
+    [[ "$r" =~ ^[0-9]+$ ]] || r=${LINES:-24}
+    [[ "$c" =~ ^[0-9]+$ ]] || c=${COLUMNS:-80}
+    TH=$r; TW=$c
+}
+tcols()  { term_size; echo "$TW"; }
+tlines() { term_size; echo "$TH"; }
+
+state_get() { [ -f "$RUNDIR/$1" ] && cat "$RUNDIR/$1" 2>/dev/null || printf '%s' "${2:-}"; }
+state_set() { printf '%s' "$2" > "$RUNDIR/$1.tmp" && mv -f "$RUNDIR/$1.tmp" "$RUNDIR/$1"; }
+state_del() { rm -f "$RUNDIR/$1"; }
+
+load_panes() {
+    PANE_MENU="" PANE_SHELL="" PANE_FOOT=""
+    # shellcheck disable=SC1091
+    [ -f "$RUNDIR/panes" ] && . "$RUNDIR/panes"
+}
+
+sudo_mode() { [ "$(state_get mode 0)" = "1" ]; }
+
+num_color() { if sudo_mode; then printf '%s' "$MAG"; else printf '%s' "$GRN"; fi; }
+
+# Truncate a plain string to width, adding an ellipsis
+trunc() {
+    local s=$1 w=$2
+    if (( w <= 1 )); then printf ''; return; fi
+    if (( ${#s} > w )); then printf '%s~' "${s:0:w-1}"; else printf '%s' "$s"; fi
+}
+
+hr() { local w=$1 ch=${2:--}; printf '%*s' "$w" '' | tr ' ' "$ch"; }
+
+human_dur() {
+    local s=$1
+    if (( s >= 3600 )); then printf '%dh%02dm' $((s/3600)) $((s%3600/60))
+    elif (( s >= 60 )); then printf '%dm%02ds' $((s/60)) $((s%60))
+    else printf '%ds' "$s"; fi
+}
+
+task_running() { [ -s "$RUNDIR/task" ]; }
+
+# ==============================================================================
+#  Repo sync + tool list (same logic as v1)
+# ==============================================================================
+
+sync_repo() {
+    local sudo_cmd=""
+    [ "${1:-}" = "root" ] && sudo_cmd="sudo"
+
+    cd /tmp || return 1
+    $sudo_cmd rm -rf /tmp/gLiTcH-ToolKit-main "$TARBALL" 2>/dev/null
+
+    echo "${CYN}Downloading gLiTcH-ToolKit...${N}"
+    if ! $sudo_cmd wget -q "$TARBALL_URL" -O "$TARBALL"; then
+        echo "${PNK}Download failed, keeping existing copy.${N}"; sleep 1; return 1
+    fi
+    if ! $sudo_cmd tar -xf "$TARBALL" -C /tmp; then
+        echo "${PNK}Extract failed, keeping existing copy.${N}"
+        $sudo_cmd rm -f "$TARBALL"; sleep 1; return 1
+    fi
+    $sudo_cmd rm -rf "$DIR" 2>/dev/null
+    $sudo_cmd mv /tmp/gLiTcH-ToolKit-main "$DIR"
+    $sudo_cmd rm -f "$TARBALL"
+}
+
+declare -a T=()
+declare -a CAT_NAMES=() CAT_RX=() CAT_IDX=()
+
+load_tools() {
+    # plain find + prefix strip (BusyBox find has no -printf)
+    local f
+    mapfile -t T < <(find "$DIR" -type f 2>/dev/null | while IFS= read -r f; do
+                         f="${f#"$DIR"/}"
+                         [[ "$f" == .git/* || "$f" == */.git/* || "$f" == categories.conf ]] && continue
+                         printf '%s\n' "$f"
+                     done | sort -f)
+    build_categories
+}
+
+build_categories() {
+    local defs=() line f
+    CAT_NAMES=() CAT_RX=() CAT_IDX=()
+
+    for f in "$USER_CATS" "$REPO_CATS"; do
+        if [ -f "$f" ]; then
+            while IFS= read -r line; do
+                [[ -z "$line" || "$line" == \#* || "$line" != *"|"* ]] && continue
+                defs+=("$line")
+            done < "$f"
+            break
+        fi
+    done
+    (( ${#defs[@]} == 0 )) && defs=("${BUILTIN_CATS[@]}")
+
+    local other=-1 k
+    for line in "${defs[@]}"; do
+        [ "${line%%|*}" = "$OTHER_CAT" ] && other=${#CAT_NAMES[@]}
+        CAT_NAMES+=("${line%%|*}")
+        CAT_RX+=("${line#*|}")
+        CAT_IDX+=("")
+    done
+    if (( other < 0 )); then
+        other=${#CAT_NAMES[@]}
+        CAT_NAMES+=("$OTHER_CAT"); CAT_RX+=(""); CAT_IDX+=("")
+    fi
+
+    local i name
+    for i in "${!T[@]}"; do
+        name="${T[i],,}"
+        for k in "${!CAT_RX[@]}"; do
+            [ -z "${CAT_RX[k]}" ] && continue
+            if [[ "$name" =~ ${CAT_RX[k],,} ]]; then
+                CAT_IDX[k]+="$i "
+                continue 2
+            fi
+        done
+        CAT_IDX[other]+="$i "
+    done
+
+    # Catch-all is matched first but listed last
+    local last=$(( ${#CAT_NAMES[@]} - 1 ))
+    if (( other != last )); then
+        local on="${CAT_NAMES[other]}" oi="${CAT_IDX[other]}"
+        CAT_NAMES=("${CAT_NAMES[@]:0:other}" "${CAT_NAMES[@]:other+1}" "$on")
+        CAT_IDX=("${CAT_IDX[@]:0:other}" "${CAT_IDX[@]:other+1}" "$oi")
+        CAT_RX=("${CAT_RX[@]:0:other}" "${CAT_RX[@]:other+1}" "")
+    fi
+}
+
+# Run a script file, picking an interpreter when it is not executable
+exec_tool() {
+    local f=$1; shift
+    if [ -x "$f" ]; then "$@" "$f"
+    elif [[ "$f" == *.py ]]; then "$@" python3 "$f"
+    else "$@" bash "$f"; fi
+}
+
+# ==============================================================================
+#  Pane [1]: search + menu
+# ==============================================================================
+
+VIEW="cats"            # cats | list
+declare -a LIST=()     # indices into T
+LIST_TITLE=""
+PAGE=0
+MSG=""
+
+prompt_str() {
+    # \001 \002 tell readline which bytes are invisible (keeps line editing sane)
+    local s=$'\001' e=$'\002'
+    if sudo_mode; then
+        printf '%s' " ${s}${RED}${e}ROOT :~\$${s}${N}${e} ${s}$(num_color)${e}>${s}${N}${e} "
+    else
+        printf '%s' " ${s}${CYN}${e}${USER:-user} :~\$${s}${N}${e} ${s}$(num_color)${e}>${s}${N}${e} "
+    fi
+}
+
+menu_rows() { echo $(( $(tlines) - 7 )); }
+
+draw_menu() {
+    local W H rows nc i n start end total pages mode_tag
+    W=$(tcols); H=$(tlines); rows=$(menu_rows); nc=$(num_color)
+    (( rows < 3 )) && rows=3
+
+    if sudo_mode; then mode_tag="${MAG}[SUDO]${N}"; else mode_tag="${GRN}[NORMAL]${N}"; fi
+
+    printf '\033[H'
+    printf ' %sgLiTcH ToolKit%s %sv%s%s  %s%s\n' "$BLD$GRN" "$N" "$DIM" "$VERSION" "$N" "$mode_tag" "$EL"
+    printf ' %s%d tools%s  %s%s\n' "$CYN" "${#T[@]}" "$N" "$(task_running && printf '%s' "${YEL}* task running${N}")" "$EL"
+    printf '%s%s%s%s\n' "$DIM" "$(hr "$W")" "$N" "$EL"
+
+    n=0
+    if [ "$VIEW" = "cats" ]; then
+        printf ' %sCATEGORIES%s%s\n' "$PNK" "$N" "$EL"
+        printf '%s%3d.%s %s %s(%d)%s%s\n' "$nc" 1 "$N" "$(trunc "All tools" $((W-12)))" "$DIM" "${#T[@]}" "$N" "$EL"
+        n=1
+        for i in "${!CAT_NAMES[@]}"; do
+            local cnt; cnt=$(wc -w <<< "${CAT_IDX[i]}")
+            (( cnt == 0 )) && continue
+            (( n >= rows )) && break
+            printf '%s%3d.%s %s %s(%d)%s%s\n' "$nc" $((i+2)) "$N" \
+                "$(trunc "${CAT_NAMES[i]}" $((W-12)))" "$DIM" "$cnt" "$N" "$EL"
+            ((n++))
+        done
+    else
+        total=${#LIST[@]}
+        pages=$(( (total + rows - 1) / rows )); (( pages < 1 )) && pages=1
+        (( PAGE >= pages )) && PAGE=$((pages-1)); (( PAGE < 0 )) && PAGE=0
+        start=$(( PAGE * rows )); end=$(( start + rows )); (( end > total )) && end=$total
+        local ptxt=""; (( pages > 1 )) && ptxt=" ${DIM}$((PAGE+1))/${pages}${N}"
+        printf ' %s%s%s%s%s\n' "$PNK" "$(trunc "$LIST_TITLE" $((W-8)))" "$N" "$ptxt" "$EL"
+        for (( i = start; i < end; i++ )); do
+            printf '%s%3d.%s %s%s\n' "$nc" $((i+1)) "$N" "$(trunc "${T[LIST[i]]}" $((W-6)))" "$EL"
+            ((n++))
+        done
+    fi
+    for (( ; n < rows; n++ )); do printf '%s\n' "$EL"; done
+
+    # message + hints + prompt
+    printf ' %s%s%s%s\n' "$YEL" "$(trunc "$MSG" $((W-2)))" "$N" "$EL"
+    if [ "$VIEW" = "cats" ]; then
+        printf ' %s%s%s%s\n' "$DIM" "$(trunc "word=search  #=open  a=all  h=help" $((W-2)))" "$N" "$EL"
+    else
+        printf ' %s%s%s%s\n' "$DIM" "$(trunc "word=search  #=run  b=back  n/p=page" $((W-2)))" "$N" "$EL"
+    fi
+    printf '\033[J'
+}
+
+open_category() {
+    local k=$1
+    if (( k == 1 )); then
+        LIST=("${!T[@]}"); LIST_TITLE="All tools (${#T[@]})"
+    else
+        local ci=$((k-2))
+        if (( ci < 0 || ci >= ${#CAT_NAMES[@]} )) || [ -z "${CAT_IDX[ci]}" ]; then
+            MSG="No category $k"; return
+        fi
+        read -r -a LIST <<< "${CAT_IDX[ci]}"
+        LIST_TITLE="${CAT_NAMES[ci]} (${#LIST[@]})"
+    fi
+    VIEW="list"; PAGE=0; MSG=""
+}
+
+launch_tool() {
+    local name="${T[$1]}" yn cmd
+    load_panes
+    if [ -z "$PANE_SHELL" ]; then MSG="Shell pane not found"; return; fi
+    if task_running; then
+        printf '\n %s[2] is busy: %s%s\n' "$YEL" "$(state_get task)" "$N"
+        read -r -p " Stop it and start ${name##*/}? y/N : " yn
+        [[ "${yn,,}" == y* ]] || { MSG="Cancelled"; return; }
+    fi
+    cmd=$(printf '%q ' bash "$SELF" --run "$name")
+    tmx respawn-pane -k -t "$PANE_SHELL" "$cmd"
+    tmx select-pane -t "$PANE_SHELL"
+    MSG="Started: ${name##*/}"
+}
+
+do_search() {
+    local q=$1 i
+    local -a M=()
+    for i in "${!T[@]}"; do
+        [[ "${T[i],,}" == *"${q,,}"* ]] && M+=("$i")
+    done
+    if (( ${#M[@]} == 1 )); then
+        launch_tool "${M[0]}"
+    elif (( ${#M[@]} > 1 )); then
+        LIST=("${M[@]}"); LIST_TITLE="Search '$q' (${#M[@]})"; VIEW="list"; PAGE=0; MSG=""
+    else
+        MSG="No matches for '$q'"
+    fi
+}
+
+toggle_sudo() {
+    clear
+    if sudo_mode; then
+        state_set mode 0; MSG="NORMAL mode"
+    else
+        if ! command -v sudo >/dev/null; then
+            MSG="sudo is not installed"; return
+        fi
+        echo " ${CYN}Checking sudo rights...${N}"
+        if sudo -v; then
+            state_set mode 1
+            MSG="SUDO mode - tools run as root"
+        else
+            MSG="Sudo authentication failed"
+        fi
+    fi
+}
+
+refresh_repo() {
+    clear
+    if sudo_mode; then sync_repo root; else sync_repo; fi
+    load_tools
+    VIEW="cats"; MSG="Refreshed: ${#T[@]} tools"
+}
+
+# Copy mode - same steps as v1, adapted to the side pane
+copy_mode() {
+    local ans src_idx="" q i yn
+    local -a M=()
+    clear
+    printf ' %sCOPY SCRIPT%s\n %s%s%s\n\n' "$PNK" "$N" "$DIM" "$(hr $(( $(tcols) - 2 )))" "$N"
+    printf ' Number from the current list,\n or a name to search. [b]ack\n\n'
+    read -e -r -p " Script > " ans
+    case "${ans,,}" in b|"") MSG=""; return ;; esac
+
+    if [[ "$ans" =~ ^[0-9]+$ ]]; then
+        if [ "$VIEW" = "list" ] && (( ans >= 1 && ans <= ${#LIST[@]} )); then
+            src_idx=${LIST[ans-1]}
+        else
+            MSG="Numbers refer to an open tool list"; return
+        fi
+    else
+        q=$ans
+        for i in "${!T[@]}"; do [[ "${T[i],,}" == *"${q,,}"* ]] && M+=("$i"); done
+        if (( ${#M[@]} == 1 )); then src_idx=${M[0]}
+        elif (( ${#M[@]} > 1 )); then
+            LIST=("${M[@]}"); LIST_TITLE="Search '$q' (${#M[@]})"; VIEW="list"; PAGE=0
+            MSG="${#M[@]} matches - press c again and pick a number"; return
+        else MSG="No matches for '$q'"; return; fi
+    fi
+
+    local src_name="${T[src_idx]}" src_path="$DIR/${T[src_idx]}"
+    printf '\n %sSelected:%s %s\n\n' "$CYN" "$N" "$src_name"
+
+    local DEST_RAW DEST NEW_NAME EXEC final_path target_dir make_exec=1
+    read -e -r -p " Copy to path [b]ack > " DEST_RAW
+    case "${DEST_RAW,,}" in b|"") MSG="Copy cancelled"; return ;; esac
+    DEST=$(eval echo "$DEST_RAW")
+
+    read -e -r -p " New name [Enter=keep] > " NEW_NAME
+    [[ "${NEW_NAME,,}" == "b" ]] && { MSG="Copy cancelled"; return; }
+    [ -z "$NEW_NAME" ] && NEW_NAME="${src_name##*/}"
+
+    if [[ "$DEST" == */ ]] || [ -d "$DEST" ]; then
+        final_path="${DEST%/}/$NEW_NAME"; target_dir="${DEST%/}"
+    else
+        if [ "$NEW_NAME" = "${src_name##*/}" ]; then final_path="$DEST"
+        else final_path="$(dirname "$DEST")/$NEW_NAME"; fi
+        target_dir="$(dirname "$final_path")"
+    fi
+
+    read -r -p " Make executable? Y/n > " EXEC
+    [[ "${EXEC,,}" == "b" ]] && { MSG="Copy cancelled"; return; }
+    [[ "${EXEC,,}" == n* ]] && make_exec=0
+
+    local sudo_cmd=()
+    sudo_mode && sudo_cmd=(sudo)
+
+    printf '\n %sTo:%s   %s\n %sExec:%s %s\n' "$CYN" "$N" "$final_path" "$CYN" "$N" \
+        "$([[ $make_exec -eq 1 ]] && echo yes || echo no)"
+    sudo_mode && printf ' %sAs:%s   root\n' "$CYN" "$N"
+    echo
+
+    if [ ! -d "$target_dir" ]; then
+        read -r -p " Create $target_dir? Y/n > " yn
+        [[ "${yn,,}" == n* ]] && { MSG="Copy aborted"; return; }
+        "${sudo_cmd[@]}" mkdir -p "$target_dir" || { MSG="mkdir failed"; return; }
+    fi
+    if [ -e "$final_path" ]; then
+        read -r -p " Exists. Overwrite? Y/n > " yn
+        [[ "${yn,,}" == n* ]] && { MSG="Copy aborted"; return; }
+    fi
+    "${sudo_cmd[@]}" cp -f "$src_path" "$final_path" || { MSG="Copy failed"; return; }
+    if (( make_exec == 1 )); then
+        "${sudo_cmd[@]}" chmod +x "$final_path" || { MSG="chmod failed"; return; }
+    fi
+    MSG="Copied to $final_path"
+}
+
+# Terminal resized while waiting for input: redraw and put the prompt back
+on_winch() {
+    draw_menu
+    local p; p=$(prompt_str)
+    printf '%s' "${p//[$'\001\002']/}"
+}
+
+menu_main() {
+    trap ':' INT
+    trap 'on_winch' WINCH
+    load_tools
+    local IN
+    while true; do
+        clear
+        draw_menu
+        IN=""
+        if ! read -e -r -p "$(prompt_str)" IN; then
+            IN=""       # Ctrl-D / interrupted read: just redraw
+        fi
+        IN="${IN#"${IN%%[![:space:]]*}"}"; IN="${IN%"${IN##*[![:space:]]}"}"
+        [ -n "$IN" ] && history -s "$IN"
+        MSG=""
+
+        if [[ "$IN" =~ ^[0-9]+$ ]]; then
+            if [ "$VIEW" = "cats" ]; then
+                open_category "$IN"
+            elif (( IN >= 1 && IN <= ${#LIST[@]} )); then
+                launch_tool "${LIST[IN-1]}"
+            else
+                MSG="Pick 1-${#LIST[@]}"
+            fi
+            continue
+        fi
+
+        case "${IN,,}" in
+            "")        ;;
+            b|back)    VIEW="cats"; PAGE=0 ;;
+            a|all)     open_category 1 ;;
+            n)         [ "$VIEW" = "list" ] && ((PAGE++)) ;;
+            p)         [ "$VIEW" = "list" ] && ((PAGE--)) ;;
+            r)         refresh_repo ;;
+            c)         copy_mode ;;
+            s)         toggle_sudo ;;
+            h|help|\?) bash "$SELF" --fkey help ;;
+            q|quit|exit)
+                local yn
+                read -r -p " Quit gLiTcH ToolKit? y/N : " yn
+                [[ "${yn,,}" == y* ]] && tmx kill-session -t "$SES"
+                ;;
+            *)         do_search "$IN" ;;
+        esac
+    done
+}
+
+# ==============================================================================
+#  Pane [2]: task runner, tools and idle monitor
+# ==============================================================================
+
+set_shell_title() { load_panes; [ -n "$PANE_SHELL" ] && tmx select-pane -t "$PANE_SHELL" -T "$1"; }
+focus_menu()      { load_panes; [ -n "$PANE_MENU" ] && tmx select-pane -t "$PANE_MENU"; }
+
+run_main() {
+    local rel=$1 F="$DIR/$1" start rc dur k runner=() as="user"
+    trap ':' INT                       # Ctrl-C hits the tool, not this wrapper
+    printf '\033[?25h\033[?7h'
+    sudo_mode && { runner=(sudo); as="root"; }
+
+    state_set task "$rel"
+    set_shell_title "[2] RUNNING: ${rel##*/}"
+    clear
+    printf '%s>> Running:%s %s%s%s  %s(as %s)%s\n' "$PNK" "$N" "$BLD" "$rel" "$N" "$DIM" "$as" "$N"
+    printf '%s%s%s\n\n' "$DIM" "$(hr "$(tcols)")" "$N"
+
+    start=$(date +%s)
+    cd /tmp || true
+    if [ -f "$F" ]; then
+        exec_tool "$F" "${runner[@]}"; rc=$?
+    else
+        echo "${RED}File not found: $F${N}"; rc=127
+    fi
+    dur=$(( $(date +%s) - start ))
+
+    state_del task
+    state_set last "$rel|$rc|$dur|$(date +%H:%M)"
+    set_shell_title "[2] SHELL / TASKS"
+
+    echo
+    printf '%s%s%s\n' "$DIM" "$(hr "$(tcols)")" "$N"
+    if (( rc == 0 )); then
+        printf '%sDone%s  %s  %s(%s)%s\n' "$GRN" "$N" "${rel##*/}" "$DIM" "$(human_dur "$dur")" "$N"
+    else
+        printf '%sExit code %d%s  %s  %s(%s)%s\n' "$RED" "$rc" "$N" "${rel##*/}" "$DIM" "$(human_dur "$dur")" "$N"
+    fi
+    read -r -p "Enter = back to menu   s = stay in a shell here > " k
+    if [[ "${k,,}" == s* ]]; then
+        state_set task "[shell]"
+        echo "${DIM}Type exit to return to the monitor.${N}"
+        bash -i
+        state_del task
+    fi
+    focus_menu
+    exec bash "$SELF" --monitor
+}
+
+show_help() {
+    cat <<EOF
+${BLD}${GRN}gLiTcH ToolKit v$VERSION${N} - how it works
+
+${PNK}[1] SEARCH & MENU${N} (left)
+  word      search all tools. One hit starts it, several hits are listed
+  number    open a category / run a tool from the list
+  a         list all tools          b   back to categories
+  n / p     next / previous page    r   re-download toolkit from GitHub
+  c         copy a script to disk   s   toggle SUDO mode (run as root)
+  h         this help               q   quit
+
+${PNK}[2] SHELL / TASKS${N} (right)
+  Tools run here with full input and output. Ctrl-C stops a tool.
+  When idle it shows a small task monitor (top processes).
+  Mouse wheel scrolls back, q leaves scroll mode.
+
+${PNK}[3] SYSTEM${N} (bottom) - F-keys work from any pane
+  F1 Help   F2 Top   F3 Disks   F4 Network   F5 Shell   F6 Logs
+  F7 Focus [1]/[2]   F8 Stop task in [2]   F10 Quit
+
+${PNK}Categories${N}
+  Built in, sorted by file name. To use your own, create
+  ~/.config/glitch-toolkit/categories.conf, one per line:
+      Category Name|regex|regex|...
+EOF
+}
+
+tool_main() {
+    local t=$1
+    trap ':' INT
+    printf '\033[?25h\033[?7h'
+    state_set task "[$t]"
+    set_shell_title "[2] ${t^^}"
+    clear
+    case "$t" in
+        help)
+            show_help ;;
+        top)
+            if command -v htop >/dev/null; then htop; else top; fi ;;
+        disks)
+            printf '%sBLOCK DEVICES%s\n' "$PNK" "$N"
+            if command -v lsblk >/dev/null; then
+                lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT 2>/dev/null || lsblk
+            else
+                cat /proc/partitions
+                if command -v blkid >/dev/null; then
+                    printf '\n%sLABELS / UUIDS%s\n' "$PNK" "$N"; blkid 2>/dev/null
+                fi
+            fi
+            printf '\n%sFILESYSTEMS%s\n' "$PNK" "$N"
+            df -hT -x tmpfs -x devtmpfs -x squashfs -x overlay 2>/dev/null || df -h ;;
+        net)
+            if ! command -v ip >/dev/null; then
+                echo "${RED}ip not found - install iproute2${N}"
+            else
+            printf '%sADDRESSES%s\n' "$PNK" "$N";  ip -br -c addr 2>/dev/null || ip addr
+            printf '\n%sROUTES%s\n' "$PNK" "$N";   ip route
+            printf '\n%sDNS%s\n' "$PNK" "$N";      grep -E '^nameserver' /etc/resolv.conf 2>/dev/null
+            printf '\n%sLISTENING PORTS%s\n' "$PNK" "$N"
+            if command -v ss >/dev/null; then ss -tulpn 2>/dev/null | head -n 40
+            else netstat -tuln 2>/dev/null | head -n 40; fi
+            fi ;;
+        shell)
+            echo "${DIM}Normal shell. Type exit to return to the monitor.${N}"
+            cd "$HOME" && bash -i ;;
+        logs)
+            echo "${DIM}Live system log. Ctrl-C to return.${N}"
+            if command -v journalctl >/dev/null; then journalctl -f -n 40
+            elif [ -r /var/log/messages ]; then tail -n 40 -f /var/log/messages
+            elif dmesg --help 2>&1 | grep -q -- '--follow'; then dmesg -w
+            else dmesg | tail -n 40; echo; read -r -p "Enter = back > " _; fi ;;
+    esac
+    case "$t" in
+        help|disks|net) echo; read -r -p "Enter = back > " _ ;;
+    esac
+    state_del task
+    set_shell_title "[2] SHELL / TASKS"
+    focus_menu
+    exec bash "$SELF" --monitor
+}
+
+monitor_main() {
+    state_del task                     # anything killed by F8/respawn is gone now
+    set_shell_title "[2] SHELL / TASKS"
+    trap 'printf "\033[?25h\033[?7h"' EXIT
+    trap ':' INT
+    printf '\033[?25l\033[?7l'         # hide cursor, no line wrap
+    clear
+    local W H rows last lrel lrc ldur ltime k gnu_ps=0
+    ps -eo pid= --sort=-pcpu >/dev/null 2>&1 && gnu_ps=1
+    while true; do
+        W=$(tcols); H=$(tlines); rows=$(( H - 8 ))
+        printf '\033[H'
+        printf ' %sIDLE%s  %sPick a tool in [1] - it runs here in [2].%s%s\n' \
+            "$BLD$GRN" "$N" "$DIM" "$N" "$EL"
+        last=$(state_get last)
+        if [ -n "$last" ]; then
+            IFS='|' read -r lrel lrc ldur ltime <<< "$last"
+            local lc=$GRN; (( lrc != 0 )) && lc=$RED
+            printf ' %sLast:%s %s  %sexit %s%s  %s  %s%s\n' "$CYN" "$N" "${lrel##*/}" \
+                "$lc" "$lrc" "$N" "$(human_dur "$ldur")" "$ltime" "$EL"
+        else
+            printf ' %sLast:%s none yet%s\n' "$CYN" "$N" "$EL"
+        fi
+        printf '%s\n' "$EL"
+        printf ' %sTASK MONITOR%s  %stop processes by CPU%s%s\n' "$PNK" "$N" "$DIM" "$N" "$EL"
+        if (( gnu_ps )); then
+            printf ' %s%7s  %-10s %5s %5s %10s  %s%s%s\n' "$DIM" PID USER CPU MEM TIME COMMAND "$N" "$EL"
+            ps -eo pid=,user=,pcpu=,pmem=,etime=,comm= --sort=-pcpu 2>/dev/null \
+                | head -n "$(( rows > 1 ? rows : 1 ))" \
+                | while read -r p u c m e cmd; do
+                    printf ' %7s  %-10.10s %5s %5s %10s  %s%s\n' "$p" "$u" "$c" "$m" "$e" "$cmd" "$EL"
+                  done
+        else
+            # BusyBox: its top already sorts by CPU; show from the PID header down
+            top -bn1 2>/dev/null | sed -n '/PID/,$p' | head -n "$(( rows > 1 ? rows + 1 : 2 ))" \
+                | while IFS= read -r line; do printf ' %s%s\n' "$line" "$EL"; done
+        fi
+        printf '\033[J'
+        printf '\033[%d;1H %s[s] shell here   [t] top   F1 help%s%s' "$H" "$DIM" "$N" "$EL"
+
+        k=""
+        read -rsn1 -t 2 k || true
+        case "${k,,}" in
+            s) printf '\033[?25h\033[?7h'; exec bash "$SELF" --tool shell ;;
+            t) printf '\033[?25h\033[?7h'; exec bash "$SELF" --tool top ;;
+        esac
+    done
+}
+
+# ==============================================================================
+#  Pane [3]: footer (resources, F-keys, tips)
+# ==============================================================================
+
+bar() {
+    local pct=$1 w=$2 fill col
+    fill=$(( pct * w / 100 )); (( fill > w )) && fill=$w
+    if (( pct >= 85 )); then col=$RED; elif (( pct >= 60 )); then col=$YEL; else col=$GRN; fi
+    printf '%s%s%s%s%s' "$col" "$(hr "$fill" '#')" "$DIM" "$(hr $((w-fill)) '.')" "$N"
+}
+
+up_fmt() {
+    local m=$1
+    if (( m >= 1440 )); then printf '%dd%dh' $((m/1440)) $((m%1440/60))
+    elif (( m >= 60 )); then printf '%dh%02dm' $((m/60)) $((m%60))
+    else printf '%dm' "$m"; fi
+}
+
+footer_main() {
+    trap ':' INT
+    printf '\033[?25l\033[?7l'
+    clear
+    local a b c d e f g h idle1=0 tot1=0 idle2 tot2 cpu=0
+    local mt ma mu mp disk load up upm tip_i=0 tick=0 mode
+    while true; do
+        read -r _ a b c d e f g h _ < /proc/stat
+        tot2=$(( a+b+c+d+e+f+g+h )); idle2=$(( d+e ))
+        if (( tot1 > 0 && tot2 > tot1 )); then
+            cpu=$(( 100 * ( (tot2-tot1) - (idle2-idle1) ) / (tot2-tot1) ))
+        fi
+        tot1=$tot2; idle1=$idle2
+
+        mt=$(awk '/^MemTotal:/{print $2}' /proc/meminfo)
+        ma=$(awk '/^MemAvailable:/{a=$2} /^(MemFree|Buffers|Cached):/{f+=$2}
+                  END{print (a ? a : f)}' /proc/meminfo)
+        mu=$(( mt - ma )); mp=$(( mt > 0 ? mu * 100 / mt : 0 ))
+        disk=$(df -P / 2>/dev/null | awk 'NR==2{gsub("%","",$5); print $5}')
+        read -r load _ < /proc/loadavg
+        read -r up _ < /proc/uptime; upm=$(( ${up%.*} / 60 ))
+        if sudo_mode; then mode="${MAG}SUDO${N}"; else mode="${GRN}NORMAL${N}"; fi
+
+        printf '\033[H'
+        printf ' CPU %s %3d%%   RAM %s %s/%sG   DISK / %s%%   LOAD %s   UP %s   %s%s\n' \
+            "$(bar "$cpu" 10)" "$cpu" "$(bar "$mp" 10)" \
+            "$(awk -v k="$mu" 'BEGIN{printf "%.1f", k/1048576}')" \
+            "$(awk -v k="$mt" 'BEGIN{printf "%.1f", k/1048576}')" \
+            "${disk:-?}" "$load" "$(up_fmt "$upm")" "$mode" "$EL"
+        printf ' %sF1%s Help %sF2%s Top %sF3%s Disks %sF4%s Net %sF5%s Shell %sF6%s Logs %sF7%s Focus %sF8%s Stop %sF10%s Quit%s\n' \
+            "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$EL"
+        printf ' %sTip:%s %s%s%s%s' "$CYN" "$N" "$DIM" "${TIPS[tip_i]}" "$N" "$EL"
+
+        sleep 2
+        (( ++tick % 4 == 0 )) && tip_i=$(( (tip_i + 1) % ${#TIPS[@]} ))
+    done
+}
+
+# ==============================================================================
+#  F-key dispatcher (called by tmux run-shell) and pane revival
+# ==============================================================================
+
+fkey_main() {
+    local k=$1
+    load_panes
+    case "$k" in
+        focus)
+            if [ "$(tmx display -p '#{pane_id}')" = "$PANE_MENU" ]; then
+                tmx select-pane -t "$PANE_SHELL"
+            else
+                tmx select-pane -t "$PANE_MENU"
+            fi ;;
+        stop)
+            tmx respawn-pane -k -t "$PANE_SHELL" "$(printf '%q ' bash "$SELF" --monitor)"
+            tmx select-pane -t "$PANE_MENU" ;;
+        help|top|disks|net|shell|logs)
+            if task_running; then
+                tmx display-message "[2] is busy ($(state_get task)) - finish it or press F8 to stop it"
+                return
+            fi
+            tmx respawn-pane -k -t "$PANE_SHELL" "$(printf '%q ' bash "$SELF" --tool "$k")"
+            tmx select-pane -t "$PANE_SHELL" ;;
+    esac
+}
+
+revive_main() {
+    local id=$1
+    load_panes
+    case "$id" in
+        "$PANE_MENU")  tmx respawn-pane -t "$id" "$(printf '%q ' bash "$SELF" --menu)" ;;
+        "$PANE_SHELL") tmx respawn-pane -t "$id" "$(printf '%q ' bash "$SELF" --monitor)" ;;
+        "$PANE_FOOT")  tmx respawn-pane -t "$id" "$(printf '%q ' bash "$SELF" --footer)" ;;
+    esac
+}
+
+# ==============================================================================
+#  Launcher: build the tmux layout
+# ==============================================================================
+
+ensure_tmux() {
+    local yn
+    if ! command -v tmux >/dev/null; then
+        echo "${PNK}tmux is required for the TUI layout but is not installed.${N}"
+        if command -v apt-get >/dev/null; then
+            read -r -p "Install it now with: sudo apt-get install -y tmux ? Y/n : " yn
+            [[ "${yn,,}" != n* ]] && sudo apt-get install -y tmux
+        elif command -v tazpkg >/dev/null; then
+            read -r -p "Install it now with: tazpkg get-install tmux (as root) ? Y/n : " yn
+            if [[ "${yn,,}" != n* ]]; then
+                if (( UID == 0 )); then tazpkg get-install tmux; else su -c "tazpkg get-install tmux"; fi
+            fi
+        fi
+        command -v tmux >/dev/null || { echo "Install tmux and run again."; exit 1; }
+    fi
+    # pane titles, -l sizes and split -f need tmux 3.0+
+    local v maj
+    v=$(tmux -V 2>/dev/null); v=${v#*tmux }; v=${v#next-}; maj=${v%%.*}
+    if [[ "$maj" =~ ^[0-9]+$ ]] && (( maj < 3 )); then
+        echo "${PNK}tmux $v found - this launcher needs tmux 3.0 or newer.${N}"; exit 1
+    fi
+}
+
+resolve_self() {
+    if [ -f "$0" ] && [ -r "$0" ]; then
+        SELF=$(readlink -f "$0")
+    else
+        # Started via bash <(wget ...) - write a runnable copy of ourselves
+        SELF="$RUNDIR/glitch-tui-toolkit"
+        {
+            echo '#!/usr/bin/env bash'
+            declare -p VERSION TARBALL_URL TARBALL DIR RUNDIR SOCK SES USER_CATS REPO_CATS \
+                       MIN_COLS MIN_LINES GRN MAG PNK CYN RED YEL DIM BLD N EL \
+                       BUILTIN_CATS OTHER_CAT TIPS
+            declare -f
+            echo 'SELF="$(readlink -f "$0")"'
+            echo 'main "$@"'
+        } > "$SELF"
+        chmod 700 "$SELF"
+    fi
+}
+
+write_tmux_conf() {
+    local term="screen-256color"
+    infocmp tmux-256color >/dev/null 2>&1 && term="tmux-256color"
+    cat > "$RUNDIR/tmux.conf" <<EOF
+set -g default-terminal "$term"
+set -ga terminal-overrides ",*:Tc"
+set -g mouse on
+set -g status off
+set -sg escape-time 10
+set -g history-limit 20000
+set -g remain-on-exit on
+set -g focus-events on
+set -g pane-border-status top
+set -g pane-border-style "fg=#00ff0b"
+set -g pane-active-border-style "fg=#db00b9"
+set -g pane-border-format "#{?pane_active,#[fg=#db00b9 bold],#[fg=#00ff0b]} #{pane_title} #[default]"
+set -gq pane-border-lines heavy
+set -gq allow-set-title off
+set -g message-style "bg=#db00b9,fg=black"
+EOF
+}
+
+launch() {
+    ensure_tmux
+    mkdir -p "$RUNDIR" && chmod 700 "$RUNDIR"
+    resolve_self
+
+    if tmx has-session -t "$SES" 2>/dev/null; then
+        TMUX='' tmx attach -t "$SES"; clear; exit 0
+    fi
+
+    local cols lines
+    cols=$(tcols); lines=$(tlines)
+    if (( cols < MIN_COLS || lines < MIN_LINES )); then
+        echo "${PNK}Terminal is ${cols}x${lines}. ${MIN_COLS}x${MIN_LINES} or larger recommended.${N}"
+        read -r -p "Continue anyway? Y/n : " yn
+        [[ "${yn,,}" == n* ]] && exit 0
+    fi
+
+    [ -d "$DIR" ] || sync_repo
+    [ -d "$DIR" ] || { echo "${RED}No toolkit found in $DIR - check your connection.${N}"; exit 1; }
+
+    state_set mode 0
+    state_del task
+    write_tmux_conf
+
+    local side=$(( cols * 30 / 100 ))
+    (( side < 38 )) && side=38
+    (( side > 52 )) && side=52
+
+    local q_menu q_mon q_foot
+    q_menu=$(printf '%q ' bash "$SELF" --menu)
+    q_mon=$(printf '%q ' bash "$SELF" --monitor)
+    q_foot=$(printf '%q ' bash "$SELF" --footer)
+
+    # Shell pane first, then footer, menu last - so the menu starts at its
+    # final size and never gets a resize signal while waiting for input
+    tmux -L "$SOCK" -f "$RUNDIR/tmux.conf" new-session -d -s "$SES" -n toolkit -x "$cols" -y "$lines" "$q_mon"
+    tmx source-file "$RUNDIR/tmux.conf"
+
+    local pm ps pf
+    ps=$(tmx display -p -t "$SES:0.0" '#{pane_id}')
+    pf=$(tmx split-window -v -t "$ps" -l 3 -P -F '#{pane_id}' "$q_foot")
+    pm=$(tmx split-window -hbf -t "$ps" -l "$side" -P -F '#{pane_id}' "$q_menu")
+    printf 'PANE_MENU=%s\nPANE_SHELL=%s\nPANE_FOOT=%s\n' "$pm" "$ps" "$pf" > "$RUNDIR/panes"
+
+    tmx select-pane -t "$pm" -T "[1] SEARCH & MENU"
+    tmx select-pane -t "$ps" -T "[2] SHELL / TASKS"
+    tmx select-pane -t "$pf" -T "[3] SYSTEM"
+
+    # Keys (root table on our private server only)
+    local fk
+    fk="bash $(printf '%q' "$SELF") --fkey"
+    tmx bind -n F1  run-shell -b "$fk help"
+    tmx bind -n F2  run-shell -b "$fk top"
+    tmx bind -n F3  run-shell -b "$fk disks"
+    tmx bind -n F4  run-shell -b "$fk net"
+    tmx bind -n F5  run-shell -b "$fk shell"
+    tmx bind -n F6  run-shell -b "$fk logs"
+    tmx bind -n F7  run-shell -b "$fk focus"
+    tmx bind -n F8  confirm-before -p "Stop whatever runs in [2]? (y/n)" "run-shell -b '$fk stop'"
+    tmx bind -n F10 confirm-before -p "Quit gLiTcH ToolKit? (y/n)" kill-session
+
+    # Any pane that dies (Ctrl-C, crash) is brought back in its role
+    tmx set-hook -g pane-died "run-shell -b 'bash $(printf '%q' "$SELF") --revive #{pane_id}'"
+
+    # Closing the terminal ends the session - armed only after the first
+    # attach, otherwise tmux destroys the still-detached session right away
+    tmx set-hook -g client-attached "set -g destroy-unattached on"
+
+    tmx select-pane -t "$pm"
+    TMUX='' tmx attach -t "$SES"
+    clear
+}
+
+main() {
+    case "${1:-}" in
+        --menu)    mkdir -p "$RUNDIR"; menu_main ;;
+        --run)     run_main "$2" ;;
+        --tool)    tool_main "$2" ;;
+        --monitor) monitor_main ;;
+        --footer)  footer_main ;;
+        --fkey)    fkey_main "$2" ;;
+        --revive)  revive_main "$2" ;;
+        -h|--help) show_help ;;
+        "")        launch ;;
+        *)         echo "Unknown option: $1"; show_help; exit 1 ;;
+    esac
+}
+
+SELF="${SELF:-}"
+[ -z "$SELF" ] && [ -f "$0" ] && SELF=$(readlink -f "$0")
+main "$@"
