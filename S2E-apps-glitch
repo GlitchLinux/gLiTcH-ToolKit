@@ -1,4 +1,3 @@
-```bash
 #!/bin/bash
 
 set -e
@@ -23,4 +22,3 @@ for app in "${apps[@]}"; do
 
     ln -sf "/bin/$app" "/usr/bin/$name"
 done
-```
