@@ -7,9 +7,9 @@
 #   +------------------+--------------------------------------+
 #   | [1] SEARCH/MENU  | [2] SHELL / TASKS                    |
 #   |  search bar      |  running tool (live output + input)  |
-#   |  categories      |  idle: task monitor (top processes)  |
+#   |  categories      |  idle: btop (or built-in monitor)    |
 #   |  tool lists      +--------------------------------------+
-#   |                  | [3] SYSTEM: resources, F-keys, tips  |
+#   |                  | [Q] [H] [R] [C] ~ RAM ~ DISK         |
 #   +------------------+--------------------------------------+
 #
 # Usage:  glitch-tui-toolkit            start / re-attach
@@ -63,28 +63,6 @@ BUILTIN_CATS=(
 )
 OTHER_CAT="System & Utilities"
 
-# --- Rotating footer tips ("no dumb questions") -------------------------------
-TIPS=(
-    "Type part of a name in [1] and press Enter. One hit = it starts right away."
-    "Several hits? Type the number, or just type a new word to search again."
-    "Tools run in [2]. You can type into them there - answer prompts, press y/n."
-    "Click a pane with the mouse to focus it, or press F7 to jump between [1] and [2]."
-    "Scroll back through tool output with the mouse wheel in [2]. Press q to leave scroll mode."
-    "Ctrl-C stops the running tool. The launcher itself keeps running."
-    "F8 force-stops whatever runs in [2] and brings back the monitor."
-    "Type s in [1] to toggle SUDO mode. Numbers turn magenta when tools run as root."
-    "Type r in [1] to download the newest toolkit from GitHub."
-    "Type c in [1] to copy a script to your system, e.g. into /usr/local/bin."
-    "Type b in [1] to go back to the category list, a to list every tool."
-    "Long list? n and p flip pages in [1]."
-    "F5 opens a normal shell in [2]. Type exit to come back."
-    "F2 = process viewer (htop or top). Press q to close it."
-    "F3 = disks and partitions (lsblk + df). Handy before flashing an image."
-    "F4 = network overview: IP addresses, routes and listening ports."
-    "F6 = live system log. Ctrl-C returns to the monitor."
-    "F10 or q quits. Closing the terminal window also quits."
-)
-
 # ==============================================================================
 #  Helpers
 # ==============================================================================
@@ -130,7 +108,13 @@ trunc() {
     if (( ${#s} > w )); then printf '%s~' "${s:0:w-1}"; else printf '%s' "$s"; fi
 }
 
-hr() { local w=$1 ch=${2:--}; printf '%*s' "$w" '' | tr ' ' "$ch"; }
+# Repeat a char w times (pure bash: tr is byte-based and mangles "─")
+hr() {
+    local w=$1 ch=${2:--} s
+    (( w < 0 )) && w=0
+    printf -v s '%*s' "$w" ''
+    printf '%s' "${s// /$ch}"
+}
 
 human_dur() {
     local s=$1
@@ -371,11 +355,17 @@ toggle_sudo() {
     fi
 }
 
-refresh_repo() {
-    clear
-    if sudo_mode; then sync_repo root; else sync_repo; fi
-    load_tools
-    VIEW="cats"; MSG="Refreshed: ${#T[@]} tools"
+ask_restart() {
+    local yn
+    task_running && printf ' %s[2] is busy: %s%s\n' "$YEL" "$(state_get task)" "$N"
+    read -r -p " Restart TUI + refresh toolkit? y/N : " yn
+    [[ "${yn,,}" == y* ]] && do_restart
+}
+
+# Flag the launcher loop to rebuild, then end the session
+do_restart() {
+    : > "$RUNDIR/restart"
+    tmx kill-session -t "$SES"
 }
 
 # Copy mode - same steps as v1, adapted to the side pane
@@ -492,7 +482,8 @@ menu_main() {
             a|all)     open_category 1 ;;
             n)         [ "$VIEW" = "list" ] && ((PAGE++)) ;;
             p)         [ "$VIEW" = "list" ] && ((PAGE--)) ;;
-            r)         refresh_repo ;;
+            r)         ask_restart ;;
+            f)         bash "$SELF" --fkey footer-open; MSG="Bottom bar shown" ;;
             c)         copy_mode ;;
             s)         toggle_sudo ;;
             h|help|\?) bash "$SELF" --fkey help ;;
@@ -558,26 +549,33 @@ run_main() {
 
 show_help() {
     cat <<EOF
-${BLD}${GRN}gLiTcH ToolKit v$VERSION${N} - how it works
+${BLD}${GRN}gLiTcH ToolKit v$VERSION${N}
+
+${PNK}BOTTOM BAR${N} (click it, or F7 to focus it)
+  ${MAG}Q${N}  Quit TUI toolkit
+  ${MAG}H${N}  Help - this screen
+  ${MAG}R${N}  Restart TUI and refresh local gLiTcH-ToolKit repo
+  ${MAG}C${N}  Close the bottom bar (type f in [1] to bring it back)
 
 ${PNK}[1] SEARCH & MENU${N} (left)
-  word      search all tools. One hit starts it, several hits are listed
+  word      search all tools. One hit starts it, several are listed -
+            then type a number, or a new word to search again
   number    open a category / run a tool from the list
-  a         list all tools          b   back to categories
-  n / p     next / previous page    r   re-download toolkit from GitHub
-  c         copy a script to disk   s   toggle SUDO mode (run as root)
-  h         this help               q   quit
+  a         all tools               b   back to categories
+  n / p     next / previous page    s   toggle SUDO mode (run as root)
+  c         copy a script to disk   f   show bottom bar again
+  r         restart + refresh       h   help       q   quit
 
 ${PNK}[2] SHELL / TASKS${N} (right)
   Tools run here with full input and output. Ctrl-C stops a tool.
-  When idle it shows a small task monitor (top processes).
-  Mouse wheel scrolls back, q leaves scroll mode.
+  When idle it shows btop. Mouse wheel scrolls back, q leaves scroll mode.
 
-${PNK}[3] SYSTEM${N} (bottom) - F-keys work from any pane
-  F1 Help   F2 Top   F3 Disks   F4 Network   F5 Shell   F6 Logs
-  F7 Focus [1]/[2]   F8 Stop task in [2]   F10 Quit
+${PNK}NAVIGATION${N}
+  Click a pane to focus it, or F7 to cycle [1] -> [2] -> bottom bar.
+  F1 help    F2 btop/top   F3 disks   F4 network   F5 shell   F6 logs
+  F7 focus   F8 stop task in [2]       F10 quit
 
-${PNK}Categories${N}
+${PNK}CATEGORIES${N}
   Built in, sorted by file name. To use your own, create
   ~/.config/glitch-toolkit/categories.conf, one per line:
       Category Name|regex|regex|...
@@ -595,7 +593,10 @@ tool_main() {
         help)
             show_help ;;
         top)
-            if command -v htop >/dev/null; then htop; else top; fi ;;
+            if command -v btop >/dev/null; then
+                if [[ "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" =~ [Uu][Tt][Ff]-?8 ]]; then btop
+                else btop --utf-force; fi
+            elif command -v htop >/dev/null; then htop; else top; fi ;;
         disks)
             printf '%sBLOCK DEVICES%s\n' "$PNK" "$N"
             if command -v lsblk >/dev/null; then
@@ -641,6 +642,24 @@ tool_main() {
 monitor_main() {
     state_del task                     # anything killed by F8/respawn is gone now
     set_shell_title "[2] SHELL / TASKS"
+
+    # btop is the default view. It needs about 80x24; smaller panes and
+    # systems without btop get the built-in monitor below.
+    term_size
+    if command -v btop >/dev/null && (( TW >= 80 && TH >= 24 )) \
+       && [ ! -f "$RUNDIR/btop-failed" ]; then
+        local bargs=() t0
+        # btop refuses to start without a UTF-8 locale; the tmux pane is UTF-8
+        [[ "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" =~ [Uu][Tt][Ff]-?8 ]] || bargs=(--utf-force)
+        t0=$(date +%s)
+        btop "${bargs[@]}"
+        if (( $(date +%s) - t0 < 3 )); then
+            # died right away: remember it and use the built-in monitor
+            : > "$RUNDIR/btop-failed"
+        fi
+        exec bash "$SELF" --monitor
+    fi
+
     trap 'printf "\033[?25h\033[?7h"' EXIT
     trap ':' INT
     printf '\033[?25l\033[?7l'         # hide cursor, no line wrap
@@ -676,70 +695,71 @@ monitor_main() {
                 | while IFS= read -r line; do printf ' %s%s\n' "$line" "$EL"; done
         fi
         printf '\033[J'
-        printf '\033[%d;1H %s[s] shell here   [t] top   F1 help%s%s' "$H" "$DIM" "$N" "$EL"
+        if [ -f "$RUNDIR/btop-failed" ]; then
+            printf '\033[%d;1H %s[s] shell here   (btop failed to start - run it with F2 to see why)%s%s' "$H" "$DIM" "$N" "$EL"
+        elif command -v btop >/dev/null; then
+            printf '\033[%d;1H %s[s] shell here   (pane too small for btop)%s%s' "$H" "$DIM" "$N" "$EL"
+        else
+            printf '\033[%d;1H %s[s] shell here   (install btop for the full monitor)%s%s' "$H" "$DIM" "$N" "$EL"
+        fi
 
         k=""
         read -rsn1 -t 2 k || true
         case "${k,,}" in
             s) printf '\033[?25h\033[?7h'; exec bash "$SELF" --tool shell ;;
-            t) printf '\033[?25h\033[?7h'; exec bash "$SELF" --tool top ;;
         esac
     done
 }
 
 # ==============================================================================
-#  Pane [3]: footer (resources, F-keys, tips)
+#  Pane [3]: bottom bar  [Q] [H] [R] [C] ~ RAM ~ DISK
 # ==============================================================================
 
-bar() {
-    local pct=$1 w=$2 fill col
-    fill=$(( pct * w / 100 )); (( fill > w )) && fill=$w
-    if (( pct >= 85 )); then col=$RED; elif (( pct >= 60 )); then col=$YEL; else col=$GRN; fi
-    printf '%s%s%s%s%s' "$col" "$(hr "$fill" '#')" "$DIM" "$(hr $((w-fill)) '.')" "$N"
-}
-
-up_fmt() {
-    local m=$1
-    if (( m >= 1440 )); then printf '%dd%dh' $((m/1440)) $((m%1440/60))
-    elif (( m >= 60 )); then printf '%dh%02dm' $((m/60)) $((m%60))
-    else printf '%dm' "$m"; fi
+# KiB -> "1.2G" / "3.4T"
+kib_h() {
+    awk -v k="$1" 'BEGIN{ if (k >= 1073741824) printf "%.1fT", k/1073741824;
+                          else printf "%.1fG", k/1048576 }'
 }
 
 footer_main() {
     trap ':' INT
     printf '\033[?25l\033[?7l'
     clear
-    local a b c d e f g h idle1=0 tot1=0 idle2 tot2 cpu=0
-    local mt ma mu mp disk load up upm tip_i=0 tick=0 mode
+    local W mt ma mu dt du line plain pad k yn what
     while true; do
-        read -r _ a b c d e f g h _ < /proc/stat
-        tot2=$(( a+b+c+d+e+f+g+h )); idle2=$(( d+e ))
-        if (( tot1 > 0 && tot2 > tot1 )); then
-            cpu=$(( 100 * ( (tot2-tot1) - (idle2-idle1) ) / (tot2-tot1) ))
-        fi
-        tot1=$tot2; idle1=$idle2
-
+        W=$(tcols)
         mt=$(awk '/^MemTotal:/{print $2}' /proc/meminfo)
         ma=$(awk '/^MemAvailable:/{a=$2} /^(MemFree|Buffers|Cached):/{f+=$2}
                   END{print (a ? a : f)}' /proc/meminfo)
-        mu=$(( mt - ma )); mp=$(( mt > 0 ? mu * 100 / mt : 0 ))
-        disk=$(df -P / 2>/dev/null | awk 'NR==2{gsub("%","",$5); print $5}')
-        read -r load _ < /proc/loadavg
-        read -r up _ < /proc/uptime; upm=$(( ${up%.*} / 60 ))
-        if sudo_mode; then mode="${MAG}SUDO${N}"; else mode="${GRN}NORMAL${N}"; fi
+        mu=$(( mt - ma ))
+        read -r dt du < <(df -P / 2>/dev/null | awk 'NR==2{print $2, $3}')
+
+        plain="[Q] [H] [R] [C] ~ RAM: $(kib_h "$mu")/$(kib_h "$mt") ~ DISK: $(kib_h "${du:-0}")/$(kib_h "${dt:-0}")"
+        line="${GRN}[${MAG}Q${GRN}] [${MAG}H${GRN}] [${MAG}R${GRN}] [${MAG}C${GRN}]${N} ~ ${CYN}RAM:${N} $(kib_h "$mu")/$(kib_h "$mt") ~ ${CYN}DISK:${N} $(kib_h "${du:-0}")/$(kib_h "${dt:-0}")"
+        if sudo_mode; then plain+=" ~ SUDO"; line+=" ~ ${MAG}SUDO${N}"; fi
+        pad=$(( W - 2 - ${#plain} )); (( pad < 0 )) && pad=0
 
         printf '\033[H'
-        printf ' CPU %s %3d%%   RAM %s %s/%sG   DISK / %s%%   LOAD %s   UP %s   %s%s\n' \
-            "$(bar "$cpu" 10)" "$cpu" "$(bar "$mp" 10)" \
-            "$(awk -v k="$mu" 'BEGIN{printf "%.1f", k/1048576}')" \
-            "$(awk -v k="$mt" 'BEGIN{printf "%.1f", k/1048576}')" \
-            "${disk:-?}" "$load" "$(up_fmt "$upm")" "$mode" "$EL"
-        printf ' %sF1%s Help %sF2%s Top %sF3%s Disks %sF4%s Net %sF5%s Shell %sF6%s Logs %sF7%s Focus %sF8%s Stop %sF10%s Quit%s\n' \
-            "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$MAG" "$N" "$EL"
-        printf ' %sTip:%s %s%s%s%s' "$CYN" "$N" "$DIM" "${TIPS[tip_i]}" "$N" "$EL"
+        # Lines are exactly pane width: no erase-to-EOL, it would eat the corner
+        printf '%s╭%s╮%s\n' "$GRN" "$(hr $((W-2)) '─')" "$N"
+        printf '%s│%s%s%*s%s│%s\n' "$GRN" "$N" "$line" "$pad" '' "$GRN" "$N"
+        printf '%s╰%s╯%s' "$GRN" "$(hr $((W-2)) '─')" "$N"
 
-        sleep 2
-        (( ++tick % 4 == 0 )) && tip_i=$(( (tip_i + 1) % ${#TIPS[@]} ))
+        k=""
+        read -rsn1 -t 2 k || true
+        case "${k,,}" in
+            q|r)
+                what="Quit gLiTcH ToolKit"
+                [ "${k,,}" = r ] && what="Restart TUI + refresh repo"
+                task_running && what="[2] is busy! $what"
+                printf '\033[2;1H%s│%s %s%s? y/N%s%s' "$GRN" "$N" "$YEL" "$what" "$N" "$EL"
+                yn=""; read -rsn1 yn || true
+                if [[ "${yn,,}" == y ]]; then
+                    if [ "${k,,}" = r ]; then do_restart; else tmx kill-session -t "$SES"; fi
+                fi ;;
+            h) bash "$SELF" --fkey help ;;
+            c) load_panes; tmx kill-pane -t "${PANE_FOOT:-$TMUX_PANE}" ;;
+        esac
     done
 }
 
@@ -752,11 +772,21 @@ fkey_main() {
     load_panes
     case "$k" in
         focus)
-            if [ "$(tmx display -p '#{pane_id}')" = "$PANE_MENU" ]; then
+            local cur; cur=$(tmx display -p '#{pane_id}')
+            if [ "$cur" = "$PANE_MENU" ]; then
                 tmx select-pane -t "$PANE_SHELL"
+            elif [ "$cur" = "$PANE_SHELL" ] && footer_alive; then
+                tmx select-pane -t "$PANE_FOOT"
             else
                 tmx select-pane -t "$PANE_MENU"
             fi ;;
+        footer-open)
+            footer_alive && return
+            local pf
+            pf=$(tmx split-window -v -d -t "$PANE_SHELL" -l 3 -P -F '#{pane_id}' \
+                 "$(printf '%q ' bash "$SELF" --footer)")
+            tmx select-pane -t "$pf" -T ""
+            sed -i "s/^PANE_FOOT=.*/PANE_FOOT=$pf/" "$RUNDIR/panes" ;;
         stop)
             tmx respawn-pane -k -t "$PANE_SHELL" "$(printf '%q ' bash "$SELF" --monitor)"
             tmx select-pane -t "$PANE_MENU" ;;
@@ -768,6 +798,10 @@ fkey_main() {
             tmx respawn-pane -k -t "$PANE_SHELL" "$(printf '%q ' bash "$SELF" --tool "$k")"
             tmx select-pane -t "$PANE_SHELL" ;;
     esac
+}
+
+footer_alive() {
+    [ -n "$PANE_FOOT" ] && tmx list-panes -t "$SES" -F '#{pane_id}' 2>/dev/null | grep -qx -- "$PANE_FOOT"
 }
 
 revive_main() {
@@ -817,7 +851,7 @@ resolve_self() {
             echo '#!/usr/bin/env bash'
             declare -p VERSION TARBALL_URL TARBALL DIR RUNDIR SOCK SES USER_CATS REPO_CATS \
                        MIN_COLS MIN_LINES GRN MAG PNK CYN RED YEL DIM BLD N EL \
-                       BUILTIN_CATS OTHER_CAT TIPS
+                       BUILTIN_CATS OTHER_CAT
             declare -f
             echo 'SELF="$(readlink -f "$0")"'
             echo 'main "$@"'
@@ -841,7 +875,7 @@ set -g focus-events on
 set -g pane-border-status top
 set -g pane-border-style "fg=#00ff0b"
 set -g pane-active-border-style "fg=#db00b9"
-set -g pane-border-format "#{?pane_active,#[fg=#db00b9 bold],#[fg=#00ff0b]} #{pane_title} #[default]"
+set -g pane-border-format "#{?pane_title,#{?pane_active,#[fg=#db00b9 bold],#[fg=#00ff0b]} #{pane_title} #[default],}"
 set -gq pane-border-lines heavy
 set -gq allow-set-title off
 set -g message-style "bg=#db00b9,fg=black"
@@ -852,11 +886,37 @@ launch() {
     ensure_tmux
     mkdir -p "$RUNDIR" && chmod 700 "$RUNDIR"
     resolve_self
+    check_btop
 
     if tmx has-session -t "$SES" 2>/dev/null; then
         TMUX='' tmx attach -t "$SES"; clear; exit 0
     fi
 
+    rm -f "$RUNDIR/restart"
+    build_session || exit 1
+    while true; do
+        TMUX='' tmx attach -t "$SES"
+        clear
+        [ -f "$RUNDIR/restart" ] || break
+        # R was pressed: refresh repo in this terminal, then rebuild
+        rm -f "$RUNDIR/restart"
+        echo "${GRN}Restarting gLiTcH ToolKit...${N}"
+        sync_repo
+        build_session || exit 1
+    done
+}
+
+check_btop() {
+    command -v btop >/dev/null && return 0
+    local yn
+    echo "${CYN}btop is not installed. [2] will use the built-in monitor instead.${N}"
+    if command -v apt-get >/dev/null; then
+        read -r -p "Install btop now with: sudo apt-get install -y btop ? y/N : " yn
+        [[ "${yn,,}" == y* ]] && sudo apt-get install -y btop
+    fi
+}
+
+build_session() {
     local cols lines
     cols=$(tcols); lines=$(tlines)
     if (( cols < MIN_COLS || lines < MIN_LINES )); then
@@ -866,10 +926,11 @@ launch() {
     fi
 
     [ -d "$DIR" ] || sync_repo
-    [ -d "$DIR" ] || { echo "${RED}No toolkit found in $DIR - check your connection.${N}"; exit 1; }
+    [ -d "$DIR" ] || { echo "${RED}No toolkit found in $DIR - check your connection.${N}"; return 1; }
 
     state_set mode 0
     state_del task
+    rm -f "$RUNDIR/btop-failed"
     write_tmux_conf
 
     local side=$(( cols * 30 / 100 ))
@@ -894,7 +955,7 @@ launch() {
 
     tmx select-pane -t "$pm" -T "[1] SEARCH & MENU"
     tmx select-pane -t "$ps" -T "[2] SHELL / TASKS"
-    tmx select-pane -t "$pf" -T "[3] SYSTEM"
+    tmx select-pane -t "$pf" -T ""
 
     # Keys (root table on our private server only)
     local fk
@@ -917,8 +978,6 @@ launch() {
     tmx set-hook -g client-attached "set -g destroy-unattached on"
 
     tmx select-pane -t "$pm"
-    TMUX='' tmx attach -t "$SES"
-    clear
 }
 
 main() {
