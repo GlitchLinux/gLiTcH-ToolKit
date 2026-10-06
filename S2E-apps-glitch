@@ -12,6 +12,7 @@ apps=(
     "S2E-neofetch-cli"
     "S2E-script-2-exec"
     "S2E-ssh-token"
+    "S2E-firefox-appimage"
 )
 
 # User who invoked sudo, or the current user when not using sudo
