@@ -14,10 +14,17 @@ apps=(
     "S2E-ssh-token"
 )
 
+# User who invoked sudo, or the current user when not using sudo
+user="${SUDO_USER:-$(whoami)}"
+group="$(id -gn "$user")"
+
 for app in "${apps[@]}"; do
     wget -O "$app" "$base_url/$app"
 
-    # Remove the "S2E-" prefix for the /usr/bin/ symlink
+    chmod +x "$app"
+    chown "$user:$group" "$app"
+
+    # Remove the "S2E-" prefix
     name="${app#S2E-}"
 
     ln -sf "/bin/$app" "/usr/bin/$name"
