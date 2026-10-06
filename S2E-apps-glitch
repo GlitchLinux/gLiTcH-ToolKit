@@ -1,0 +1,26 @@
+```bash
+#!/bin/bash
+
+set -e
+
+cd /bin/
+
+base_url="https://glitchlinux.wtf/FILES/Script-2-Exec/glitch-S2E"
+
+apps=(
+    "S2E-convert2base64"
+    "S2E-create-disk-image"
+    "S2E-neofetch-cli"
+    "S2E-script-2-exec"
+    "S2E-ssh-token"
+)
+
+for app in "${apps[@]}"; do
+    wget -O "$app" "$base_url/$app"
+
+    # Remove the "S2E-" prefix for the /usr/bin/ symlink
+    name="${app#S2E-}"
+
+    ln -sf "/bin/$app" "/usr/bin/$name"
+done
+```
