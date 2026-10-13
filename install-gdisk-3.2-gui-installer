@@ -1,0 +1,37 @@
+#!/bin/bash
+
+cd /tmp && sudo rm -f "gdisk-v3.2-gui-installer"
+wget "https://glitchlinux.wtf/FILES/GLITCH-SOFTWARE/Gdisk-GUI-Installer/gdisk-v3.2-gui-installer"
+sudo cp gdisk-v3.2-gui-installer /bin/gdisk-v3.2-gui-installer
+sudo chmod +x /bin/gdisk-v3.2-gui-installer
+
+cat > "/tmp/gdisk-gui-installer.desktop" << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Gdisk GUI Installer
+Exec=/usr/bin/sudo /bin/gdisk-v3.2-gui-installer
+Icon=/usr/share/icons/Gdisk.png
+Terminal=false
+Categories=Utility;
+EOF
+
+cat > "/tmp/gdisk-gui" << 'EOF'
+#!/bin/bash
+if [ -e "/bin/gdisk-v3.2-gui-installer" ]; then
+    /usr/bin/sudo /bin/gdisk-v3.2-gui-installer &
+    exit 0
+else
+    cd /tmp && sudo rm -f "gdisk-v3.2-gui-installer"
+    wget "https://glitchlinux.wtf/FILES/GLITCH-SOFTWARE/Gdisk-GUI-Installer/gdisk-v3.2-gui-installer"
+    sudo cp gdisk-v3.2-gui-installer /bin/gdisk-v3.2-gui-installer
+    sudo chmod +x /bin/gdisk-v3.2-gui-installer
+    /usr/bin/sudo /bin/gdisk-v3.2-gui-installer &
+    exit 0
+fi
+EOF
+
+sudo cp /tmp/gdisk-gui /bin/gdisk-gui
+sudo chmod +x /bin/gdisk-gui
+sudo cp /tmp/gdisk-gui-installer.desktop /usr/share/applications/gdisk-gui-installer.desktop
+sudo chmod +x /usr/share/applications/gdisk-gui-installer.desktop
