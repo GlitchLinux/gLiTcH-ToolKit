@@ -108,34 +108,21 @@ if [ "$COPY_RESOLV" = "y" ] || [ "$COPY_RESOLV" = "Y" ]; then
     cp /etc/resolv.conf /mnt/etc/resolv.conf
 fi
 
+echo ""
+echo "Entering chroot. Type 'exit' when finished."
+echo "Things you may want to do inside: locale, timezone, bootloader, root password"
+echo ""
 
-sudo chroot /mnt
-
-# Verify we can chroot
-#echo "Testing chroot environment..."
-#if chroot /mnt /bin/bash -c "echo 'Chroot test successful!'"; then
-#    echo ""
-#    echo "Chroot environment is ready!"
-echo "You can now chroot into the system with:"
-echo "sudo chroot /mnt"
-#else
-#    echo ""
-#    echo "Chroot setup completed but test failed. You can try:"
-#    echo "sudo chroot /mnt /bin/sh (if available)"
-#    echo "Or investigate missing components in the target filesystem"
-#fi
+chroot /mnt
 
 echo ""
-echo "After chrooting, you may need to:"
-echo "1. Set up your locale"
-echo "2. Set your timezone"
-echo "3. Configure your bootloader"
-echo "4. Set root password"
-echo "5. Perform other system maintenance"
-echo ""
-echo "When finished, exit the chroot and unmount with:"
-echo "exit"
-echo "umount -R /mnt""
+read -p "Chroot exited. Unmount everything under /mnt now? (Y/n): " DO_UMOUNT
+if [[ ! "$DO_UMOUNT" =~ ^[Nn]$ ]]; then
+    umount -R /mnt && echo "Unmounted." || echo "Unmount failed - check with: findmnt -R /mnt"
+else
+    echo "Left mounted. Unmount later with: umount -R /mnt"
+fi
+
 
 #echo "GRUB_PURGE_PACKAGES.txt is saved here, use it to fully remove grub before re-install"
 #echo "GOOD LUCK!"
