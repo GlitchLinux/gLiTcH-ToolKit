@@ -11,7 +11,8 @@ apps=(
     "S2E-create-disk-image"
     "S2E-neofetch-cli"
     "S2E-script-2-exec"
-    "S2E-ssh-token"
+    "S2E-vnc-glitchserver"
+    "S2E-poweriso-x64"
     "S2E-firefox-appimage"
 )
 
