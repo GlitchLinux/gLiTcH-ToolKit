@@ -3,7 +3,7 @@ set -e
 
 cd /tmp
 
-sudo rm -f .token .token-timer 
+sudo rm -f .token .token-timer token*
 
 # Clean startup - check if mounted and clean it properly
 if grep -q /tmp/.luks-mount /proc/mounts; then
@@ -49,8 +49,9 @@ sudo rm -rf /tmp/.luks-mount /tmp/TOKEN.img
 echo "Git-token imported to /tmp/" > /tmp/token-get
 ls -lh /tmp/.token >> /tmp/token-get
 ls -lh /tmp/token-timer.sh >> /tmp/token-get
+ls -lh /tmp/token-timer >> /tmp/token-get
 echo ""
 cat /tmp/token-get | borderize
 sudo rm -f /tmp/token-get
 echo ""
-read -p "Hit Enter to exit" 
+read -p "Hit Enter to exit" _
