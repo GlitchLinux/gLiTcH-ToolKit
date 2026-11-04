@@ -661,6 +661,111 @@ else
     exit 2
 fi
 #!/usr/bin/env bash
+# Self-extracting base64 rebuild script for: bash-encrypter.sh
+# Original size: 4149 bytes
+set -euo pipefail
+
+OUT_FILE="bash-encrypter.sh"
+EXPECTED_SIZE=4149
+
+if [[ -e "$OUT_FILE" ]]; then
+    printf "> '%s' already exists. Overwrite? [y/N] " "$OUT_FILE"
+    read -r ANS
+    case "$ANS" in
+        [Yy]*) ;;
+        *) echo "> aborted"; exit 1 ;;
+    esac
+fi
+
+echo "> rebuilding '$OUT_FILE'..."
+base64 -d <<'B64_DATA' > "$OUT_FILE"
+IyEvdXNyL2Jpbi9lbnYgYmFzaAojIGJhc2gtZW5jcnlwdGVyLnNoIC0gd3JhcCBhIGJhc2ggc2Ny
+aXB0IHNvIGl0IGFza3MgZm9yIGEgcGFzc3BocmFzZSBiZWZvcmUgcnVubmluZwojCiMgRmxhZyBt
+b2RlOiAgICAgICAgLi9iYXNoLWVuY3J5cHRlci5zaCBTT1VSQ0VfRklMRSAtcCBQQVNTUEhSQVNF
+CiMgSW50ZXJhY3RpdmUgbW9kZTogLi9iYXNoLWVuY3J5cHRlci5zaAojCiMgT3V0cHV0IGlzIHdy
+aXR0ZW4gbmV4dCB0byB0aGUgc291cmNlIGFzIE5BTUUtZW5jcnlwdGVkLkVYVAoKc2V0IC1ldW8g
+cGlwZWZhaWwKCnVzYWdlKCkgewogIGNhdCA8PEVPRgpVc2FnZToKICAkMCBTT1VSQ0VfRklMRSAt
+cCBQQVNTUEhSQVNFICAgIGZsYWcgbW9kZQogICQwIFtTT1VSQ0VfRklMRV0gICAgICAgICAgICAg
+ICAgaW50ZXJhY3RpdmUgbW9kZSAocHJvbXB0cyBmb3Igd2hhdCBpcyBtaXNzaW5nKQpFT0YKfQoK
+ZGllKCkgewogIGVjaG8gImVycm9yOiAkKiIgPiYyCiAgZXhpdCAxCn0KCiMgQnVpbGQgdGhlIG91
+dHB1dCBwYXRoOiAvZGlyL25hbWUuc2ggLT4gL2Rpci9uYW1lLWVuY3J5cHRlZC5zaApvdXRfcGF0
+aCgpIHsKICBsb2NhbCBzcmM9JDEgZGlyIGJhc2UKICBkaXI9JChkaXJuYW1lIC0tICIkc3JjIikK
+ICBiYXNlPSQoYmFzZW5hbWUgLS0gIiRzcmMiKQogIGlmIFtbICRiYXNlID09ICouKiAmJiAkYmFz
+ZSAhPSAuKiBdXTsgdGhlbgogICAgcHJpbnRmICclcy8lcy1lbmNyeXB0ZWQuJXNcbicgIiRkaXIi
+ICIke2Jhc2UlLip9IiAiJHtiYXNlIyMqLn0iCiAgZWxzZQogICAgcHJpbnRmICclcy8lcy1lbmNy
+eXB0ZWRcbicgIiRkaXIiICIkYmFzZSIKICBmaQp9CgojIFdyaXRlIGEgc2VsZi1kZWNyeXB0aW5n
+IHNjcmlwdCB0aGF0IGVtYmVkcyB0aGUgZW5jcnlwdGVkIHNvdXJjZQpidWlsZF9lbmNyeXB0ZWQo
+KSB7CiAgbG9jYWwgc3JjPSQxIHBhc3M9JDIgb3V0PSQzIHBheWxvYWQgc2FsdAoKICAjIDggcmFu
+ZG9tIGJ5dGVzIGZyb20gL2Rldi91cmFuZG9tLCBhcyBoZXggZm9yIG9wZW5zc2wgLVMKICBzYWx0
+PSQoaGVhZCAtYyA4IC9kZXYvdXJhbmRvbSB8IG9kIC1BbiAtdHgxIHwgdHIgLWQgJyBcbicpIHx8
+IGRpZSAiY291bGQgbm90IHJlYWQgL2Rldi91cmFuZG9tIgoKICAjIFRoZSBtYXJrZXIgbGluZSBs
+ZXRzIHRoZSBzdHViIGRldGVjdCBhIHdyb25nIHBhc3NwaHJhc2UgcmVsaWFibHkKICBwYXlsb2Fk
+PSQoeyBwcmludGYgJyNCQVNIRU5DLU9LXG4nOyBjYXQgLS0gIiRzcmMiOyB9IHwKICAgIEJBU0hF
+TkNfUEFTUz0iJHBhc3MiIG9wZW5zc2wgZW5jIC1hZXMtMjU2LWNiYyAtcGJrZGYyIC1pdGVyIDYw
+MDAwMCAtUyAiJHNhbHQiIC1hIC1BIFwKICAgICAgLXBhc3MgZW52OkJBU0hFTkNfUEFTUykgfHwg
+ZGllICJlbmNyeXB0aW9uIGZhaWxlZCIKCiAgewogICAgcHJpbnRmICcjIS91c3IvYmluL2VudiBi
+YXNoXG4nCiAgICBwcmludGYgJyMgUGFzc3BocmFzZS1wcm90ZWN0ZWQgc2NyaXB0IGdlbmVyYXRl
+ZCBieSBiYXNoLWVuY3J5cHRlci5zaFxuJwogICAgcHJpbnRmICJFTkNfU0FMVD0nJXMnXG4iICIk
+c2FsdCIKICAgIHByaW50ZiAiRU5DX1BBWUxPQUQ9JyVzJ1xuIiAiJHBheWxvYWQiCiAgICBjYXQg
+PDwnU1RVQicKCkVOQ19BUkdTPSgpCkVOQ19QQVNTPSIiCkVOQ19TQVZFPTAKRU5DX1NBVkVfUEFU
+SD0iIgoKd2hpbGUgW1sgJCMgLWd0IDAgXV07IGRvCiAgY2FzZSAkMSBpbgogICAgLXApCiAgICAg
+IFtbICQjIC1nZSAyIF1dIHx8IHsgZWNobyAiZXJyb3I6IC1wIG5lZWRzIGEgcGFzc3BocmFzZSIg
+PiYyOyBleGl0IDE7IH0KICAgICAgRU5DX1BBU1M9JDIKICAgICAgc2hpZnQgMgogICAgICA7Owog
+ICAgLS1zYXZlLWRlY3J5cHRlZCkKICAgICAgRU5DX1NBVkU9MQogICAgICBzaGlmdAogICAgICA7
+OwogICAgLS1zYXZlLWRlY3J5cHRlZD0qKQogICAgICBFTkNfU0FWRT0xCiAgICAgIEVOQ19TQVZF
+X1BBVEg9JHsxIyo9fQogICAgICBzaGlmdAogICAgICA7OwogICAgKikKICAgICAgRU5DX0FSR1Mr
+PSgiJDEiKQogICAgICBzaGlmdAogICAgICA7OwogIGVzYWMKZG9uZQoKaWYgW1sgLXogJEVOQ19Q
+QVNTIF1dOyB0aGVuCiAgcmVhZCAtcnNwICIkKGJhc2VuYW1lIC0tICIkMCIpIElzIEVuY3J5cHRl
+ZCAtIEVudGVyIFBhc3NwaHJhc2U6ICIgRU5DX1BBU1MKICBlY2hvCmZpCgpFTkNfU1JDPSQocHJp
+bnRmICclcycgIiRFTkNfUEFZTE9BRCIgfAogIEJBU0hFTkNfUEFTUz0iJEVOQ19QQVNTIiBvcGVu
+c3NsIGVuYyAtZCAtYWVzLTI1Ni1jYmMgLXBia2RmMiAtaXRlciA2MDAwMDAgLWEgLUEgXAogICAg
+LVMgIiRFTkNfU0FMVCIgLXBhc3MgZW52OkJBU0hFTkNfUEFTUyAyPi9kZXYvbnVsbCkgfHwgRU5D
+X1NSQz0iIgoKaWYgW1sgJHtFTkNfU1JDJSUkJ1xuJyp9ICE9ICIjQkFTSEVOQy1PSyIgXV07IHRo
+ZW4KICBlY2hvICJlcnJvcjogd3JvbmcgcGFzc3BocmFzZSIgPiYyCiAgZXhpdCAxCmZpCgppZiAo
+KCBFTkNfU0FWRSApKTsgdGhlbgogIFtbIC1uICRFTkNfU0FWRV9QQVRIIF1dIHx8IEVOQ19TQVZF
+X1BBVEg9IiQoZGlybmFtZSAtLSAiJDAiKS9kZWNyeXB0ZWQtJChiYXNlbmFtZSAtLSAiJDAiKSIK
+ICBpZiBbWyAtZSAkRU5DX1NBVkVfUEFUSCBdXTsgdGhlbgogICAgZWNobyAiZXJyb3I6ICRFTkNf
+U0FWRV9QQVRIIGFscmVhZHkgZXhpc3RzIiA+JjIKICAgIGV4aXQgMQogIGZpCmZpCgojIEZlZWQg
+dGhlIHNvdXJjZSB0aHJvdWdoIGEgcGlwZSBvbiBmZCAzIGluc3RlYWQgb2YgYXJndiwgc28gdGhl
+IHBsYWludGV4dAojIG5ldmVyIGFwcGVhcnMgaW4gL3Byb2MvUElEL2NtZGxpbmUgKHdvcmxkLXJl
+YWRhYmxlKSBhbmQgaXMgbm90IGxpbWl0ZWQgYnkKIyBNQVhfQVJHX1NUUkxFTiAoMTI4IEtpQiku
+IFNvdXJjaW5nIGtlZXBzICQwIGFuZCB0aGUgYXJndW1lbnRzIGludGFjdC4KIyBUaGUgbWFya2Vy
+IGxpbmUgaXMgc3RyaXBwZWQgc28gJExJTkVOTyBtYXRjaGVzIHRoZSBvcmlnaW5hbCBzY3JpcHQu
+CmJhc2ggLWMgJy4gL2Rldi9mZC8zJyAiJDAiICIke0VOQ19BUkdTW0BdfSIgMzwgPChwcmludGYg
+JyVzXG4nICIke0VOQ19TUkMjKiQnXG4nfSIpCkVOQ19SQz0kPwoKaWYgKCggRU5DX1NBVkUgKSk7
+IHRoZW4KICAoCiAgICB1bWFzayAwNzcKICAgIHByaW50ZiAnJXNcbicgIiR7RU5DX1NSQyMqJCdc
+bid9IiA+ICIkRU5DX1NBVkVfUEFUSCIKICApCiAgZWNobyAiZGVjcnlwdGVkIHNjcmlwdCBzYXZl
+ZCB0byAkRU5DX1NBVkVfUEFUSCIgPiYyCmZpCgpleGl0ICRFTkNfUkMKU1RVQgogIH0gPiAiJG91
+dCIKCiAgY2htb2QgK3ggLS0gIiRvdXQiCn0KCnNyYz0iIgpwYXNzPSIiCmhhdmVfcGFzcz0wCgp3
+aGlsZSBbWyAkIyAtZ3QgMCBdXTsgZG8KICBjYXNlICQxIGluCiAgICAtcCkKICAgICAgW1sgJCMg
+LWdlIDIgXV0gfHwgZGllICItcCBuZWVkcyBhIHBhc3NwaHJhc2UiCiAgICAgIHBhc3M9JDIKICAg
+ICAgaGF2ZV9wYXNzPTEKICAgICAgc2hpZnQgMgogICAgICA7OwogICAgLWh8LS1oZWxwKQogICAg
+ICB1c2FnZQogICAgICBleGl0IDAKICAgICAgOzsKICAgIC0qKQogICAgICBkaWUgInVua25vd24g
+b3B0aW9uOiAkMSIKICAgICAgOzsKICAgICopCiAgICAgIFtbIC16ICRzcmMgXV0gfHwgZGllICJv
+bmx5IG9uZSBzb3VyY2UgZmlsZSBjYW4gYmUgZ2l2ZW4iCiAgICAgIHNyYz0kMQogICAgICBzaGlm
+dAogICAgICA7OwogIGVzYWMKZG9uZQoKaWYgW1sgLXogJHNyYyBdXTsgdGhlbgogIHJlYWQgLXJw
+ICI+IGVudGVyIHNvdXJjZSBmaWxlOiAiIHNyYwpmaQoKW1sgLWYgJHNyYyAmJiAtciAkc3JjIF1d
+IHx8IGRpZSAiY2Fubm90IHJlYWQgc291cmNlIGZpbGU6ICRzcmMiCgppZiAoKCAhIGhhdmVfcGFz
+cyApKTsgdGhlbgogIHJlYWQgLXJzcCAiPiBlbnRlciBwYXNzcGhyYXNlOiAiIHBhc3MKICBlY2hv
+CiAgcmVhZCAtcnNwICI+IHBhc3NwaHJhc2UgY29uZmlybTogIiBjb25maXJtCiAgZWNobwogIFtb
+ICRwYXNzID09ICIkY29uZmlybSIgXV0gfHwgZGllICJwYXNzcGhyYXNlcyBkbyBub3QgbWF0Y2gi
+CmZpCgpbWyAtbiAkcGFzcyBdXSB8fCBkaWUgInBhc3NwaHJhc2UgY2Fubm90IGJlIGVtcHR5IgoK
+b3V0PSQob3V0X3BhdGggIiRzcmMiKQoKZWNobyAiZW5jcnlwdGluZyAkc3JjLi4uIgpidWlsZF9l
+bmNyeXB0ZWQgIiRzcmMiICIkcGFzcyIgIiRvdXQiCmVjaG8gIj4gJG91dCIK
+B64_DATA
+
+if ACTUAL=$(stat -c%s "$OUT_FILE" 2>/dev/null); then :; else ACTUAL=$(stat -f%z "$OUT_FILE"); fi
+
+if [[ "$ACTUAL" -eq "$EXPECTED_SIZE" ]]; then
+    echo "> rebuild complete: '$OUT_FILE' ($ACTUAL bytes) - byte count matches"
+else
+    echo "> WARNING: byte count mismatch!"
+    echo ">   expected: $EXPECTED_SIZE bytes"
+    echo ">   actual:   $ACTUAL bytes"
+    echo ">   file rebuild may be corrupt."
+    exit 2
+fi
+#!/usr/bin/env bash
 # Self-extracting base64 rebuild script for: borderize
 # Original size: 12854 bytes
 set -euo pipefail
@@ -2639,7 +2744,7 @@ fi
 chmod 755 size
 chown root:root size
 )
-chmod 755 BULK-Image-Utility PATH SYMLINK-QUICK UUID-Config VHD-Creator.sh archiver.sh borderize convert2base64.sh counter dd_easy gen-qcow2-image.sh list-dir mkiso-v2.sh mkiso.sh mount-IMG-as-Read-Write password-generator.py png-to-txt quick-convert.sh rsync_CLI.sh tree.sh unarchiver.sh vfat-uuid.sh wim2vhd.sh
-chown root:root BULK-Image-Utility PATH SYMLINK-QUICK UUID-Config VHD-Creator.sh archiver.sh borderize convert2base64.sh counter dd_easy gen-qcow2-image.sh list-dir mkiso-v2.sh mkiso.sh mount-IMG-as-Read-Write password-generator.py png-to-txt quick-convert.sh rsync_CLI.sh tree.sh unarchiver.sh vfat-uuid.sh wim2vhd.sh
-echo "> done: 23 tools installed to /bin (755, root:root)"
+chmod 755 BULK-Image-Utility PATH SYMLINK-QUICK UUID-Config VHD-Creator.sh archiver.sh bash-encrypter.sh borderize convert2base64.sh counter dd_easy gen-qcow2-image.sh list-dir mkiso-v2.sh mkiso.sh mount-IMG-as-Read-Write password-generator.py png-to-txt quick-convert.sh rsync_CLI.sh tree.sh unarchiver.sh vfat-uuid.sh wim2vhd.sh
+chown root:root BULK-Image-Utility PATH SYMLINK-QUICK UUID-Config VHD-Creator.sh archiver.sh bash-encrypter.sh borderize convert2base64.sh counter dd_easy gen-qcow2-image.sh list-dir mkiso-v2.sh mkiso.sh mount-IMG-as-Read-Write password-generator.py png-to-txt quick-convert.sh rsync_CLI.sh tree.sh unarchiver.sh vfat-uuid.sh wim2vhd.sh
+echo "> done: 25 tools installed to /bin (755, root:root)"
 echo "> size installed to /usr/local/bin (GNU binutils size in /usr/bin left untouched)"
