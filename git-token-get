@@ -6,6 +6,13 @@ set -e
 
 cd /tmp
 
+# Stop timers/fallbacks from an earlier fetch first. Their cleanup deletes
+# /tmp/token-timer, so this must run before the new files are copied in.
+sudo pkill -f '^bash /tmp/\.token-timer$' || true
+sudo pkill -f '[D]eleting /tmp/\.token in' || true
+sudo pkill -f '[t]oken-timer-fallback' || true
+sleep 1
+
 sudo rm -f .token .token-timer token*
 
 # Clean startup - check if mounted and clean it properly
@@ -48,6 +55,10 @@ sudo umount /tmp/.luks-mount
 sudo cryptsetup luksClose img-luks
 sudo rm -rf /tmp/.luks-mount /tmp/TOKEN.img
 
+# Token binary readable by root only, and wiped after 1h even if never run
+sudo chmod 700 /tmp/token-timer
+sudo setsid nohup bash -c ': token-timer-fallback; sleep 3600; [ -f /tmp/token-timer ] && head -c 10k /dev/urandom > /tmp/token-timer; rm -f /tmp/token-timer /tmp/token-timer.sh' >/dev/null 2>&1 </dev/null &
+
 # Report
 echo "Git-token imported to /tmp/" > /tmp/token-get
 ls -lh /tmp/.token >> /tmp/token-get
@@ -60,6 +71,6 @@ echo ""
 read -p "Hit Enter to exit" _
 EOF
 
-sudo mv /tmp/git-token-get /usr/local/bin/git-token-get
-sudo chmod +x /usr/local/bin/git-token-get
+sudo install -o root -g root -m 755 /tmp/git-token-get /usr/local/bin/git-token-get
+sudo rm -f /tmp/git-token-get
 clear && /usr/local/bin/git-token-get
