@@ -1,0 +1,56 @@
+#!/bin/bash
+set -e
+
+cd /tmp
+
+sudo rm -f .token .token-timer 
+
+# Clean startup - check if mounted and clean it properly
+if grep -q /tmp/.luks-mount /proc/mounts; then
+  echo "[git-token-get] Unmounting leftover mount..."
+  sudo umount /tmp/.luks-mount
+fi
+
+# Close device if it exists
+if sudo cryptsetup status img-luks &>/dev/null; then
+  echo "[git-token-get] Closing leftover device..."
+  sudo cryptsetup luksClose img-luks
+fi
+
+# Remove residual files
+sudo rm -rf /tmp/.luks-mount /tmp/TOKEN.img
+
+echo "[git-token-get] Downloading TOKEN image..."
+
+# Download with HTTPS
+wget "https://glitchlinux.wtf/FILES/SSH-TOKEN/TOKEN.img"
+
+# Create mount directory
+sudo mkdir -p /tmp/.luks-mount
+
+# Open and mount
+sudo cryptsetup luksOpen TOKEN.img img-luks
+sudo mount /dev/mapper/img-luks /tmp/.luks-mount/
+
+sleep 1
+
+# Extract hidden files (.git-token, .token)
+echo "[git-token-get] Extracting tokens..."
+
+cd /tmp/.luks-mount/ && sudo cp -f token-timer.sh /tmp/ && sudo cp -f token-timer /tmp/ && sudo cp -f .token /tmp/ && cd ~
+
+# Proper cleanup
+echo "[git-token-get] Cleaning up..."
+sudo umount /tmp/.luks-mount
+sudo cryptsetup luksClose img-luks
+sudo rm -rf /tmp/.luks-mount /tmp/TOKEN.img
+
+# Report
+echo "Git-token imported to /tmp/" > /tmp/token-get
+ls -lh /tmp/.token >> /tmp/token-get
+ls -lh /tmp/token-timer.sh >> /tmp/token-get
+echo ""
+cat /tmp/token-get | borderize
+sudo rm -f /tmp/token-get
+echo ""
+read -p "Hit Enter to exit" 
