@@ -81,7 +81,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z $ENC_PASS ]]; then
-  read -rsp "Script is encrypted - Enter passphrase > : " ENC_PASS
+  read -rsp "$(basename -- "$0") Is Encrypted - Enter Passphrase: " ENC_PASS
   echo
 fi
 
@@ -102,7 +102,11 @@ if (( ENC_SAVE )); then
   fi
 fi
 
-bash -c "$ENC_SRC" "$0" "${ENC_ARGS[@]}"
+# Feed the source through a pipe on fd 3 instead of argv, so the plaintext
+# never appears in /proc/PID/cmdline (world-readable) and is not limited by
+# MAX_ARG_STRLEN (128 KiB). Sourcing keeps $0 and the arguments intact.
+# The marker line is stripped so $LINENO matches the original script.
+bash -c '. /dev/fd/3' "$0" "${ENC_ARGS[@]}" 3< <(printf '%s\n' "${ENC_SRC#*$'\n'}")
 ENC_RC=$?
 
 if (( ENC_SAVE )); then
