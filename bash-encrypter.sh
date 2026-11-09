@@ -102,11 +102,18 @@ if (( ENC_SAVE )); then
   fi
 fi
 
-# Feed the source through a pipe on fd 3 instead of argv, so the plaintext
-# never appears in /proc/PID/cmdline (world-readable) and is not limited by
-# MAX_ARG_STRLEN (128 KiB). Sourcing keeps $0 and the arguments intact.
-# The marker line is stripped so $LINENO matches the original script.
-bash -c '. /dev/fd/3' "$0" "${ENC_ARGS[@]}" 3< <(printf '%s\n' "${ENC_SRC#*$'\n'}")
+# Write plaintext to a temp file (mode 0600, owned by current user) so the
+# decrypted script runs as a normal bash script with full terminal/tty
+# inheritance.  The old fd-3 sourcing method (bash -c '. /dev/fd/3') ran the
+# script in a -c eval context which broke interactive features: wget progress
+# bars, tty detection, and similar isatty() checks on child processes.
+# The temp file is removed immediately after bash opens it; on Linux the
+# kernel keeps the inode alive until the process closes it, so the plaintext
+# is unlinked from the filesystem before a single line executes.
+ENC_TMP=$(mktemp "${TMPDIR:-/tmp}/bashenc.XXXXXXXXXX")
+trap 'rm -f -- "$ENC_TMP"' EXIT
+(umask 077; printf '%s\n' "${ENC_SRC#*$'\n'}" > "$ENC_TMP")
+bash -- "$ENC_TMP" "${ENC_ARGS[@]}"
 ENC_RC=$?
 
 if (( ENC_SAVE )); then
