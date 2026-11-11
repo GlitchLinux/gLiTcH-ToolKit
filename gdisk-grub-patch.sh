@@ -6,7 +6,7 @@
 #   sudo ./gdisk-grub-patch.sh update    - Pull latest Gdisk and refresh GRUB
 #   sudo ./gdisk-grub-patch.sh remove    - Remove Gdisk from GRUB and delete /boot/gdisk
 #
-# Requirements: git, grub (update-grub or grub2-mkconfig)
+# Requirements: git, python3, grub (update-grub or grub2-mkconfig)
 # License: GPLv3
 
 set -e
@@ -15,7 +15,7 @@ GDISK_DIR="/boot/gdisk"
 GRUB_D_DIR=""
 UPDATE_GRUB=""
 
-# Detect grub.d location and update command
+# ── Detect grub.d location and update command ──
 detect_grub() {
     if [ -d /etc/grub.d ]; then
         GRUB_D_DIR="/etc/grub.d"
@@ -36,7 +36,7 @@ detect_grub() {
     fi
 }
 
-# Check root
+# ── Check root ──
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "Error: This script must be run as root."
@@ -44,6 +44,89 @@ check_root() {
     fi
 }
 
+# ── Rewrite Gdisk internal paths for nested /boot/gdisk/ install ──
+# Rewrites /boot/grub/ -> /boot/gdisk/boot/grub/ in all .cfg files,
+# while protecting references that resolve against loopback devices
+# (ISOs/IMGs mounted via GRUB's loopback command).
+rewrite_paths() {
+    local prefix="$1"
+
+    if [ ! -d "$prefix/boot/grub" ]; then
+        echo "Error: $prefix/boot/grub not found"
+        exit 1
+    fi
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "Error: python3 is required for path rewriting."
+        exit 1
+    fi
+
+    echo "Rewriting internal paths: /boot/grub/ -> $prefix/boot/grub/"
+
+    local count=0
+
+    for cfg in $(find "$prefix/boot/grub" -name "*.cfg" -type f); do
+        [ -f "$cfg" ] || continue
+
+        if ! grep -q '/boot/grub/' "$cfg"; then
+            continue
+        fi
+
+        python3 << PYEOF
+with open("$cfg") as f:
+    lines = f.readlines()
+
+prefix = "$prefix"
+out = []
+in_loop = False
+
+for line in lines:
+    stripped = line.strip()
+
+    # Detect entering loop context:
+    # - "set root=loop" or "root=(loop)" = explicit root change to loop device
+    # - "(loop)/boot/grub" on the line = checking/using content inside a looped ISO/IMG
+    if ('set root=loop' in stripped or 'root=(loop)' in stripped or
+        '(loop)/boot/grub' in stripped):
+        in_loop = True
+
+    # Detect leaving loop context
+    if in_loop and ('return 0' in stripped or 'loopback --delete' in stripped):
+        out.append(line)
+        in_loop = False
+        continue
+
+    # Reset on menuentry/function boundaries (new scope)
+    if stripped.startswith('menuentry ') or stripped.startswith('function '):
+        in_loop = False
+
+    if in_loop:
+        # In loop context: don't rewrite - these paths resolve against the looped device
+        out.append(line)
+        continue
+
+    # Outside loop context: rewrite /boot/grub/ but protect (loop)/boot/grub/
+    line = line.replace('(loop)/boot/grub/', '(loop)/__PBG__/')
+    line = line.replace('(loop)/boot/grub2/', '(loop)/__PBG2__/')
+
+    line = line.replace('/boot/grub/', prefix + '/boot/grub/')
+
+    line = line.replace('(loop)/__PBG__/', '(loop)/boot/grub/')
+    line = line.replace('(loop)/__PBG2__/', '(loop)/boot/grub2/')
+
+    out.append(line)
+
+with open("$cfg", "w") as f:
+    f.writelines(out)
+PYEOF
+
+        count=$((count + 1))
+    done
+
+    echo "Rewrote paths in $count .cfg files."
+}
+
+# ── Install ──
 do_install() {
     if [ -d "$GDISK_DIR/boot/grub" ]; then
         echo "Gdisk is already installed at $GDISK_DIR"
@@ -58,6 +141,9 @@ do_install() {
 
     echo "Cloning Gdisk to $GDISK_DIR..."
     git clone --depth 1 https://github.com/GlitchLinux/Gdisk.git "$GDISK_DIR"
+
+    # Rewrite internal paths for nested install
+    rewrite_paths "$GDISK_DIR"
 
     echo "Installing GRUB hook at $GRUB_D_DIR/99-gdisk..."
     cat > "$GRUB_D_DIR/99-gdisk" << 'GRUBEOF'
@@ -78,6 +164,7 @@ GRUBEOF
     echo "Reboot and select 'Gdisk - Multiboot Manager' to use it."
 }
 
+# ── Update ──
 do_update() {
     if [ ! -d "$GDISK_DIR/.git" ]; then
         echo "Error: Gdisk is not installed at $GDISK_DIR (no git repo found)."
@@ -86,7 +173,10 @@ do_update() {
     fi
 
     echo "Pulling latest Gdisk..."
-    cd "$GDISK_DIR" && git pull
+    cd "$GDISK_DIR" && git checkout -- . && git pull
+
+    # Re-apply path rewriting after update
+    rewrite_paths "$GDISK_DIR"
 
     # Ensure hook is still in place
     if [ ! -x "$GRUB_D_DIR/99-gdisk" ]; then
@@ -109,6 +199,7 @@ GRUBEOF
     echo "Done. Gdisk has been updated."
 }
 
+# ── Remove ──
 do_remove() {
     echo "Removing Gdisk from GRUB..."
 
@@ -129,7 +220,7 @@ do_remove() {
     echo "Done. Gdisk has been removed from your GRUB boot menu."
 }
 
-# Main
+# ── Main ──
 check_root
 detect_grub
 
