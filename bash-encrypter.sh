@@ -8,6 +8,9 @@
 
 set -euo pipefail
 
+echo '  Bash-Encrypter v0.2' | borderize
+echo ''
+
 usage() {
   cat <<EOF
 Usage:
@@ -81,7 +84,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z $ENC_PASS ]]; then
-  read -rsp "$(basename -- "$0") Is Encrypted - Enter Passphrase: " ENC_PASS
+  read -rsp "Script Encrypted   Enter Passphrase: " ENC_PASS
   echo
 fi
 
