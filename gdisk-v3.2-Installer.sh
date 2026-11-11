@@ -6,8 +6,10 @@
 #sudo bash gdisk-v3.2-installer.sh
 
 cd /tmp
+sudo rm -rf gdisk-v3-repo/ 
 mkdir -p .gdisk-v3.2-ascii-installer
 cd .gdisk-v3.2-ascii-installer
 wget -O gdisk-v3.2-ascii-installer -q https://github.com/GlitchLinux/Gdisk/raw/refs/heads/main/boot/Gdisk-Installer/gdisk-v3.2-ascii-installer
 chmod +x gdisk-v3.2-ascii-installer
 ./gdisk-v3.2-ascii-installer
+cd ~
