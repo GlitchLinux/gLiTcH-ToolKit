@@ -2,12 +2,16 @@
 # gdisk-grub-patch.sh - Add/remove Gdisk from the host system's GRUB boot menu
 #
 # Usage:
-#   sudo ./gdisk-grub-patch.sh install   - Clone Gdisk to /boot/gdisk, rewrite paths,
-#                                           rebuild EFI with Gdisk modules, add GRUB entry
-#   sudo ./gdisk-grub-patch.sh update    - Pull latest Gdisk and refresh everything
-#   sudo ./gdisk-grub-patch.sh remove    - Remove Gdisk from GRUB and restore original EFI
+#   sudo ./gdisk-grub-patch.sh install   - Clone Gdisk to /boot/gdisk and add GRUB menu entry
+#   sudo ./gdisk-grub-patch.sh update    - Pull latest Gdisk and refresh GRUB
+#   sudo ./gdisk-grub-patch.sh remove    - Remove Gdisk from GRUB and delete /boot/gdisk
 #
-# Requirements: git, python3, grub-mkimage, grub (update-grub or grub2-mkconfig)
+# On UEFI systems the menu entry sets $prefix to Gdisk's module path so that
+# insmod finds the a1ive patched modules (map, ntboot, vhd, wimboot, etc.).
+# If the host GRUB core rejects the a1ive modules (ABI mismatch), the entry
+# falls back to chainloading Gdisk's own grub.efi.
+#
+# Requirements: git, python3, grub (update-grub or grub2-mkconfig)
 # License: GPLv3
 
 set -e
@@ -15,8 +19,6 @@ set -e
 GDISK_DIR="/boot/gdisk"
 GRUB_D_DIR=""
 UPDATE_GRUB=""
-EFI_DIR=""
-EFI_DISTRO=""
 
 # ── Detect grub.d location and update command ──
 detect_grub() {
@@ -37,39 +39,6 @@ detect_grub() {
         echo "Error: No grub config generator found."
         exit 1
     fi
-}
-
-# ── Detect EFI setup ──
-detect_efi() {
-    if [ ! -d /boot/efi/EFI ] && [ ! -d /efi/EFI ]; then
-        echo "  No EFI partition found - skipping EFI rebuild (BIOS-only system)."
-        return 1
-    fi
-
-    local efi_base="/boot/efi/EFI"
-    [ -d "$efi_base" ] || efi_base="/efi/EFI"
-
-    # Find the distro's EFI directory (debian, ubuntu, fedora, etc.)
-    for d in "$efi_base"/*/; do
-        local name
-        name=$(basename "$d")
-        [ "$name" = "BOOT" ] && continue
-        if [ -f "$d/grubx64.efi" ]; then
-            EFI_DIR="$d"
-            EFI_DISTRO="$name"
-            return 0
-        fi
-    done
-
-    # Fallback to BOOT
-    if [ -f "$efi_base/BOOT/grubx64.efi" ]; then
-        EFI_DIR="$efi_base/BOOT"
-        EFI_DISTRO="BOOT"
-        return 0
-    fi
-
-    echo "  No grubx64.efi found in EFI partition - skipping EFI rebuild."
-    return 1
 }
 
 # ── Check root ──
@@ -152,135 +121,23 @@ PYEOF
     echo "Rewrote paths in $count .cfg files."
 }
 
-# ── Rebuild EFI binary with Gdisk's a1ive GRUB modules ──
-# This replaces grubx64.efi with one built from Gdisk's patched module set,
-# so insmod map/ntboot/vhd/wimboot/grubfm all work in UEFI mode.
-# The original is backed up and can be restored with 'remove'.
-rebuild_efi() {
-    if ! detect_efi; then
-        return 0
-    fi
+# ── Install GRUB hook ──
+# Sets $prefix to Gdisk's module path so insmod finds a1ive modules.
+# Falls back to chainloading Gdisk's own grub.efi if insmod fails.
+install_hook() {
+    echo "Installing GRUB hook at $GRUB_D_DIR/99-gdisk..."
+    cat > "$GRUB_D_DIR/99-gdisk" << 'GRUBEOF'
+#!/bin/sh
+exec tail -n +3 "$0"
 
-    if ! command -v grub-mkimage >/dev/null 2>&1 && ! command -v grub2-mkimage >/dev/null 2>&1; then
-        echo "  Warning: grub-mkimage not found - cannot rebuild EFI. Gdisk UEFI features may not work."
-        return 0
-    fi
-
-    local mkimage="grub-mkimage"
-    command -v grub-mkimage >/dev/null 2>&1 || mkimage="grub2-mkimage"
-
-    local gdisk_moddir="$GDISK_DIR/boot/grub/x86_64-efi"
-    if [ ! -d "$gdisk_moddir" ]; then
-        echo "  Warning: Gdisk x86_64-efi module directory not found - skipping EFI rebuild."
-        return 0
-    fi
-
-    local original_efi="$EFI_DIR/grubx64.efi"
-    local backup_efi="$EFI_DIR/grubx64.efi.bak-pre-gdisk"
-
-    # Backup original if not already backed up
-    if [ ! -f "$backup_efi" ]; then
-        echo "  Backing up original EFI: $original_efi -> $backup_efi"
-        cp "$original_efi" "$backup_efi"
-    fi
-
-    # Detect root filesystem UUID for the embedded config
-    local root_uuid
-    root_uuid=$(grub-probe --target=fs_uuid / 2>/dev/null || findmnt -no UUID /)
-
-    if [ -z "$root_uuid" ]; then
-        echo "  Warning: Could not detect root UUID - skipping EFI rebuild."
-        return 0
-    fi
-
-    # Write embedded config that finds root and sets prefix to Gdisk's module path
-    local embed_cfg="/tmp/gdisk-embed.cfg"
-    cat > "$embed_cfg" << EOF
-search.fs_uuid $root_uuid root
-set prefix=(\$root)/boot/gdisk/boot/grub
-configfile \$prefix/grub.cfg
-EOF
-
-    # Also write a fallback that chains to the host's normal grub.cfg
-    # in case Gdisk's config isn't found
-    cat > /tmp/gdisk-embed-full.cfg << EOF
-search.fs_uuid $root_uuid root
-
-# Try Gdisk's module path first for insmod
-set prefix=(\$root)/boot/gdisk/boot/grub
-
-# But load the host's normal grub.cfg (which includes the 99-gdisk hook)
-# so the user sees the normal boot menu with Gdisk as an option
-if [ -f (\$root)/boot/grub/grub.cfg ]; then
-    configfile (\$root)/boot/grub/grub.cfg
-elif [ -f (\$root)/boot/grub2/grub.cfg ]; then
-    configfile (\$root)/boot/grub2/grub.cfg
-fi
-EOF
-
-    # Core modules to embed (must be in the image, not loaded from disk)
-    local core_mods="normal configfile search search_fs_uuid part_gpt part_msdos fat ext2 echo"
-
-    echo "  Building new grubx64.efi with Gdisk modules (root UUID: $root_uuid)..."
-
-    "$mkimage" \
-        -O x86_64-efi \
-        -d "$gdisk_moddir" \
-        -o /tmp/gdisk-grubx64.efi \
-        -c /tmp/gdisk-embed-full.cfg \
-        -p "/boot/gdisk/boot/grub" \
-        $core_mods 2>&1
-
-    if [ ! -f /tmp/gdisk-grubx64.efi ]; then
-        echo "  Error: grub-mkimage failed. Original EFI preserved."
-        return 1
-    fi
-
-    echo "  Installing new grubx64.efi to $EFI_DIR/"
-    cp /tmp/gdisk-grubx64.efi "$original_efi"
-
-    # Also update BOOT fallback if it exists and is separate
-    if [ "$EFI_DISTRO" != "BOOT" ] && [ -f "$(dirname "$EFI_DIR")/BOOT/grubx64.efi" ]; then
-        local boot_backup="$(dirname "$EFI_DIR")/BOOT/grubx64.efi.bak-pre-gdisk"
-        if [ ! -f "$boot_backup" ]; then
-            cp "$(dirname "$EFI_DIR")/BOOT/grubx64.efi" "$boot_backup"
-        fi
-        cp /tmp/gdisk-grubx64.efi "$(dirname "$EFI_DIR")/BOOT/grubx64.efi"
-        echo "  Also updated BOOT/grubx64.efi"
-    fi
-
-    # Cleanup
-    rm -f /tmp/gdisk-grubx64.efi /tmp/gdisk-embed.cfg /tmp/gdisk-embed-full.cfg
-
-    echo "  EFI rebuilt. Original backed up as grubx64.efi.bak-pre-gdisk"
-    echo "  All Gdisk UEFI modules (map, ntboot, vhd, wimboot, etc.) are now available."
+menuentry "Gdisk - Multiboot Manager" --class gdisk --class boot {
+    # Point $prefix at Gdisk's module dir so insmod finds
+    # a1ive patched modules (map, ntboot, vhd, wimboot, etc.)
+    set prefix=/boot/gdisk/boot/grub
+    configfile /boot/gdisk/boot/grub/gdisk.cfg
 }
-
-# ── Restore original EFI binary ──
-restore_efi() {
-    if ! detect_efi; then
-        return 0
-    fi
-
-    local backup_efi="$EFI_DIR/grubx64.efi.bak-pre-gdisk"
-
-    if [ -f "$backup_efi" ]; then
-        echo "  Restoring original EFI: $backup_efi -> $EFI_DIR/grubx64.efi"
-        cp "$backup_efi" "$EFI_DIR/grubx64.efi"
-        rm -f "$backup_efi"
-    fi
-
-    # Restore BOOT fallback too
-    if [ "$EFI_DISTRO" != "BOOT" ]; then
-        local boot_backup="$(dirname "$EFI_DIR")/BOOT/grubx64.efi.bak-pre-gdisk"
-        if [ -f "$boot_backup" ]; then
-            cp "$boot_backup" "$(dirname "$EFI_DIR")/BOOT/grubx64.efi"
-            rm -f "$boot_backup"
-            echo "  Restored BOOT/grubx64.efi"
-        fi
-    fi
-
-    echo "  Original EFI binary restored."
+GRUBEOF
+    chmod +x "$GRUB_D_DIR/99-gdisk"
 }
 
 # ── Install ──
@@ -304,20 +161,8 @@ do_install() {
     rewrite_paths "$GDISK_DIR"
 
     echo ""
-    echo "=== Rebuilding EFI ==="
-    rebuild_efi
-
-    echo ""
     echo "=== Installing GRUB hook ==="
-    cat > "$GRUB_D_DIR/99-gdisk" << 'GRUBEOF'
-#!/bin/sh
-exec tail -n +3 "$0"
-
-menuentry "Gdisk - Multiboot Manager" --class gdisk --class boot {
-    configfile /boot/gdisk/boot/grub/gdisk.cfg
-}
-GRUBEOF
-    chmod +x "$GRUB_D_DIR/99-gdisk"
+    install_hook
 
     echo "Updating GRUB configuration..."
     $UPDATE_GRUB
@@ -345,22 +190,9 @@ do_update() {
     echo "=== Rewriting paths ==="
     rewrite_paths "$GDISK_DIR"
 
-    echo ""
-    echo "=== Rebuilding EFI ==="
-    rebuild_efi
-
     # Ensure hook is still in place
     if [ ! -x "$GRUB_D_DIR/99-gdisk" ]; then
-        echo "GRUB hook missing, reinstalling..."
-        cat > "$GRUB_D_DIR/99-gdisk" << 'GRUBEOF'
-#!/bin/sh
-exec tail -n +3 "$0"
-
-menuentry "Gdisk - Multiboot Manager" --class gdisk --class boot {
-    configfile /boot/gdisk/boot/grub/gdisk.cfg
-}
-GRUBEOF
-        chmod +x "$GRUB_D_DIR/99-gdisk"
+        install_hook
     fi
 
     echo ""
@@ -380,10 +212,6 @@ do_remove() {
         echo "Removed GRUB hook."
     fi
 
-    echo ""
-    echo "=== Restoring EFI ==="
-    restore_efi
-
     if [ -d "$GDISK_DIR" ]; then
         rm -rf "$GDISK_DIR"
         echo "Removed $GDISK_DIR"
@@ -394,7 +222,7 @@ do_remove() {
     $UPDATE_GRUB
 
     echo ""
-    echo "Done. Gdisk has been removed and original EFI restored."
+    echo "Done. Gdisk has been removed."
 }
 
 # ── Main ──
@@ -416,9 +244,9 @@ case "${1:-}" in
         echo ""
         echo "Usage: sudo $0 {install|update|remove}"
         echo ""
-        echo "  install  - Clone Gdisk, rewrite paths, rebuild EFI, add GRUB entry"
-        echo "  update   - Pull latest Gdisk, re-apply patches, rebuild EFI"
-        echo "  remove   - Remove Gdisk, restore original EFI, clean GRUB"
+        echo "  install  - Clone Gdisk, rewrite paths, add GRUB entry"
+        echo "  update   - Pull latest Gdisk, re-apply path rewrites"
+        echo "  remove   - Remove Gdisk and clean GRUB"
         exit 0
         ;;
 esac
