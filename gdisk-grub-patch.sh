@@ -203,31 +203,29 @@ cleanup_efi() {
 install_hook() {
     echo "Installing GRUB hook at $GRUB_D_DIR/99-gdisk..."
 
-    if [ "$IS_EFI" -eq 1 ]; then
-        # UEFI: chainload Gdisk's own EFI binary (a1ive GRUB core)
-        cat > "$GRUB_D_DIR/99-gdisk" << GRUBEOF
+    # Both EFI and BIOS entries are written; GRUB picks the right one
+    # at boot time via ${grub_platform}.
+    # EFI UUID is needed for the chainloader path.
+    cat > "$GRUB_D_DIR/99-gdisk" << GRUBEOF
 #!/bin/sh
 exec tail -n +3 "\$0"
 
-menuentry "Gdisk - Multiboot Manager" --class gdisk --class boot {
-    insmod chain
-    insmod fat
-    insmod search_fs_uuid
-    search --no-floppy --fs-uuid --set=root $EFI_UUID
-    chainloader /EFI/gdisk/BOOTX64.EFI
-}
-GRUBEOF
-    else
-        # BIOS: load Gdisk config directly
-        cat > "$GRUB_D_DIR/99-gdisk" << 'GRUBEOF'
-#!/bin/sh
-exec tail -n +3 "$0"
+if [ "\${grub_platform}" = "efi" ]; then
+    menuentry "Gdisk v3.2" --class gdisk --class boot {
+        insmod chain
+        insmod fat
+        insmod search_fs_uuid
+        search --no-floppy --fs-uuid --set=root $EFI_UUID
+        chainloader /EFI/gdisk/BOOTX64.EFI
+    }
+fi
 
-menuentry "Gdisk - Multiboot Manager" --class gdisk --class boot {
-    configfile /boot/gdisk/boot/grub/gdisk.cfg
-}
+if [ "\${grub_platform}" = "pc" ]; then
+    menuentry "Gdisk v3.2" --class gdisk --class boot {
+        configfile /boot/gdisk/boot/grub/gdisk.cfg
+    }
+fi
 GRUBEOF
-    fi
 
     chmod +x "$GRUB_D_DIR/99-gdisk"
 }
