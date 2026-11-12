@@ -1,5 +1,43 @@
 #!/bin/bash
-cd /tmp
+cd /tmp || exit 1
 rm -f Grub2-BIOS-EFI.img
 wget https://glitchlinux.wtf/FILES/GLITCH-SOFTWARE/Grub2-BIOS-EFI/Grub2-BIOS-EFI.img
-echo "Grub2 BIOS-EFI image doenloaded to '/tmp/Grub2-BIOS-EFI.img'"
+
+# Abort if download failed
+if [ ! -f /tmp/Grub2-BIOS-EFI.img ]; then
+    echo "ERROR: Download failed. Aborting."
+    exit 1
+fi
+
+# Prompt for target device
+echo
+echo "Enter target device (e.g. /dev/sdb):"
+read -r target
+
+# Basic sanity checks
+if [ -z "$target" ]; then
+    echo "ERROR: No target specified. Aborting."
+    exit 1
+fi
+
+if [ ! -b "$target" ]; then
+    echo "ERROR: '$target' is not a block device. Aborting."
+    exit 1
+fi
+
+# Show device info and confirm
+echo
+echo "About to write /tmp/Grub2-BIOS-EFI.img to:"
+lsblk -o NAME,SIZE,MODEL,MOUNTPOINT "$target" 2>/dev/null || true
+echo
+echo "WARNING: This will DESTROY all data on $target."
+read -r -p "Type YES to continue: " confirm
+if [ "$confirm" != "YES" ]; then
+    echo "Aborted."
+    exit 1
+fi
+
+# Write image
+sudo dd if=/tmp/Grub2-BIOS-EFI.img of="$target" bs=4M status=progress conv=fsync
+sync
+echo "Done."
