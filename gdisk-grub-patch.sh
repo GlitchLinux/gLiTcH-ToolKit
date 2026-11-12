@@ -47,20 +47,14 @@ detect_grub() {
     fi
 }
 
-# ── Detect EFI partition ──
+# ── Detect EFI partition (regardless of current boot mode) ──
 detect_efi() {
-    # Check if booted in EFI mode
-    if [ ! -d /sys/firmware/efi ]; then
-        echo "  System booted in BIOS mode - using configfile method."
-        IS_EFI=0
-        return
-    fi
-
     # Find EFI mount point
     EFI_PART=$(findmnt -no TARGET /boot/efi 2>/dev/null || findmnt -no TARGET /efi 2>/dev/null || echo "")
 
     if [ -z "$EFI_PART" ] || [ ! -d "$EFI_PART/EFI" ]; then
-        echo "  Warning: EFI partition not found/mounted. Falling back to BIOS method."
+        echo "  No EFI partition found/mounted - UEFI chainloader will not be set up."
+        echo "  BIOS boot entry will still work."
         IS_EFI=0
         return
     fi
@@ -71,7 +65,7 @@ detect_efi() {
     EFI_UUID=$(blkid -s UUID -o value "$efi_dev" 2>/dev/null)
 
     if [ -z "$EFI_UUID" ]; then
-        echo "  Warning: Could not determine EFI partition UUID. Falling back to BIOS method."
+        echo "  Warning: Could not determine EFI partition UUID."
         IS_EFI=0
         return
     fi
@@ -251,12 +245,10 @@ do_install() {
     rewrite_paths "$GDISK_DIR"
 
     echo ""
-    echo "=== Detecting boot mode ==="
+    echo "=== Setting up EFI ==="
     detect_efi
 
     if [ "$IS_EFI" -eq 1 ]; then
-        echo ""
-        echo "=== Setting up EFI chainloader ==="
         setup_efi
     fi
 
@@ -272,12 +264,15 @@ do_install() {
     echo "========================================="
     echo " Gdisk installed successfully!"
     if [ "$IS_EFI" -eq 1 ]; then
-        echo " Mode: UEFI (chainloader)"
+        echo " UEFI: chainloader via EFI partition"
     else
-        echo " Mode: BIOS (configfile)"
+        echo " Note: No EFI partition found."
+        echo " UEFI chainloader not installed."
     fi
-    echo " Reboot and select 'Gdisk - Multiboot"
-    echo " Manager' from the GRUB boot menu."
+    echo " BIOS: configfile (always available)"
+    echo ""
+    echo " Reboot and select 'Gdisk v3.2'"
+    echo " from the GRUB boot menu."
     echo "========================================="
 }
 
@@ -297,12 +292,10 @@ do_update() {
     rewrite_paths "$GDISK_DIR"
 
     echo ""
-    echo "=== Detecting boot mode ==="
+    echo "=== Setting up EFI ==="
     detect_efi
 
     if [ "$IS_EFI" -eq 1 ]; then
-        echo ""
-        echo "=== Updating EFI chainloader ==="
         setup_efi
     fi
 
