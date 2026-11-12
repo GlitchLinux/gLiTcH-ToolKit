@@ -2,14 +2,17 @@
 # gdisk-grub-patch.sh - Add/remove Gdisk from the host system's GRUB boot menu
 #
 # Usage:
-#   sudo ./gdisk-grub-patch.sh install   - Clone Gdisk to /boot/gdisk and add GRUB menu entry
-#   sudo ./gdisk-grub-patch.sh update    - Pull latest Gdisk and refresh GRUB
-#   sudo ./gdisk-grub-patch.sh remove    - Remove Gdisk from GRUB and delete /boot/gdisk
+#   sudo ./gdisk-grub-patch.sh install   - Clone Gdisk, set up EFI chainloader, add GRUB entry
+#   sudo ./gdisk-grub-patch.sh update    - Pull latest Gdisk and refresh everything
+#   sudo ./gdisk-grub-patch.sh remove    - Remove Gdisk from GRUB, clean up EFI, delete /boot/gdisk
 #
-# On UEFI systems the menu entry sets $prefix to Gdisk's module path so that
-# insmod finds the a1ive patched modules (map, ntboot, vhd, wimboot, etc.).
-# If the host GRUB core rejects the a1ive modules (ABI mismatch), the entry
-# falls back to chainloading Gdisk's own grub.efi.
+# UEFI: Copies Gdisk's BOOTX64.EFI to the EFI partition and chainloads it.
+#       Gdisk's EFI auto-finds /boot/grub/gdisk.cfg (a redirect stub) which
+#       loads the full Gdisk config from /boot/gdisk/boot/grub/gdisk.cfg.
+#       This gives Gdisk its own a1ive GRUB core with map, ntboot, vhd, etc.
+#
+# BIOS: Directly loads Gdisk's config via configfile (host GRUB modules suffice
+#       for basic operation; a1ive-specific features like map won't work in BIOS).
 #
 # Requirements: git, python3, grub (update-grub or grub2-mkconfig)
 # License: GPLv3
@@ -19,6 +22,9 @@ set -e
 GDISK_DIR="/boot/gdisk"
 GRUB_D_DIR=""
 UPDATE_GRUB=""
+EFI_PART=""
+EFI_UUID=""
+IS_EFI=0
 
 # ── Detect grub.d location and update command ──
 detect_grub() {
@@ -39,6 +45,39 @@ detect_grub() {
         echo "Error: No grub config generator found."
         exit 1
     fi
+}
+
+# ── Detect EFI partition ──
+detect_efi() {
+    # Check if booted in EFI mode
+    if [ ! -d /sys/firmware/efi ]; then
+        echo "  System booted in BIOS mode - using configfile method."
+        IS_EFI=0
+        return
+    fi
+
+    # Find EFI mount point
+    EFI_PART=$(findmnt -no TARGET /boot/efi 2>/dev/null || findmnt -no TARGET /efi 2>/dev/null || echo "")
+
+    if [ -z "$EFI_PART" ] || [ ! -d "$EFI_PART/EFI" ]; then
+        echo "  Warning: EFI partition not found/mounted. Falling back to BIOS method."
+        IS_EFI=0
+        return
+    fi
+
+    # Get UUID of EFI partition
+    local efi_dev
+    efi_dev=$(findmnt -no SOURCE "$EFI_PART" 2>/dev/null)
+    EFI_UUID=$(blkid -s UUID -o value "$efi_dev" 2>/dev/null)
+
+    if [ -z "$EFI_UUID" ]; then
+        echo "  Warning: Could not determine EFI partition UUID. Falling back to BIOS method."
+        IS_EFI=0
+        return
+    fi
+
+    IS_EFI=1
+    echo "  EFI partition: $EFI_PART (UUID: $EFI_UUID)"
 }
 
 # ── Check root ──
@@ -121,22 +160,75 @@ PYEOF
     echo "Rewrote paths in $count .cfg files."
 }
 
+# ── Set up EFI chainloader ──
+setup_efi() {
+    local gdisk_efi="$GDISK_DIR/EFI/BOOT/BOOTX64.EFI"
+
+    if [ ! -f "$gdisk_efi" ]; then
+        echo "  Warning: Gdisk BOOTX64.EFI not found - skipping EFI setup."
+        IS_EFI=0
+        return
+    fi
+
+    # Create Gdisk EFI directory on EFI partition
+    mkdir -p "$EFI_PART/EFI/gdisk"
+    cp "$gdisk_efi" "$EFI_PART/EFI/gdisk/BOOTX64.EFI"
+    echo "  Copied BOOTX64.EFI to $EFI_PART/EFI/gdisk/"
+
+    # Create redirect stub at /boot/grub/gdisk.cfg
+    # Gdisk's BOOTX64.EFI auto-searches for /boot/grub/gdisk.cfg and loads it.
+    # This stub redirects to the full config in the nested Gdisk install.
+    cat > /boot/grub/gdisk.cfg << 'STUBEOF'
+configfile /boot/gdisk/boot/grub/gdisk.cfg
+STUBEOF
+    echo "  Created redirect stub at /boot/grub/gdisk.cfg"
+}
+
+# ── Clean up EFI ──
+cleanup_efi() {
+    # Remove Gdisk from EFI partition
+    if [ -n "$EFI_PART" ] && [ -d "$EFI_PART/EFI/gdisk" ]; then
+        rm -rf "$EFI_PART/EFI/gdisk"
+        echo "  Removed $EFI_PART/EFI/gdisk/"
+    fi
+
+    # Remove redirect stub
+    if [ -f /boot/grub/gdisk.cfg ]; then
+        rm -f /boot/grub/gdisk.cfg
+        echo "  Removed /boot/grub/gdisk.cfg"
+    fi
+}
+
 # ── Install GRUB hook ──
-# Sets $prefix to Gdisk's module path so insmod finds a1ive modules.
-# Falls back to chainloading Gdisk's own grub.efi if insmod fails.
 install_hook() {
     echo "Installing GRUB hook at $GRUB_D_DIR/99-gdisk..."
-    cat > "$GRUB_D_DIR/99-gdisk" << 'GRUBEOF'
+
+    if [ "$IS_EFI" -eq 1 ]; then
+        # UEFI: chainload Gdisk's own EFI binary (a1ive GRUB core)
+        cat > "$GRUB_D_DIR/99-gdisk" << GRUBEOF
+#!/bin/sh
+exec tail -n +3 "\$0"
+
+menuentry "Gdisk - Multiboot Manager" --class gdisk --class boot {
+    insmod chain
+    insmod fat
+    insmod search_fs_uuid
+    search --no-floppy --fs-uuid --set=root $EFI_UUID
+    chainloader /EFI/gdisk/BOOTX64.EFI
+}
+GRUBEOF
+    else
+        # BIOS: load Gdisk config directly
+        cat > "$GRUB_D_DIR/99-gdisk" << 'GRUBEOF'
 #!/bin/sh
 exec tail -n +3 "$0"
 
 menuentry "Gdisk - Multiboot Manager" --class gdisk --class boot {
-    # Point $prefix at Gdisk's module dir so insmod finds
-    # a1ive patched modules (map, ntboot, vhd, wimboot, etc.)
-    set prefix=/boot/gdisk/boot/grub
     configfile /boot/gdisk/boot/grub/gdisk.cfg
 }
 GRUBEOF
+    fi
+
     chmod +x "$GRUB_D_DIR/99-gdisk"
 }
 
@@ -161,15 +253,31 @@ do_install() {
     rewrite_paths "$GDISK_DIR"
 
     echo ""
+    echo "=== Detecting boot mode ==="
+    detect_efi
+
+    if [ "$IS_EFI" -eq 1 ]; then
+        echo ""
+        echo "=== Setting up EFI chainloader ==="
+        setup_efi
+    fi
+
+    echo ""
     echo "=== Installing GRUB hook ==="
     install_hook
 
+    echo ""
     echo "Updating GRUB configuration..."
     $UPDATE_GRUB
 
     echo ""
     echo "========================================="
     echo " Gdisk installed successfully!"
+    if [ "$IS_EFI" -eq 1 ]; then
+        echo " Mode: UEFI (chainloader)"
+    else
+        echo " Mode: BIOS (configfile)"
+    fi
     echo " Reboot and select 'Gdisk - Multiboot"
     echo " Manager' from the GRUB boot menu."
     echo "========================================="
@@ -190,8 +298,19 @@ do_update() {
     echo "=== Rewriting paths ==="
     rewrite_paths "$GDISK_DIR"
 
+    echo ""
+    echo "=== Detecting boot mode ==="
+    detect_efi
+
+    if [ "$IS_EFI" -eq 1 ]; then
+        echo ""
+        echo "=== Updating EFI chainloader ==="
+        setup_efi
+    fi
+
     # Ensure hook is still in place
     if [ ! -x "$GRUB_D_DIR/99-gdisk" ]; then
+        echo ""
         install_hook
     fi
 
@@ -211,6 +330,11 @@ do_remove() {
         rm -f "$GRUB_D_DIR/99-gdisk"
         echo "Removed GRUB hook."
     fi
+
+    echo ""
+    echo "=== Cleaning up EFI ==="
+    detect_efi
+    cleanup_efi
 
     if [ -d "$GDISK_DIR" ]; then
         rm -rf "$GDISK_DIR"
@@ -244,9 +368,9 @@ case "${1:-}" in
         echo ""
         echo "Usage: sudo $0 {install|update|remove}"
         echo ""
-        echo "  install  - Clone Gdisk, rewrite paths, add GRUB entry"
-        echo "  update   - Pull latest Gdisk, re-apply path rewrites"
-        echo "  remove   - Remove Gdisk and clean GRUB"
+        echo "  install  - Clone Gdisk, set up EFI/BIOS boot, add GRUB entry"
+        echo "  update   - Pull latest Gdisk, refresh EFI and paths"
+        echo "  remove   - Remove Gdisk, clean up EFI, restore GRUB"
         exit 0
         ;;
 esac
