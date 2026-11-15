@@ -1,4 +1,11 @@
 #!/bin/bash
+cat > /tmp/.gdisk-boot << 'GDISK-EOF'
+#!/bin/bash
+
+######################################
+############### START ################
+######################################
+
 # ╔══════════════════════════════════════════════════════════════╗
 # ║  gdiskboot.sh v0.3                                           ║
 # ║  Prepares a Linux system inside a .gdisk virtual disk file   ║
@@ -485,4 +492,15 @@ rebuild_initramfs
 echo ""
 ok "gdiskboot v${GDISKBOOT_VERSION} installed!"
 info "Devices after boot: /dev/gdisk0, /dev/gdisk0p1.."
-echo ""
+counter 20 -l 'Auto-Exit IN'
+sudo rm -f /tmp/.gdisk-boot
+
+#######################################
+############### FINISH ################
+#######################################
+
+GDISK-EOF
+
+sudo bash /tmp/.gdisk-boot
+
+
