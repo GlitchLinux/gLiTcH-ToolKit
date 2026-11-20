@@ -1,0 +1,1096 @@
+#!/bin/bash
+clear
+sudo rm -f /tmp/.script2exec
+cat > /tmp/.script2exec << 'S2E'
+#!/bin/bash
+
+sudo rm -f counter borderize.banner banner.ascii
+
+cat > banner.ascii << 'EOF'
+S2E - Script to Executable v1.01
+https://glitchlinux.com (c) 2026
+EOF
+cat > borderize.banner << 'BOR'
+#!/bin/bash
+
+# Default color definitions
+DEFAULT_GREEN='\033[1;32m'
+DEFAULT_TEXT='\033[0m'  # Default text (terminal default)
+PINK='\033[1;35m'
+NC='\033[0m' # No Color
+
+# Function to convert hex to RGB and then to ANSI
+hex_to_ansi() {
+    local hex="$1"
+    
+    # Remove # if present
+    hex="${hex#\#}"
+    
+    # Validate hex format
+    if [[ ! "$hex" =~ ^[0-9A-Fa-f]{6}$ ]]; then
+        # If invalid hex, return default green
+        echo "$DEFAULT_GREEN"
+        return
+    fi
+    
+    # Convert hex to RGB
+    local r=$((16#${hex:0:2}))
+    local g=$((16#${hex:2:2}))
+    local b=$((16#${hex:4:2}))
+    
+    # Return ANSI escape code for 24-bit color
+    echo -e "\033[38;2;${r};${g};${b}m"
+}
+
+# Function to calculate the visual width of a string (accounting for ANSI codes)
+get_visual_width() {
+    local str="$1"
+    # Remove ANSI escape sequences for width calculation
+    local clean_str=$(echo -e "$str" | sed 's/\x1b\[[0-9;]*m//g')
+    echo "${#clean_str}"
+}
+
+# Function to pad string to desired width
+pad_string() {
+    local str="$1"
+    local desired_width="$2"
+    local current_width=$(get_visual_width "$str")
+    local padding=$((desired_width - current_width))
+    
+    if [ $padding -gt 0 ]; then
+        printf "%s%*s" "$str" $padding ""
+    else
+        echo -n "$str"
+    fi
+}
+
+# Function to create bordered text
+borderize_text() {
+    local border_color="$1"
+    local text_color="$2"
+    local lines=()
+    local max_width=0
+    local has_variables=false
+    
+    # Read all lines into array
+    while IFS= read -r line || [ -n "$line" ]; do
+        lines+=("$line")
+        
+        # Check if line contains $ (indicating variables)
+        if [[ "$line" == *'$'* ]]; then
+            has_variables=true
+        fi
+        
+        local width=$(get_visual_width "$line")
+        if [ $width -gt $max_width ]; then
+            max_width=$width
+        fi
+    done
+    
+    # If no input, return
+    if [ ${#lines[@]} -eq 0 ]; then
+        return
+    fi
+    
+    # Add padding for borders (2 spaces on each side)
+    local inner_width=$((max_width + 2))
+    
+    if [ "$has_variables" = true ]; then
+        # Dynamic border for variable content
+        echo -e "${border_color}╭$(printf '─%.0s' $(seq 1 $inner_width))❖${NC}"
+        
+        for line in "${lines[@]}"; do
+            echo -e "${border_color}│${NC} ${text_color}${line}${NC}"
+        done
+        
+        echo -e "${border_color}╰$(printf '─%.0s' $(seq 1 $inner_width))❖${NC}"
+    else
+        # Fixed border for static content
+        echo -e "${border_color}╭$(printf '─%.0s' $(seq 1 $inner_width))╮${NC}"
+        
+        for line in "${lines[@]}"; do
+            local padded_line=$(pad_string "$line" $max_width)
+            echo -e "${border_color}│${NC} ${text_color}${padded_line}${NC} ${border_color}│${NC}"
+        done
+        
+        echo -e "${border_color}╰$(printf '─%.0s' $(seq 1 $inner_width))╯${NC}"
+    fi
+}
+
+# Function to show usage
+show_usage() {
+    local border_color="${1:-$DEFAULT_GREEN}"
+    
+    echo " "
+    echo -e "${border_color}╭─────────────────────────────────────────╮${NC}"
+    echo -e "${border_color}│${NC}  Borderize - Text Border Utility       ${border_color}│${NC}"
+    echo -e "${border_color}│${NC}  Creates beautiful borders around text ${border_color}│${NC}"
+    echo -e "${border_color}╰─────────────────────────────────────────╯${NC}"
+    echo " "
+    echo -e "${DEFAULT_GREEN}╭──────────────────────────────────────────────╮${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC} ${PINK}Usage Examples:${NC}                  ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}                                              ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC} ${PINK}1${NC}. Default green border:         ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    echo \"text\" | borderize                 ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}                                              ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC} ${PINK}2${NC}. Custom border color:          ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    echo \"text\" | borderize -FF0000         ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}                                              ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC} ${PINK}3${NC}. Border AND text color:        ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    echo \"text\" | borderize -FF0000 -FFFF00 ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    (red border with yellow text)             ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}                                              ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC} ${PINK}4${NC}. Style combinations:           ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    -FFFFFF -000000  (white border/black)     ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    -00FFFF -FF00FF  (cyan border/magenta)    ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    -FFD700 -FFFFFF  (gold border/white)      ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    -FF1493 -00CED1  (pink/turquoise)         ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}                                              ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC} ${PINK}5${NC}. With other options:           ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    borderize -t \"text\" -FF00FF -FFFFFF     ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    borderize -c \"ls\" -00FFFF -FFFF00       ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}                                              ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC} ${PINK}Options:${NC}                         ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    -h, --help     Show this help message     ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    -t \"text\"      Borderize given text     ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    -c command     Borderize command output   ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    -RRGGBB        Set border color (hex)     ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}│${NC}    -RRGGBB        Set text color (2nd hex)   ${DEFAULT_GREEN}│${NC}"
+    echo -e "${DEFAULT_GREEN}╰──────────────────────────────────────────────╯${NC}"
+    echo " "
+}
+
+# Main script logic
+main() {
+    local border_color="$DEFAULT_GREEN"
+    local text_color="$DEFAULT_TEXT"
+    local text_mode=false
+    local command_mode=false
+    local input_text=""
+    local input_command=""
+    local hex_count=0
+    
+    # Parse all arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            -t|--text)
+                text_mode=true
+                shift
+                if [ -z "$1" ]; then
+                    echo "Error: No text provided"
+                    exit 1
+                fi
+                input_text="$1"
+                shift
+                ;;
+            -c|--command)
+                command_mode=true
+                shift
+                # Collect the rest as command, but check for hex colors first
+                input_command=""
+                while [[ $# -gt 0 ]]; do
+                    if [[ "$1" =~ ^-[0-9A-Fa-f]{6}$ ]] || [[ "$1" =~ ^-#[0-9A-Fa-f]{6}$ ]]; then
+                        # This is a hex color, process it
+                        local hex_code="${1#-}"
+                        hex_count=$((hex_count + 1))
+                        if [ $hex_count -eq 1 ]; then
+                            border_color=$(hex_to_ansi "$hex_code")
+                        elif [ $hex_count -eq 2 ]; then
+                            text_color=$(hex_to_ansi "$hex_code")
+                        fi
+                        shift
+                    else
+                        # Part of the command
+                        if [ -z "$input_command" ]; then
+                            input_command="$1"
+                        else
+                            input_command="$input_command $1"
+                        fi
+                        shift
+                    fi
+                done
+                break
+                ;;
+            -[0-9A-Fa-f]*)
+                # Hex color code
+                local hex_code="${1#-}"
+                hex_count=$((hex_count + 1))
+                if [ $hex_count -eq 1 ]; then
+                    border_color=$(hex_to_ansi "$hex_code")
+                elif [ $hex_count -eq 2 ]; then
+                    text_color=$(hex_to_ansi "$hex_code")
+                fi
+                shift
+                ;;
+            -#[0-9A-Fa-f]*)
+                # Hex color code with #
+                local hex_code="${1#-}"
+                hex_count=$((hex_count + 1))
+                if [ $hex_count -eq 1 ]; then
+                    border_color=$(hex_to_ansi "$hex_code")
+                elif [ $hex_count -eq 2 ]; then
+                    text_color=$(hex_to_ansi "$hex_code")
+                fi
+                shift
+                ;;
+            *)
+                # Check if it's a file
+                if [ -f "$1" ]; then
+                    cat "$1" | borderize_text "$border_color" "$text_color"
+                    exit 0
+                else
+                    # Check if it looks like a hex color without dash
+                    if [[ "$1" =~ ^[0-9A-Fa-f]{6}$ ]] || [[ "$1" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+                        hex_count=$((hex_count + 1))
+                        if [ $hex_count -eq 1 ]; then
+                            border_color=$(hex_to_ansi "$1")
+                        elif [ $hex_count -eq 2 ]; then
+                            text_color=$(hex_to_ansi "$1")
+                        fi
+                        shift
+                    else
+                        echo "Error: Unknown option or file not found: $1"
+                        echo "Use -h for help"
+                        exit 1
+                    fi
+                fi
+                ;;
+        esac
+    done
+    
+    # Execute based on mode
+    if [ "$text_mode" = true ]; then
+        echo -e "$input_text" | borderize_text "$border_color" "$text_color"
+    elif [ "$command_mode" = true ]; then
+        if [ -z "$input_command" ]; then
+            echo "Error: No command provided"
+            exit 1
+        fi
+        eval "$input_command" | borderize_text "$border_color" "$text_color"
+    else
+        # No specific mode - check for piped input or interactive
+        if [ -t 0 ]; then
+            # No pipe input - interactive mode
+            echo " "
+            echo -e "${border_color}╭─────────────────────────────────╮${NC}"
+            echo -e "${border_color}│${NC} ${PINK}❖${NC} Interactive BORDERIZE Mode ${PINK}❖${NC} ${border_color} │${NC}"
+            echo -e "${border_color}│${NC} Type or paste text hit: Ctrl+D ${border_color} │${NC}"
+            echo -e "${border_color}│${NC} to finished and add the border ${border_color} │${NC}"
+            echo -e "${border_color}╰─────────────────────────────────╯${NC}"
+            echo " "
+            echo -n " -> "
+            # Read all input until EOF (Ctrl+D)
+            input=$(cat)
+            # Add newline after input capture
+            echo ""
+            # Process the input if not empty
+            if [ -n "$input" ]; then
+                echo -e "$input" | borderize_text "$border_color" "$text_color"
+            fi
+        else
+            # Pipe input detected
+            borderize_text "$border_color" "$text_color"
+        fi
+    fi
+}
+
+# Script execution steps:
+# 1. Parse command line arguments including hex colors
+# 2. First hex = border color, Second hex = text color
+# 3. Convert hex colors to ANSI escape codes
+# 4. Detect input method (pipe/file/text/interactive)
+# 5. Read and process input text
+# 6. Calculate optimal border width
+# 7. Generate bordered output with custom colors
+# 8. Display result with specified border and text colors
+
+# Run main function
+main "$@"
+BOR
+cat > counter << 'COUNT'
+#!/bin/bash
+
+VERSION="2.0.0"
+
+# Defaults
+label=""
+use_minutes=false
+show_seconds_with_minutes=false
+block_char="■"
+mode="countdown"      # countdown | countup | quiet
+repeat_count=1
+notify=false
+log_file=""
+color=""
+show_percent=false
+show_eta=false
+input_duration=""
+
+show_help() {
+    cat <<HLP
+Usage: counter [options] [duration]
+
+Duration formats:
+  <seconds>          Plain integer, e.g. 90
+  <minutes>          With -m, integer or decimal, e.g. -m 2.5
+  HH:MM:SS / MM:SS   Colon-separated, e.g. 1:30:00 or 5:00
+
+Options:
+  -l 'Label'     Custom prefix label
+  -m             Treat <duration> as minutes (accepts decimals)
+  -s             Show seconds counter alongside minutes (requires -m)
+  -b             Use hollow blocks (□) instead of solid (■)
+  -c <color>     Color the bar (red green yellow blue magenta cyan white, or 0-255)
+  -p             Show percentage complete
+  -e             Show ETA (wall-clock finish time)
+  -u             Count up (stopwatch). Omit duration for an open-ended stopwatch
+  -r <n>         Repeat the timer n times back to back (interval/pomodoro mode)
+  -q             Quiet mode: no bar, just block until done
+  -n             Desktop notification on completion (needs notify-send)
+  -L <file>      Append a completion log line to <file>
+  -v, --version  Show version
+  -h, --help     Show this help message
+HLP
+    exit 0
+}
+
+parse_duration() {
+    local d="$1"
+    if [[ "$d" =~ ^([0-9]+):([0-9]{1,2}):([0-9]{1,2})$ ]]; then
+        echo $(( 10#${BASH_REMATCH[1]} * 3600 + 10#${BASH_REMATCH[2]} * 60 + 10#${BASH_REMATCH[3]} ))
+    elif [[ "$d" =~ ^([0-9]+):([0-9]{1,2})$ ]]; then
+        echo $(( 10#${BASH_REMATCH[1]} * 60 + 10#${BASH_REMATCH[2]} ))
+    elif [[ "$d" =~ ^[0-9]+$ ]]; then
+        local val=$((10#$d))
+        if [ "$use_minutes" = true ]; then
+            echo $(( val * 60 ))
+        else
+            echo "$val"
+        fi
+    elif [[ "$d" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        if [ "$use_minutes" = true ]; then
+            awk -v m="$d" 'BEGIN{printf "%d", (m*60)+0.5}'
+        else
+            echo "Error: decimal seconds not supported, use -m for decimal minutes" >&2
+            exit 1
+        fi
+    else
+        echo "Error: invalid duration '$d'" >&2
+        exit 1
+    fi
+}
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -l)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "Error: -l requires a label argument" >&2
+                exit 1
+            fi
+            label="$2"; shift 2 ;;
+        -m) use_minutes=true; shift ;;
+        -s) show_seconds_with_minutes=true; shift ;;
+        -b) block_char="□"; shift ;;
+        -c)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "Error: -c requires a color argument" >&2
+                exit 1
+            fi
+            color="$2"; shift 2 ;;
+        -p) show_percent=true; shift ;;
+        -e) show_eta=true; shift ;;
+        -u) mode="countup"; shift ;;
+        -r)
+            if [[ -z "$2" || ! "$2" =~ ^[0-9]+$ ]]; then
+                echo "Error: -r requires a numeric repeat count" >&2
+                exit 1
+            fi
+            repeat_count="$2"; shift 2 ;;
+        -q) mode="quiet"; shift ;;
+        -n) notify=true; shift ;;
+        -L)
+            if [[ -z "$2" || "$2" == -* ]]; then
+                echo "Error: -L requires a file path" >&2
+                exit 1
+            fi
+            log_file="$2"; shift 2 ;;
+        -v|--version) echo "counter $VERSION"; exit 0 ;;
+        -h|--help) show_help ;;
+        *)
+            if [[ -z "$input_duration" ]] && [[ "$1" =~ ^([0-9]+(\.[0-9]+)?|[0-9]+:[0-9]{1,2}(:[0-9]{1,2})?)$ ]]; then
+                input_duration="$1"
+                shift
+            else
+                echo "Error: Unknown option $1" >&2
+                echo "Run 'counter --help' for usage instructions." >&2
+                exit 1
+            fi
+            ;;
+    esac
+done
+
+if [ -z "$input_duration" ] && [ "$mode" != "countup" ]; then
+    echo "Error: Missing required argument <duration>." >&2
+    echo "Usage: counter [options] <duration>" >&2
+    exit 1
+fi
+
+if [ "$show_seconds_with_minutes" = true ] && [ "$use_minutes" != true ]; then
+    echo "Warning: -s has no effect without -m" >&2
+fi
+
+if [ -n "$input_duration" ]; then
+    total_seconds=$(parse_duration "$input_duration") || exit 1
+else
+    total_seconds=0
+fi
+
+# Detect if stdout is a terminal or a pipe
+if [ -t 1 ]; then
+    is_piped=false
+else
+    is_piped=true
+fi
+
+# Terminal-width-aware bar sizing
+if [ -t 1 ]; then
+    term_width=$(tput cols 2>/dev/null || echo 80)
+    reserve=20
+    [ -n "$label" ] && reserve=$(( reserve + ${#label} + 2 ))
+    max_bar=$(( term_width - reserve ))
+    [ "$max_bar" -lt 10 ] && max_bar=10
+else
+    max_bar=99
+fi
+
+if [ "$total_seconds" -gt 0 ] && [ "$total_seconds" -lt "$max_bar" ]; then
+    bar_width=$total_seconds
+else
+    bar_width=$max_bar
+fi
+
+# Color setup
+color_code=""
+reset_code=""
+if [ -n "$color" ] && [ -t 1 ]; then
+    case "$color" in
+        red) color_code=$(tput setaf 1 2>/dev/null) ;;
+        green) color_code=$(tput setaf 2 2>/dev/null) ;;
+        yellow) color_code=$(tput setaf 3 2>/dev/null) ;;
+        blue) color_code=$(tput setaf 4 2>/dev/null) ;;
+        magenta) color_code=$(tput setaf 5 2>/dev/null) ;;
+        cyan) color_code=$(tput setaf 6 2>/dev/null) ;;
+        white) color_code=$(tput setaf 7 2>/dev/null) ;;
+        *)
+            if [[ "$color" =~ ^[0-9]+$ ]]; then
+                color_code=$(tput setaf "$color" 2>/dev/null)
+            fi
+            ;;
+    esac
+    [ -n "$color_code" ] && reset_code=$(tput sgr0 2>/dev/null)
+fi
+
+[ -t 1 ] && tput civis 2>/dev/null
+cleanup() {
+    [ -t 1 ] && tput cnorm 2>/dev/null
+    echo ""
+    exit 1
+}
+trap cleanup SIGINT
+
+run_timer() {
+    local total=$1
+    local round_label="$2"
+
+    if [ "$mode" = "quiet" ]; then
+        sleep "$total"
+        return
+    fi
+
+    local start_time end_time
+    start_time=$(date +%s)
+    end_time=$(( start_time + total ))
+
+    while :; do
+        local now remaining elapsed display_seconds
+        now=$(date +%s)
+        if [ "$mode" = "countup" ] && [ "$total" -eq 0 ]; then
+            elapsed=$(( now - start_time ))
+            remaining=0
+        else
+            remaining=$(( end_time - now ))
+            [ "$remaining" -lt 0 ] && remaining=0
+            elapsed=$(( total - remaining ))
+        fi
+
+        if [ "$mode" = "countup" ]; then
+            display_seconds=$elapsed
+        else
+            display_seconds=$remaining
+        fi
+
+        local time_text=""
+        if [ "$use_minutes" = true ] && [ "$total" -gt 0 ]; then
+            local d_min d_sec
+            d_min=$(( display_seconds / 60 ))
+            d_sec=$(( display_seconds % 60 ))
+            if [ "$show_seconds_with_minutes" = true ]; then
+                time_text="${d_min}min ${d_sec}sec"
+            else
+                if [ "$d_sec" -gt 0 ] && [ "$mode" != "countup" ] && [ "$elapsed" -gt 0 ]; then
+                    time_text="$(( d_min + 1 ))min"
+                else
+                    time_text="${d_min}min"
+                fi
+            fi
+        else
+            time_text="${display_seconds}s"
+        fi
+
+        local prefix=""
+        if [ -n "$label" ]; then
+            prefix=" ${label}${round_label}: ${time_text}"
+        else
+            prefix=" ${time_text}${round_label}"
+        fi
+
+        if [ "$show_percent" = true ] && [ "$total" -gt 0 ]; then
+            local pct=$(( elapsed * 100 / total ))
+            prefix="${prefix} (${pct}%)"
+        fi
+
+        if [ "$show_eta" = true ] && [ "$mode" != "countup" ] && [ "$total" -gt 0 ]; then
+            local eta
+            eta=$(date -d "@${end_time}" +%H:%M:%S 2>/dev/null)
+            [ -n "$eta" ] && prefix="${prefix} ETA ${eta}"
+        fi
+
+        local bar=""
+        if [ "$total" -gt 0 ]; then
+            local filled empty b s space
+            filled=$(( elapsed * bar_width / total ))
+            [ "$filled" -gt "$bar_width" ] && filled=$bar_width
+            empty=$(( bar_width - filled ))
+            bar=""
+            for ((b=0; b<filled; b++)); do bar+="$block_char"; done
+            space=""
+            for ((s=0; s<empty; s++)); do space+="-"; done
+            bar="[${color_code}${bar}${reset_code}${space}]"
+        fi
+
+        if [ "$is_piped" = true ]; then
+            echo "${prefix} ${bar}"
+        else
+            echo -ne "${prefix} ${bar} \r"
+        fi
+
+        if [ "$mode" = "countup" ] && [ "$total" -eq 0 ]; then
+            sleep 1
+            continue
+        elif [ "$remaining" -le 0 ]; then
+            break
+        fi
+        sleep 1
+    done
+}
+
+[ "$is_piped" = false ] && [ "$mode" != "quiet" ] && echo ""
+
+for ((round=1; round<=repeat_count; round++)); do
+    round_label=""
+    [ "$repeat_count" -gt 1 ] && round_label=" [${round}/${repeat_count}]"
+
+    run_timer "$total_seconds" "$round_label"
+
+    if [ "$mode" != "quiet" ] && [ "$is_piped" = false ]; then
+        echo ""
+    fi
+
+    if [ "$mode" != "quiet" ]; then
+        printf '\a'
+    fi
+    if [ "$notify" = true ] && command -v notify-send >/dev/null 2>&1; then
+        notify-send "Counter" "${label:-Timer} finished${round_label}"
+    fi
+    if [ -n "$log_file" ]; then
+        printf '%s | %s%s | %ds\n' "$(date '+%Y-%m-%d %H:%M:%S')" "${label:-counter}" "$round_label" "$total_seconds" >> "$log_file"
+    fi
+
+    [ "$round" -lt "$repeat_count" ] && sleep 1
+done
+
+if [ "$mode" != "quiet" ] && [ "$is_piped" = false ]; then
+    echo ""
+fi
+
+if [ -t 1 ]; then
+    tput cnorm 2>/dev/null
+fi
+exit 0
+COUNT
+#!/bin/bash
+# ============================================================================
+#  S2E - Script-2-Executable
+#  Glitch Linux (c) 2026
+#  https://glitchlinux.com
+#
+#  Compiles a directory containing a script (.sh/.py/.c) and an icon
+#  (.png/.svg) into a single ELF binary executable.
+#
+#  Requires: gcc, tar, xxd (or od), ImageMagick (convert)
+#  Usage: ./script2exec.sh [source_dir]
+# ============================================================================
+
+sudo chmod +x counter borderize.banner banner.ascii
+
+set -e
+
+COL_G="\033[0;32m"
+COL_R="\033[0;31m"
+COL_Y="\033[0;33m"
+COL_C="\033[0;36m"
+COL_W="\033[1;37m"
+COL_D="\033[0;90m"
+COL_N="\033[0m"
+
+banner() {
+cat banner.ascii | ./borderize.banner
+echo
+}
+
+cp borderize.banner /tmp/.borderize.banner
+cp counter /tmp/.counter
+
+die() { echo -e "${COL_R}[S2E] ERROR: $1${COL_N}"; exit 1; }
+info() { echo -e "${COL_G}[S2E]${COL_N} $1"; }
+prompt() { echo -en "${COL_G}[S2E]${COL_N} $1"; }
+
+# ============================================================================
+#  Check dependencies
+# ============================================================================
+check_deps() {
+    local missing=""
+    for cmd in gcc tar convert; do
+        command -v "$cmd" >/dev/null 2>&1 || missing="$missing $cmd"
+    done
+    if [ -n "$missing" ]; then
+        die "Missing required tools:$missing"
+    fi
+}
+
+# ============================================================================
+#  Detect source files
+# ============================================================================
+detect_files() {
+    local dir="$1"
+
+    # Find script/source
+    SCRIPT=""
+    SCRIPT_TYPE=""
+    for ext in sh py c; do
+        found=$(find "$dir" -maxdepth 1 -name "*.$ext" -type f | head -1)
+        if [ -n "$found" ]; then
+            SCRIPT="$found"
+            SCRIPT_TYPE="$ext"
+            break
+        fi
+    done
+
+    # Find icon
+    ICON=""
+    ICON_TYPE=""
+    for ext in png svg; do
+        found=$(find "$dir" -maxdepth 1 -name "*.$ext" -type f | head -1)
+        if [ -n "$found" ]; then
+            ICON="$found"
+            ICON_TYPE="$ext"
+            break
+        fi
+    done
+
+    # Count all files
+    TOTAL_FILES=$(find "$dir" -maxdepth 1 -type f | wc -l)
+}
+
+# ============================================================================
+#  Generate ARGB icon data as C header
+# ============================================================================
+generate_icon_header() {
+    local icon="$1"
+    local header="$2"
+    local size=48
+
+    # Convert to 48x48 raw RGBA
+    local rawfile="${WORKDIR}/icon_raw.bin"
+    convert "$icon" -resize ${size}x${size}\! -depth 8 rgba:"$rawfile"
+
+    python3 - "$rawfile" "$header" "$size" << 'PYEOF'
+import sys, struct
+rawfile, outfile, size = sys.argv[1], sys.argv[2], int(sys.argv[3])
+raw = open(rawfile, "rb").read()
+w = h = size
+out = []
+out.append(f"#define S2E_ICON_W {w}")
+out.append(f"#define S2E_ICON_H {h}")
+out.append(f"#define S2E_ICON_LEN ({w * h + 2})")
+out.append(f"static const unsigned long s2e_icon[S2E_ICON_LEN] = {{")
+out.append(f"    {w}, {h},")
+line = "    "
+for i in range(w * h):
+    off = i * 4
+    r, g, b, a = raw[off], raw[off+1], raw[off+2], raw[off+3]
+    val = (a << 24) | (r << 16) | (g << 8) | b
+    line += f"0x{val:08x},"
+    if (i + 1) % 10 == 0:
+        out.append(line)
+        line = "    "
+if line.strip():
+    out.append(line)
+out.append("};")
+open(outfile, "w").write("\n".join(out) + "\n")
+PYEOF
+}
+
+generate_script_stub() {
+    local src_dir="$1"
+    local script_name="$2"
+    local script_type="$3"
+    local has_icon="$4"
+    local stub_c="${WORKDIR}/s2e_stub.c"
+
+    # Create tar payload of entire directory contents
+    local payload="${WORKDIR}/payload.tar.gz"
+    tar czf "$payload" -C "$src_dir" .
+
+    # Convert to C byte array
+    local payload_h="${WORKDIR}/payload_data.h"
+    python3 - "$payload" "$payload_h" << 'PYEOF'
+import sys
+data = open(sys.argv[1], "rb").read()
+out = []
+out.append(f"#define S2E_PAYLOAD_LEN {len(data)}")
+out.append(f"static const unsigned char s2e_payload[S2E_PAYLOAD_LEN] = {{")
+line = "    "
+for i, b in enumerate(data):
+    line += f"0x{b:02x},"
+    if (i + 1) % 16 == 0:
+        out.append(line)
+        line = "    "
+if line.strip():
+    out.append(line)
+out.append("};")
+open(sys.argv[2], "w").write("\n".join(out) + "\n")
+PYEOF
+
+    # Determine interpreter
+    local interp="/bin/sh"
+    [ "$script_type" = "py" ] && interp="/usr/bin/python3"
+
+    # Generate the C stub
+    cat > "$stub_c" << CEOF
+/*
+ * S2E - Script-2-Executable stub
+ * Auto-generated - do not edit
+ * Glitch Linux (c) 2026
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <time.h>
+
+#include "${payload_h}"
+CEOF
+
+    if [ "$has_icon" = "1" ]; then
+        cat >> "$stub_c" << CEOF
+
+/* Icon support */
+#include <X11/Xlib.h>
+#include <X11/Xatom.h>
+#include "${WORKDIR}/s2e_icon.h"
+
+static void set_icon_on_window(Display *dpy, Window w) {
+    Atom net_wm_icon = XInternAtom(dpy, "_NET_WM_ICON", False);
+    Atom cardinal = XInternAtom(dpy, "CARDINAL", False);
+    XChangeProperty(dpy, w, net_wm_icon, cardinal, 32,
+                    PropModeReplace, (unsigned char *)s2e_icon, S2E_ICON_LEN);
+    XFlush(dpy);
+}
+
+/* Try to set icon on all windows matching our child PID */
+static void try_set_icon(pid_t child_pid) {
+    Display *dpy = XOpenDisplay(NULL);
+    if (!dpy) return;
+
+    /* Write a tiny script that uses xdotool to find the window */
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd),
+             "xdotool search --pid %d 2>/dev/null | head -1", (int)child_pid);
+
+    FILE *fp = popen(cmd, "r");
+    if (fp) {
+        char buf[64];
+        if (fgets(buf, sizeof(buf), fp)) {
+            unsigned long wid = strtoul(buf, NULL, 10);
+            if (wid > 0) {
+                set_icon_on_window(dpy, (Window)wid);
+            }
+        }
+        pclose(fp);
+    }
+    XCloseDisplay(dpy);
+}
+CEOF
+    fi
+
+    cat >> "$stub_c" << CEOF
+
+static char tmpdir[256];
+static pid_t child_pid = 0;
+
+static void cleanup(void) {
+    if (tmpdir[0]) {
+        char cmd[300];
+        snprintf(cmd, sizeof(cmd), "rm -rf '%s'", tmpdir);
+        system(cmd);
+    }
+}
+
+static void sighandler(int sig) {
+    if (child_pid > 0) kill(child_pid, sig);
+    cleanup();
+    _exit(128 + sig);
+}
+
+int main(int argc, char *argv[]) {
+    /* Create unique tmpdir */
+    snprintf(tmpdir, sizeof(tmpdir), "/tmp/s2e-%d-%ld", getpid(), (long)time(NULL));
+    mkdir(tmpdir, 0700);
+
+    /* Extract payload */
+    char payload_path[300];
+    snprintf(payload_path, sizeof(payload_path), "%s/.payload.tar.gz", tmpdir);
+    FILE *f = fopen(payload_path, "wb");
+    if (!f) { perror("fopen"); cleanup(); return 1; }
+    fwrite(s2e_payload, 1, S2E_PAYLOAD_LEN, f);
+    fclose(f);
+
+    /* Untar */
+    char cmd[600];
+    snprintf(cmd, sizeof(cmd), "tar xzf '%s' -C '%s'", payload_path, tmpdir);
+    if (system(cmd) != 0) {
+        fprintf(stderr, "S2E: Failed to extract payload\\n");
+        cleanup();
+        return 1;
+    }
+    unlink(payload_path);
+
+    /* Setup signal handlers */
+    signal(SIGINT, sighandler);
+    signal(SIGTERM, sighandler);
+    atexit(cleanup);
+
+    /* Build script path */
+    char script_path[512];
+    snprintf(script_path, sizeof(script_path), "%s/${script_name}", tmpdir);
+    chmod(script_path, 0755);
+
+    /* Fork and exec */
+    child_pid = fork();
+    if (child_pid == 0) {
+        /* Child: run the script */
+        chdir(tmpdir);
+        execl("${interp}", "${interp}", script_path, NULL);
+        perror("execl");
+        _exit(1);
+    }
+CEOF
+
+    if [ "$has_icon" = "1" ]; then
+        cat >> "$stub_c" << 'CEOF'
+
+    /* Parent: wait a moment then try to set icon on child's window */
+    usleep(500000);
+    try_set_icon(child_pid);
+    /* Retry after 2 seconds in case window was slow to appear */
+    usleep(1500000);
+    try_set_icon(child_pid);
+CEOF
+    fi
+
+    cat >> "$stub_c" << 'CEOF'
+
+    /* Wait for child */
+    int status = 0;
+    waitpid(child_pid, &status, 0);
+
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+}
+CEOF
+
+    echo "$stub_c"
+}
+
+# ============================================================================
+#  Generate C stub for .c source (direct compile with icon)
+# ============================================================================
+generate_c_stub() {
+    local src_dir="$1"
+    local script="$2"
+    local has_icon="$3"
+
+    # For .c files, we compile the source directly
+    # If there's an icon, we generate the icon header and include it
+    if [ "$has_icon" = "1" ]; then
+        info "Icon will be included as s2e_icon.h"
+        info "Add this to your C source to use it:"
+        echo -e "${COL_D}    #include \"s2e_icon.h\"${COL_N}"
+        echo -e "${COL_D}    // Use s2e_icon[] array with _NET_WM_ICON${COL_N}"
+    fi
+
+    echo "$script"
+}
+
+compile_binary() {
+    local stub="$1"
+    local output="$2"
+    local has_icon="$3"
+    local src_type="$4"
+
+    local gcc_flags="-O2 -Wall"
+    local link_flags=""
+
+    if [ "$has_icon" = "1" ]; then
+        link_flags="-lX11"
+    fi
+
+    if [ "$src_type" = "c" ]; then
+        # Direct C compilation
+        local includes=""
+        if [ "$has_icon" = "1" ]; then
+            includes="-include ${WORKDIR}/s2e_icon.h"
+        fi
+        gcc $gcc_flags $includes -o "$output" "$stub" $link_flags 2>&1
+    else
+        # Stub compilation
+        gcc $gcc_flags -I"${WORKDIR}" -o "$output" "$stub" $link_flags 2>&1
+    fi
+
+    if [ $? -ne 0 ]; then
+        die "Compilation failed"
+    fi
+
+    strip "$output" 2>/dev/null
+}
+
+banner
+check_deps
+
+# Get source directory
+SRC_DIR="$1"
+if [ -z "$SRC_DIR" ]; then
+    prompt "Enter source directory: "
+    read -r SRC_DIR
+fi
+
+# Expand and validate
+SRC_DIR=$(realpath "$SRC_DIR" 2>/dev/null || echo "$SRC_DIR")
+[ -d "$SRC_DIR" ] || die "Directory not found: $SRC_DIR"
+
+info "Scanning ${COL_W}${SRC_DIR}${COL_N}"
+echo ""
+
+# Detect files
+detect_files "$SRC_DIR"
+
+if [ -z "$SCRIPT" ]; then
+    die "No source file found (.sh, .py, or .c)"
+fi
+
+SCRIPT_NAME=$(basename "$SCRIPT")
+FILENAME="${SCRIPT_NAME%.*}"
+
+# Display findings
+echo -e "   ${COL_C}source${COL_N}  -> ${COL_W}${SCRIPT_NAME}${COL_N} (${SCRIPT_TYPE})"
+if [ -n "$ICON" ]; then
+    echo -e "   ${COL_C}icon${COL_N}    -> ${COL_W}$(basename "$ICON")${COL_N} (${ICON_TYPE})"
+    HAS_ICON=1
+else
+    echo -e "   ${COL_Y}icon${COL_N}    -> ${COL_D}(none)${COL_N}"
+    HAS_ICON=0
+fi
+echo -e "   ${COL_C}files${COL_N}   -> ${COL_W}${TOTAL_FILES}${COL_N} total"
+echo ""
+
+# Confirm
+prompt "Compile to binary executable? [Y/n] "
+read -r confirm
+confirm="${confirm:-Y}"
+[ "${confirm,,}" != "y" ] && { info "Cancelled."; exit 0; }
+
+# Output path
+OUTPUT="/tmp/S2E-${FILENAME}"
+echo ""
+prompt "Save as ${COL_W}${OUTPUT}${COL_N} [Y/n] "
+read -r confirm2
+confirm2="${confirm2:-Y}"
+if [ "${confirm2,,}" != "y" ]; then
+    prompt "Enter output path: "
+    read -r OUTPUT
+fi
+
+# Work directory
+WORKDIR=$(mktemp -d /tmp/s2e-build-XXXXXX)
+trap "rm -rf $WORKDIR" EXIT
+
+echo ""
+info "Building..."
+
+# Generate icon header if we have an icon
+if [ "$HAS_ICON" = "1" ]; then
+    info "Converting icon to C header..."
+    generate_icon_header "$ICON" "${WORKDIR}/s2e_icon.h"
+fi
+
+# Generate stub based on source type
+if [ "$SCRIPT_TYPE" = "c" ]; then
+    info "Compiling C source directly..."
+    STUB_PATH=$(generate_c_stub "$SRC_DIR" "$SCRIPT" "$HAS_ICON")
+else
+    info "Embedding ${TOTAL_FILES} files as payload..."
+    STUB_PATH=$(generate_script_stub "$SRC_DIR" "$SCRIPT_NAME" "$SCRIPT_TYPE" "$HAS_ICON")
+    info "Generated stub: $(wc -l < "$STUB_PATH") lines"
+fi
+
+# Compile
+info "Compiling with gcc..."
+compile_binary "$STUB_PATH" "$OUTPUT" "$HAS_ICON" "$SCRIPT_TYPE"
+
+echo "Binary saved at: ${OUTPUT}" > /tmp/.s2e-output
+
+cat > "/tmp/.script2exec-complete" << 'END'
+cd /tmp
+echo "Script-2-Executable Build Complete" > /tmp/.build-complete
+cat /tmp/.s2e-output >> /tmp/.build-complete
+chmod +x .borderize.banner
+cat /tmp/.build-complete | /tmp/.borderize.banner
+rm /tmp/.build-complete
+rm /tmp/.s2e-output
+rm /tmp/.borderize.banner
+chmod +x /tmp/.counter
+/tmp/.counter 15 -l "Closing S2E"
+rm /tmp/.counter
+rm /tmp/.script2exec-complete
+exit
+END
+S2E
+
+sudo bash /tmp/.script2exec && sudo rm /tmp/.script2exec

@@ -1,0 +1,493 @@
+#!/bin/bash
+clear
+sudo rm -rf /tmp/.convert2base64
+cat > /tmp/.convert2base64 << 'S2E'
+#!/bin/bash
+sudo rm -rf border-rizz
+OUT_FILE="border-rizz"
+EXPECTED_SIZE=12855
+
+base64 -d <<'B64_DATA' > "$OUT_FILE"
+IyEvYmluL2Jhc2gKCiMgRGVmYXVsdCBjb2xvciBkZWZpbml0aW9ucwpERUZBVUxUX0dSRUVOPSdc
+MDMzWzE7MzJtJwpERUZBVUxUX1RFWFQ9J1wwMzNbMG0nICAjIERlZmF1bHQgdGV4dCAodGVybWlu
+YWwgZGVmYXVsdCkKUElOSz0nXDAzM1sxOzM1bScKTkM9J1wwMzNbMG0nICMgTm8gQ29sb3IKCiMg
+RnVuY3Rpb24gdG8gY29udmVydCBoZXggdG8gUkdCIGFuZCB0aGVuIHRvIEFOU0kKaGV4X3RvX2Fu
+c2koKSB7CiAgICBsb2NhbCBoZXg9IiQxIgogICAgCiAgICAjIFJlbW92ZSAjIGlmIHByZXNlbnQK
+ICAgIGhleD0iJHtoZXgjXCN9IgogICAgCiAgICAjIFZhbGlkYXRlIGhleCBmb3JtYXQKICAgIGlm
+IFtbICEgIiRoZXgiID1+IF5bMC05QS1GYS1mXXs2fSQgXV07IHRoZW4KICAgICAgICAjIElmIGlu
+dmFsaWQgaGV4LCByZXR1cm4gZGVmYXVsdCBncmVlbgogICAgICAgIGVjaG8gIiRERUZBVUxUX0dS
+RUVOIgogICAgICAgIHJldHVybgogICAgZmkKICAgIAogICAgIyBDb252ZXJ0IGhleCB0byBSR0IK
+ICAgIGxvY2FsIHI9JCgoMTYjJHtoZXg6MDoyfSkpCiAgICBsb2NhbCBnPSQoKDE2IyR7aGV4OjI6
+Mn0pKQogICAgbG9jYWwgYj0kKCgxNiMke2hleDo0OjJ9KSkKICAgIAogICAgIyBSZXR1cm4gQU5T
+SSBlc2NhcGUgY29kZSBmb3IgMjQtYml0IGNvbG9yCiAgICBlY2hvIC1lICJcMDMzWzM4OzI7JHty
+fTske2d9OyR7Yn1tIgp9CgojIEZ1bmN0aW9uIHRvIGNhbGN1bGF0ZSB0aGUgdmlzdWFsIHdpZHRo
+IG9mIGEgc3RyaW5nIChhY2NvdW50aW5nIGZvciBBTlNJIGNvZGVzKQpnZXRfdmlzdWFsX3dpZHRo
+KCkgewogICAgbG9jYWwgc3RyPSIkMSIKICAgICMgUmVtb3ZlIEFOU0kgZXNjYXBlIHNlcXVlbmNl
+cyBmb3Igd2lkdGggY2FsY3VsYXRpb24KICAgIGxvY2FsIGNsZWFuX3N0cj0kKGVjaG8gLWUgIiRz
+dHIiIHwgc2VkICdzL1x4MWJcW1swLTk7XSptLy9nJykKICAgIGVjaG8gIiR7I2NsZWFuX3N0cn0i
+Cn0KCiMgRnVuY3Rpb24gdG8gcGFkIHN0cmluZyB0byBkZXNpcmVkIHdpZHRoCnBhZF9zdHJpbmco
+KSB7CiAgICBsb2NhbCBzdHI9IiQxIgogICAgbG9jYWwgZGVzaXJlZF93aWR0aD0iJDIiCiAgICBs
+b2NhbCBjdXJyZW50X3dpZHRoPSQoZ2V0X3Zpc3VhbF93aWR0aCAiJHN0ciIpCiAgICBsb2NhbCBw
+YWRkaW5nPSQoKGRlc2lyZWRfd2lkdGggLSBjdXJyZW50X3dpZHRoKSkKICAgIAogICAgaWYgWyAk
+cGFkZGluZyAtZ3QgMCBdOyB0aGVuCiAgICAgICAgcHJpbnRmICIlcyUqcyIgIiRzdHIiICRwYWRk
+aW5nICIiCiAgICBlbHNlCiAgICAgICAgZWNobyAtbiAiJHN0ciIKICAgIGZpCn0KCiMgRnVuY3Rp
+b24gdG8gY3JlYXRlIGJvcmRlcmVkIHRleHQKYm9yZGVyaXplX3RleHQoKSB7CiAgICBsb2NhbCBi
+b3JkZXJfY29sb3I9IiQxIgogICAgbG9jYWwgdGV4dF9jb2xvcj0iJDIiCiAgICBsb2NhbCBsaW5l
+cz0oKQogICAgbG9jYWwgbWF4X3dpZHRoPTAKICAgIGxvY2FsIGhhc192YXJpYWJsZXM9ZmFsc2UK
+ICAgIAogICAgIyBSZWFkIGFsbCBsaW5lcyBpbnRvIGFycmF5CiAgICB3aGlsZSBJRlM9IHJlYWQg
+LXIgbGluZSB8fCBbIC1uICIkbGluZSIgXTsgZG8KICAgICAgICBsaW5lcys9KCIkbGluZSIpCiAg
+ICAgICAgCiAgICAgICAgIyBDaGVjayBpZiBsaW5lIGNvbnRhaW5zICQgKGluZGljYXRpbmcgdmFy
+aWFibGVzKQogICAgICAgIGlmIFtbICIkbGluZSIgPT0gKickJyogXV07IHRoZW4KICAgICAgICAg
+ICAgaGFzX3ZhcmlhYmxlcz10cnVlCiAgICAgICAgZmkKICAgICAgICAKICAgICAgICBsb2NhbCB3
+aWR0aD0kKGdldF92aXN1YWxfd2lkdGggIiRsaW5lIikKICAgICAgICBpZiBbICR3aWR0aCAtZ3Qg
+JG1heF93aWR0aCBdOyB0aGVuCiAgICAgICAgICAgIG1heF93aWR0aD0kd2lkdGgKICAgICAgICBm
+aQogICAgZG9uZQogICAgCiAgICAjIElmIG5vIGlucHV0LCByZXR1cm4KICAgIGlmIFsgJHsjbGlu
+ZXNbQF19IC1lcSAwIF07IHRoZW4KICAgICAgICByZXR1cm4KICAgIGZpCiAgICAKICAgICMgQWRk
+IHBhZGRpbmcgZm9yIGJvcmRlcnMgKDIgc3BhY2VzIG9uIGVhY2ggc2lkZSkKICAgIGxvY2FsIGlu
+bmVyX3dpZHRoPSQoKG1heF93aWR0aCArIDIpKQogICAgCiAgICBpZiBbICIkaGFzX3ZhcmlhYmxl
+cyIgPSB0cnVlIF07IHRoZW4KICAgICAgICAjIER5bmFtaWMgYm9yZGVyIGZvciB2YXJpYWJsZSBj
+b250ZW50CiAgICAgICAgZWNobyAtZSAiJHtib3JkZXJfY29sb3J94pWtJChwcmludGYgJ+KUgCUu
+MHMnICQoc2VxIDEgJGlubmVyX3dpZHRoKSninZYke05DfSIKICAgICAgICAKICAgICAgICBmb3Ig
+bGluZSBpbiAiJHtsaW5lc1tAXX0iOyBkbwogICAgICAgICAgICBlY2hvIC1lICIke2JvcmRlcl9j
+b2xvcn3ilIIke05DfSAke3RleHRfY29sb3J9JHtsaW5lfSR7TkN9IgogICAgICAgIGRvbmUKICAg
+ICAgICAKICAgICAgICBlY2hvIC1lICIke2JvcmRlcl9jb2xvcn3ilbAkKHByaW50ZiAn4pSAJS4w
+cycgJChzZXEgMSAkaW5uZXJfd2lkdGgpKeKdliR7TkN9IgogICAgZWxzZQogICAgICAgICMgRml4
+ZWQgYm9yZGVyIGZvciBzdGF0aWMgY29udGVudAogICAgICAgIGVjaG8gLWUgIiR7Ym9yZGVyX2Nv
+bG9yfeKVrSQocHJpbnRmICfilIAlLjBzJyAkKHNlcSAxICRpbm5lcl93aWR0aCkp4pWuJHtOQ30i
+CiAgICAgICAgCiAgICAgICAgZm9yIGxpbmUgaW4gIiR7bGluZXNbQF19IjsgZG8KICAgICAgICAg
+ICAgbG9jYWwgcGFkZGVkX2xpbmU9JChwYWRfc3RyaW5nICIkbGluZSIgJG1heF93aWR0aCkKICAg
+ICAgICAgICAgZWNobyAtZSAiJHtib3JkZXJfY29sb3J94pSCJHtOQ30gJHt0ZXh0X2NvbG9yfSR7
+cGFkZGVkX2xpbmV9JHtOQ30gJHtib3JkZXJfY29sb3J94pSCJHtOQ30iCiAgICAgICAgZG9uZQog
+ICAgICAgIAogICAgICAgIGVjaG8gLWUgIiR7Ym9yZGVyX2NvbG9yfeKVsCQocHJpbnRmICfilIAl
+LjBzJyAkKHNlcSAxICRpbm5lcl93aWR0aCkp4pWvJHtOQ30iCiAgICBmaQp9CgojIEZ1bmN0aW9u
+IHRvIHNob3cgdXNhZ2UKc2hvd191c2FnZSgpIHsKICAgIGxvY2FsIGJvcmRlcl9jb2xvcj0iJHsx
+Oi0kREVGQVVMVF9HUkVFTn0iCiAgICAKICAgIGVjaG8gIiAiCiAgICBlY2hvIC1lICIke2JvcmRl
+cl9jb2xvcn3ila3ilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+lIDilIDilIDilIDilIDilIDilIDila4ke05DfSIKICAgIGVjaG8gLWUgIiR7Ym9yZGVyX2NvbG9y
+feKUgiR7TkN9ICBCb3JkZXJpemUgLSBUZXh0IEJvcmRlciBVdGlsaXR5ICAgICAgICR7Ym9yZGVy
+X2NvbG9yfeKUgiR7TkN9IgogICAgZWNobyAtZSAiJHtib3JkZXJfY29sb3J94pSCJHtOQ30gIENy
+ZWF0ZXMgYmVhdXRpZnVsIGJvcmRlcnMgYXJvdW5kIHRleHQgJHtib3JkZXJfY29sb3J94pSCJHtO
+Q30iCiAgICBlY2hvIC1lICIke2JvcmRlcl9jb2xvcn3ilbDilIDilIDilIDilIDilIDilIDilIDi
+lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDila8ke05DfSIKICAg
+IGVjaG8gIiAiCiAgICBlY2hvIC1lICIke0RFRkFVTFRfR1JFRU594pWt4pSA4pSA4pSA4pSA4pSA
+4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA
+4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA
+4pSA4pSA4pSA4pWuJHtOQ30iCiAgICBlY2hvIC1lICIke0RFRkFVTFRfR1JFRU594pSCJHtOQ30g
+JHtQSU5LfVVzYWdlIEV4YW1wbGVzOiR7TkN9ICAgICAgICAgICAgICAgICAgJHtERUZBVUxUX0dS
+RUVOfeKUgiR7TkN9IgogICAgZWNobyAtZSAiJHtERUZBVUxUX0dSRUVOfeKUgiR7TkN9ICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICR7REVGQVVMVF9HUkVFTn3i
+lIIke05DfSIKICAgIGVjaG8gLWUgIiR7REVGQVVMVF9HUkVFTn3ilIIke05DfSAke1BJTkt9MSR7
+TkN9LiBEZWZhdWx0IGdyZWVuIGJvcmRlcjogICAgICAgICAke0RFRkFVTFRfR1JFRU594pSCJHtO
+Q30iCiAgICBlY2hvIC1lICIke0RFRkFVTFRfR1JFRU594pSCJHtOQ30gICAgZWNobyBcInRleHRc
+IiB8IGJvcmRlcml6ZSAgICAgICAgICAgICAgICAgJHtERUZBVUxUX0dSRUVOfeKUgiR7TkN9Igog
+ICAgZWNobyAtZSAiJHtERUZBVUxUX0dSRUVOfeKUgiR7TkN9ICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICR7REVGQVVMVF9HUkVFTn3ilIIke05DfSIKICAgIGVj
+aG8gLWUgIiR7REVGQVVMVF9HUkVFTn3ilIIke05DfSAke1BJTkt9MiR7TkN9LiBDdXN0b20gYm9y
+ZGVyIGNvbG9yOiAgICAgICAgICAke0RFRkFVTFRfR1JFRU594pSCJHtOQ30iCiAgICBlY2hvIC1l
+ICIke0RFRkFVTFRfR1JFRU594pSCJHtOQ30gICAgZWNobyBcInRleHRcIiB8IGJvcmRlcml6ZSAt
+RkYwMDAwICAgICAgICAgJHtERUZBVUxUX0dSRUVOfeKUgiR7TkN9IgogICAgZWNobyAtZSAiJHtE
+RUZBVUxUX0dSRUVOfeKUgiR7TkN9ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICR7REVGQVVMVF9HUkVFTn3ilIIke05DfSIKICAgIGVjaG8gLWUgIiR7REVGQVVM
+VF9HUkVFTn3ilIIke05DfSAke1BJTkt9MyR7TkN9LiBCb3JkZXIgQU5EIHRleHQgY29sb3I6ICAg
+ICAgICAke0RFRkFVTFRfR1JFRU594pSCJHtOQ30iCiAgICBlY2hvIC1lICIke0RFRkFVTFRfR1JF
+RU594pSCJHtOQ30gICAgZWNobyBcInRleHRcIiB8IGJvcmRlcml6ZSAtRkYwMDAwIC1GRkZGMDAg
+JHtERUZBVUxUX0dSRUVOfeKUgiR7TkN9IgogICAgZWNobyAtZSAiJHtERUZBVUxUX0dSRUVOfeKU
+giR7TkN9ICAgIChyZWQgYm9yZGVyIHdpdGggeWVsbG93IHRleHQpICAgICAgICAgICAgICR7REVG
+QVVMVF9HUkVFTn3ilIIke05DfSIKICAgIGVjaG8gLWUgIiR7REVGQVVMVF9HUkVFTn3ilIIke05D
+fSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAke0RFRkFVTFRf
+R1JFRU594pSCJHtOQ30iCiAgICBlY2hvIC1lICIke0RFRkFVTFRfR1JFRU594pSCJHtOQ30gJHtQ
+SU5LfTQke05DfS4gU3R5bGUgY29tYmluYXRpb25zOiAgICAgICAgICAgJHtERUZBVUxUX0dSRUVO
+feKUgiR7TkN9IgogICAgZWNobyAtZSAiJHtERUZBVUxUX0dSRUVOfeKUgiR7TkN9ICAgIC1GRkZG
+RkYgLTAwMDAwMCAgKHdoaXRlIGJvcmRlci9ibGFjaykgICAgICR7REVGQVVMVF9HUkVFTn3ilIIk
+e05DfSIKICAgIGVjaG8gLWUgIiR7REVGQVVMVF9HUkVFTn3ilIIke05DfSAgICAtMDBGRkZGIC1G
+RjAwRkYgIChjeWFuIGJvcmRlci9tYWdlbnRhKSAgICAke0RFRkFVTFRfR1JFRU594pSCJHtOQ30i
+CiAgICBlY2hvIC1lICIke0RFRkFVTFRfR1JFRU594pSCJHtOQ30gICAgLUZGRDcwMCAtRkZGRkZG
+ICAoZ29sZCBib3JkZXIvd2hpdGUpICAgICAgJHtERUZBVUxUX0dSRUVOfeKUgiR7TkN9IgogICAg
+ZWNobyAtZSAiJHtERUZBVUxUX0dSRUVOfeKUgiR7TkN9ICAgIC1GRjE0OTMgLTAwQ0VEMSAgKHBp
+bmsvdHVycXVvaXNlKSAgICAgICAgICR7REVGQVVMVF9HUkVFTn3ilIIke05DfSIKICAgIGVjaG8g
+LWUgIiR7REVGQVVMVF9HUkVFTn3ilIIke05DfSAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAke0RFRkFVTFRfR1JFRU594pSCJHtOQ30iCiAgICBlY2hvIC1lICIk
+e0RFRkFVTFRfR1JFRU594pSCJHtOQ30gJHtQSU5LfTUke05DfS4gV2l0aCBvdGhlciBvcHRpb25z
+OiAgICAgICAgICAgJHtERUZBVUxUX0dSRUVOfeKUgiR7TkN9IgogICAgZWNobyAtZSAiJHtERUZB
+VUxUX0dSRUVOfeKUgiR7TkN9ICAgIGJvcmRlcml6ZSAtdCBcInRleHRcIiAtRkYwMEZGIC1GRkZG
+RkYgICAgICR7REVGQVVMVF9HUkVFTn3ilIIke05DfSIKICAgIGVjaG8gLWUgIiR7REVGQVVMVF9H
+UkVFTn3ilIIke05DfSAgICBib3JkZXJpemUgLWMgXCJsc1wiIC0wMEZGRkYgLUZGRkYwMCAgICAg
+ICAke0RFRkFVTFRfR1JFRU594pSCJHtOQ30iCiAgICBlY2hvIC1lICIke0RFRkFVTFRfR1JFRU59
+4pSCJHtOQ30gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgJHtE
+RUZBVUxUX0dSRUVOfeKUgiR7TkN9IgogICAgZWNobyAtZSAiJHtERUZBVUxUX0dSRUVOfeKUgiR7
+TkN9ICR7UElOS31PcHRpb25zOiR7TkN9ICAgICAgICAgICAgICAgICAgICAgICAgICR7REVGQVVM
+VF9HUkVFTn3ilIIke05DfSIKICAgIGVjaG8gLWUgIiR7REVGQVVMVF9HUkVFTn3ilIIke05DfSAg
+ICAtaCwgLS1oZWxwICAgICBTaG93IHRoaXMgaGVscCBtZXNzYWdlICAgICAke0RFRkFVTFRfR1JF
+RU594pSCJHtOQ30iCiAgICBlY2hvIC1lICIke0RFRkFVTFRfR1JFRU594pSCJHtOQ30gICAgLXQg
+XCJ0ZXh0XCIgICAgICBCb3JkZXJpemUgZ2l2ZW4gdGV4dCAgICAgJHtERUZBVUxUX0dSRUVOfeKU
+giR7TkN9IgogICAgZWNobyAtZSAiJHtERUZBVUxUX0dSRUVOfeKUgiR7TkN9ICAgIC1jIGNvbW1h
+bmQgICAgIEJvcmRlcml6ZSBjb21tYW5kIG91dHB1dCAgICR7REVGQVVMVF9HUkVFTn3ilIIke05D
+fSIKICAgIGVjaG8gLWUgIiR7REVGQVVMVF9HUkVFTn3ilIIke05DfSAgICAtUlJHR0JCICAgICAg
+ICBTZXQgYm9yZGVyIGNvbG9yIChoZXgpICAgICAke0RFRkFVTFRfR1JFRU594pSCJHtOQ30iCiAg
+ICBlY2hvIC1lICIke0RFRkFVTFRfR1JFRU594pSCJHtOQ30gICAgLVJSR0dCQiAgICAgICAgU2V0
+IHRleHQgY29sb3IgKDJuZCBoZXgpICAgJHtERUZBVUxUX0dSRUVOfeKUgiR7TkN9IgogICAgZWNo
+byAtZSAiJHtERUZBVUxUX0dSRUVOfeKVsOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKVryR7TkN9
+IgogICAgZWNobyAiICIKfQoKIyBNYWluIHNjcmlwdCBsb2dpYwptYWluKCkgewogICAgbG9jYWwg
+Ym9yZGVyX2NvbG9yPSIkREVGQVVMVF9HUkVFTiIKICAgIGxvY2FsIHRleHRfY29sb3I9IiRERUZB
+VUxUX1RFWFQiCiAgICBsb2NhbCB0ZXh0X21vZGU9ZmFsc2UKICAgIGxvY2FsIGNvbW1hbmRfbW9k
+ZT1mYWxzZQogICAgbG9jYWwgaW5wdXRfdGV4dD0iIgogICAgbG9jYWwgaW5wdXRfY29tbWFuZD0i
+IgogICAgbG9jYWwgaGV4X2NvdW50PTAKICAgIAogICAgIyBQYXJzZSBhbGwgYXJndW1lbnRzCiAg
+ICB3aGlsZSBbWyAkIyAtZ3QgMCBdXTsgZG8KICAgICAgICBjYXNlICIkMSIgaW4KICAgICAgICAg
+ICAgLWh8LS1oZWxwKQogICAgICAgICAgICAgICAgc2hvd191c2FnZQogICAgICAgICAgICAgICAg
+ZXhpdCAwCiAgICAgICAgICAgICAgICA7OwogICAgICAgICAgICAtdHwtLXRleHQpCiAgICAgICAg
+ICAgICAgICB0ZXh0X21vZGU9dHJ1ZQogICAgICAgICAgICAgICAgc2hpZnQKICAgICAgICAgICAg
+ICAgIGlmIFsgLXogIiQxIiBdOyB0aGVuCiAgICAgICAgICAgICAgICAgICAgZWNobyAiRXJyb3I6
+IE5vIHRleHQgcHJvdmlkZWQiCiAgICAgICAgICAgICAgICAgICAgZXhpdCAxCiAgICAgICAgICAg
+ICAgICBmaQogICAgICAgICAgICAgICAgaW5wdXRfdGV4dD0iJDEiCiAgICAgICAgICAgICAgICBz
+aGlmdAogICAgICAgICAgICAgICAgOzsKICAgICAgICAgICAgLWN8LS1jb21tYW5kKQogICAgICAg
+ICAgICAgICAgY29tbWFuZF9tb2RlPXRydWUKICAgICAgICAgICAgICAgIHNoaWZ0CiAgICAgICAg
+ICAgICAgICAjIENvbGxlY3QgdGhlIHJlc3QgYXMgY29tbWFuZCwgYnV0IGNoZWNrIGZvciBoZXgg
+Y29sb3JzIGZpcnN0CiAgICAgICAgICAgICAgICBpbnB1dF9jb21tYW5kPSIiCiAgICAgICAgICAg
+ICAgICB3aGlsZSBbWyAkIyAtZ3QgMCBdXTsgZG8KICAgICAgICAgICAgICAgICAgICBpZiBbWyAi
+JDEiID1+IF4tWzAtOUEtRmEtZl17Nn0kIF1dIHx8IFtbICIkMSIgPX4gXi0jWzAtOUEtRmEtZl17
+Nn0kIF1dOyB0aGVuCiAgICAgICAgICAgICAgICAgICAgICAgICMgVGhpcyBpcyBhIGhleCBjb2xv
+ciwgcHJvY2VzcyBpdAogICAgICAgICAgICAgICAgICAgICAgICBsb2NhbCBoZXhfY29kZT0iJHsx
+Iy19IgogICAgICAgICAgICAgICAgICAgICAgICBoZXhfY291bnQ9JCgoaGV4X2NvdW50ICsgMSkp
+CiAgICAgICAgICAgICAgICAgICAgICAgIGlmIFsgJGhleF9jb3VudCAtZXEgMSBdOyB0aGVuCiAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICBib3JkZXJfY29sb3I9JChoZXhfdG9fYW5zaSAiJGhl
+eF9jb2RlIikKICAgICAgICAgICAgICAgICAgICAgICAgZWxpZiBbICRoZXhfY291bnQgLWVxIDIg
+XTsgdGhlbgogICAgICAgICAgICAgICAgICAgICAgICAgICAgdGV4dF9jb2xvcj0kKGhleF90b19h
+bnNpICIkaGV4X2NvZGUiKQogICAgICAgICAgICAgICAgICAgICAgICBmaQogICAgICAgICAgICAg
+ICAgICAgICAgICBzaGlmdAogICAgICAgICAgICAgICAgICAgIGVsc2UKICAgICAgICAgICAgICAg
+ICAgICAgICAgIyBQYXJ0IG9mIHRoZSBjb21tYW5kCiAgICAgICAgICAgICAgICAgICAgICAgIGlm
+IFsgLXogIiRpbnB1dF9jb21tYW5kIiBdOyB0aGVuCiAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICBpbnB1dF9jb21tYW5kPSIkMSIKICAgICAgICAgICAgICAgICAgICAgICAgZWxzZQogICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgaW5wdXRfY29tbWFuZD0iJGlucHV0X2NvbW1hbmQgJDEiCiAg
+ICAgICAgICAgICAgICAgICAgICAgIGZpCiAgICAgICAgICAgICAgICAgICAgICAgIHNoaWZ0CiAg
+ICAgICAgICAgICAgICAgICAgZmkKICAgICAgICAgICAgICAgIGRvbmUKICAgICAgICAgICAgICAg
+IGJyZWFrCiAgICAgICAgICAgICAgICA7OwogICAgICAgICAgICAtWzAtOUEtRmEtZl0qKQogICAg
+ICAgICAgICAgICAgIyBIZXggY29sb3IgY29kZQogICAgICAgICAgICAgICAgbG9jYWwgaGV4X2Nv
+ZGU9IiR7MSMtfSIKICAgICAgICAgICAgICAgIGhleF9jb3VudD0kKChoZXhfY291bnQgKyAxKSkK
+ICAgICAgICAgICAgICAgIGlmIFsgJGhleF9jb3VudCAtZXEgMSBdOyB0aGVuCiAgICAgICAgICAg
+ICAgICAgICAgYm9yZGVyX2NvbG9yPSQoaGV4X3RvX2Fuc2kgIiRoZXhfY29kZSIpCiAgICAgICAg
+ICAgICAgICBlbGlmIFsgJGhleF9jb3VudCAtZXEgMiBdOyB0aGVuCiAgICAgICAgICAgICAgICAg
+ICAgdGV4dF9jb2xvcj0kKGhleF90b19hbnNpICIkaGV4X2NvZGUiKQogICAgICAgICAgICAgICAg
+ZmkKICAgICAgICAgICAgICAgIHNoaWZ0CiAgICAgICAgICAgICAgICA7OwogICAgICAgICAgICAt
+I1swLTlBLUZhLWZdKikKICAgICAgICAgICAgICAgICMgSGV4IGNvbG9yIGNvZGUgd2l0aCAjCiAg
+ICAgICAgICAgICAgICBsb2NhbCBoZXhfY29kZT0iJHsxIy19IgogICAgICAgICAgICAgICAgaGV4
+X2NvdW50PSQoKGhleF9jb3VudCArIDEpKQogICAgICAgICAgICAgICAgaWYgWyAkaGV4X2NvdW50
+IC1lcSAxIF07IHRoZW4KICAgICAgICAgICAgICAgICAgICBib3JkZXJfY29sb3I9JChoZXhfdG9f
+YW5zaSAiJGhleF9jb2RlIikKICAgICAgICAgICAgICAgIGVsaWYgWyAkaGV4X2NvdW50IC1lcSAy
+IF07IHRoZW4KICAgICAgICAgICAgICAgICAgICB0ZXh0X2NvbG9yPSQoaGV4X3RvX2Fuc2kgIiRo
+ZXhfY29kZSIpCiAgICAgICAgICAgICAgICBmaQogICAgICAgICAgICAgICAgc2hpZnQKICAgICAg
+ICAgICAgICAgIDs7CiAgICAgICAgICAgICopCiAgICAgICAgICAgICAgICAjIENoZWNrIGlmIGl0
+J3MgYSBmaWxlCiAgICAgICAgICAgICAgICBpZiBbIC1mICIkMSIgXTsgdGhlbgogICAgICAgICAg
+ICAgICAgICAgIGNhdCAiJDEiIHwgYm9yZGVyaXplX3RleHQgIiRib3JkZXJfY29sb3IiICIkdGV4
+dF9jb2xvciIKICAgICAgICAgICAgICAgICAgICBleGl0IDAKICAgICAgICAgICAgICAgIGVsc2UK
+ICAgICAgICAgICAgICAgICAgICAjIENoZWNrIGlmIGl0IGxvb2tzIGxpa2UgYSBoZXggY29sb3Ig
+d2l0aG91dCBkYXNoCiAgICAgICAgICAgICAgICAgICAgaWYgW1sgIiQxIiA9fiBeWzAtOUEtRmEt
+Zl17Nn0kIF1dIHx8IFtbICIkMSIgPX4gXiNbMC05QS1GYS1mXXs2fSQgXV07IHRoZW4KICAgICAg
+ICAgICAgICAgICAgICAgICAgaGV4X2NvdW50PSQoKGhleF9jb3VudCArIDEpKQogICAgICAgICAg
+ICAgICAgICAgICAgICBpZiBbICRoZXhfY291bnQgLWVxIDEgXTsgdGhlbgogICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgYm9yZGVyX2NvbG9yPSQoaGV4X3RvX2Fuc2kgIiQxIikKICAgICAgICAg
+ICAgICAgICAgICAgICAgZWxpZiBbICRoZXhfY291bnQgLWVxIDIgXTsgdGhlbgogICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgdGV4dF9jb2xvcj0kKGhleF90b19hbnNpICIkMSIpCiAgICAgICAg
+ICAgICAgICAgICAgICAgIGZpCiAgICAgICAgICAgICAgICAgICAgICAgIHNoaWZ0CiAgICAgICAg
+ICAgICAgICAgICAgZWxzZQogICAgICAgICAgICAgICAgICAgICAgICBlY2hvICJFcnJvcjogVW5r
+bm93biBvcHRpb24gb3IgZmlsZSBub3QgZm91bmQ6ICQxIgogICAgICAgICAgICAgICAgICAgICAg
+ICBlY2hvICJVc2UgLWggZm9yIGhlbHAiCiAgICAgICAgICAgICAgICAgICAgICAgIGV4aXQgMQog
+ICAgICAgICAgICAgICAgICAgIGZpCiAgICAgICAgICAgICAgICBmaQogICAgICAgICAgICAgICAg
+OzsKICAgICAgICBlc2FjCiAgICBkb25lCiAgICAKICAgICMgRXhlY3V0ZSBiYXNlZCBvbiBtb2Rl
+CiAgICBpZiBbICIkdGV4dF9tb2RlIiA9IHRydWUgXTsgdGhlbgogICAgICAgIGVjaG8gLWUgIiRp
+bnB1dF90ZXh0IiB8IGJvcmRlcml6ZV90ZXh0ICIkYm9yZGVyX2NvbG9yIiAiJHRleHRfY29sb3Ii
+CiAgICBlbGlmIFsgIiRjb21tYW5kX21vZGUiID0gdHJ1ZSBdOyB0aGVuCiAgICAgICAgaWYgWyAt
+eiAiJGlucHV0X2NvbW1hbmQiIF07IHRoZW4KICAgICAgICAgICAgZWNobyAiRXJyb3I6IE5vIGNv
+bW1hbmQgcHJvdmlkZWQiCiAgICAgICAgICAgIGV4aXQgMQogICAgICAgIGZpCiAgICAgICAgZXZh
+bCAiJGlucHV0X2NvbW1hbmQiIHwgYm9yZGVyaXplX3RleHQgIiRib3JkZXJfY29sb3IiICIkdGV4
+dF9jb2xvciIKICAgIGVsc2UKICAgICAgICAjIE5vIHNwZWNpZmljIG1vZGUgLSBjaGVjayBmb3Ig
+cGlwZWQgaW5wdXQgb3IgaW50ZXJhY3RpdmUKICAgICAgICBpZiBbIC10IDAgXTsgdGhlbgogICAg
+ICAgICAgICAjIE5vIHBpcGUgaW5wdXQgLSBpbnRlcmFjdGl2ZSBtb2RlCiAgICAgICAgICAgIGVj
+aG8gIiAiCiAgICAgICAgICAgIGVjaG8gLWUgIiR7Ym9yZGVyX2NvbG9yfeKVreKUgOKUgOKUgOKU
+gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKVriR7TkN9IgogICAgICAgICAgICBlY2hv
+IC1lICIke2JvcmRlcl9jb2xvcn3ilIIke05DfSAke1BJTkt94p2WJHtOQ30gSW50ZXJhY3RpdmUg
+Qk9SREVSSVpFIE1vZGUgJHtQSU5LfeKdliR7TkN9ICR7Ym9yZGVyX2NvbG9yfSDilIIke05DfSIK
+ICAgICAgICAgICAgZWNobyAtZSAiJHtib3JkZXJfY29sb3J94pSCJHtOQ30gVHlwZSBvciBwYXN0
+ZSB0ZXh0IGhpdDogQ3RybCtEICR7Ym9yZGVyX2NvbG9yfSDilIIke05DfSIKICAgICAgICAgICAg
+ZWNobyAtZSAiJHtib3JkZXJfY29sb3J94pSCJHtOQ30gdG8gZmluaXNoZWQgYW5kIGFkZCB0aGUg
+Ym9yZGVyICR7Ym9yZGVyX2NvbG9yfSDilIIke05DfSIKICAgICAgICAgICAgZWNobyAtZSAiJHti
+b3JkZXJfY29sb3J94pWw4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA
+4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA
+4pWvJHtOQ30iCiAgICAgICAgICAgIGVjaG8gIiAiCiAgICAgICAgICAgIGVjaG8gLW4gIiAtPiAi
+CiAgICAgICAgICAgICMgUmVhZCBhbGwgaW5wdXQgdW50aWwgRU9GIChDdHJsK0QpCiAgICAgICAg
+ICAgIGlucHV0PSQoY2F0KQogICAgICAgICAgICAjIEFkZCBuZXdsaW5lIGFmdGVyIGlucHV0IGNh
+cHR1cmUKICAgICAgICAgICAgZWNobyAiIgogICAgICAgICAgICAjIFByb2Nlc3MgdGhlIGlucHV0
+IGlmIG5vdCBlbXB0eQogICAgICAgICAgICBpZiBbIC1uICIkaW5wdXQiIF07IHRoZW4KICAgICAg
+ICAgICAgICAgIGVjaG8gLWUgIiRpbnB1dCIgfCBib3JkZXJpemVfdGV4dCAiJGJvcmRlcl9jb2xv
+ciIgIiR0ZXh0X2NvbG9yIgogICAgICAgICAgICBmaQogICAgICAgIGVsc2UKICAgICAgICAgICAg
+IyBQaXBlIGlucHV0IGRldGVjdGVkCiAgICAgICAgICAgIGJvcmRlcml6ZV90ZXh0ICIkYm9yZGVy
+X2NvbG9yIiAiJHRleHRfY29sb3IiCiAgICAgICAgZmkKICAgIGZpCn0KCiMgU2NyaXB0IGV4ZWN1
+dGlvbiBzdGVwczoKIyAxLiBQYXJzZSBjb21tYW5kIGxpbmUgYXJndW1lbnRzIGluY2x1ZGluZyBo
+ZXggY29sb3JzCiMgMi4gRmlyc3QgaGV4ID0gYm9yZGVyIGNvbG9yLCBTZWNvbmQgaGV4ID0gdGV4
+dCBjb2xvcgojIDMuIENvbnZlcnQgaGV4IGNvbG9ycyB0byBBTlNJIGVzY2FwZSBjb2RlcwojIDQu
+IERldGVjdCBpbnB1dCBtZXRob2QgKHBpcGUvZmlsZS90ZXh0L2ludGVyYWN0aXZlKQojIDUuIFJl
+YWQgYW5kIHByb2Nlc3MgaW5wdXQgdGV4dAojIDYuIENhbGN1bGF0ZSBvcHRpbWFsIGJvcmRlciB3
+aWR0aAojIDcuIEdlbmVyYXRlIGJvcmRlcmVkIG91dHB1dCB3aXRoIGN1c3RvbSBjb2xvcnMKIyA4
+LiBEaXNwbGF5IHJlc3VsdCB3aXRoIHNwZWNpZmllZCBib3JkZXIgYW5kIHRleHQgY29sb3JzCgoj
+IFJ1biBtYWluIGZ1bmN0aW9uCm1haW4gIiRAIgoK
+B64_DATA
+
+sudo chmod +x border-rizz
+
+#
+# convert2base64.sh
+# Converts a file (or a whole directory) into a self-contained bash script
+# that embeds the data as base64 and rebuilds it when executed.
+#
+# Modes:
+#   SINGLE FILE  -> <file>.sh          rebuilds that one file
+#   DIRECTORY    -> <dirname>-Files.sh rebuilds every file (bulk mode)
+#
+# Usage:
+#   ./convert2base64.sh /path/to/source.file
+#   ./convert2base64.sh /path/to/directory
+#   ./convert2base64.sh                        (interactive prompt)
+#
+# ---- resolve input path (arg or prompt) -------------------------------------
+if [[ $# -ge 1 ]]; then
+    SRC="$1"
+else
+    echo "Convert-2-Base64" | ./border-rizz
+    echo
+    printf '> Path to file or directory:\n '
+    echo
+    read -r SRC
+fi
+
+# Trim surrounding whitespace/quotes a user might paste
+SRC="${SRC#\"}"; SRC="${SRC%\"}"
+SRC="${SRC#\'}"; SRC="${SRC%\'}"
+
+if [[ -z "$SRC" ]]; then
+    echo "> ERROR: no path entered" >&2
+    exit 1
+fi
+
+# strip a trailing slash from directory paths (keeps basename clean)
+[[ "$SRC" != "/" ]] && SRC="${SRC%/}"
+
+# ---- helpers ----------------------------------------------------------------
+# portable byte size
+fsize() {
+    local sz
+    if sz=$(stat -c%s "$1" 2>/dev/null); then printf '%s' "$sz"; else stat -f%z "$1"; fi
+}
+
+# human-readable size from a byte count
+human() {
+    local b=$1
+    if   (( b >= 1073741824 )); then awk -v b="$b" 'BEGIN{printf "%.2f GB", b/1073741824}'
+    elif (( b >= 1048576   )); then awk -v b="$b" 'BEGIN{printf "%.2f MB", b/1048576}'
+    elif (( b >= 1024      )); then awk -v b="$b" 'BEGIN{printf "%.2f KB", b/1024}'
+    else printf '%s bytes' "$b"; fi
+}
+
+# =============================================================================
+# BULK MODE  (directory) - fully recursive, preserves tree + symlinks
+# =============================================================================
+if [[ -d "$SRC" ]]; then
+    DIRNAME="$(basename "$SRC")"
+    if [[ "$SRC" == */* ]]; then
+        OUT="${SRC%/*}/${DIRNAME}-Files.sh"
+    else
+        OUT="${DIRNAME}-Files.sh"   # relative dir in cwd
+    fi
+
+    # Enumerate the whole tree relative to $SRC.
+    # Directories, symlinks and regular files are gathered separately so the
+    # rebuild can recreate structure first, then files, then links.
+    pushd "$SRC" >/dev/null
+
+    mapfile -d '' DIRS  < <(find . -mindepth 1 -type d        -print0 | sort -z)
+    mapfile -d '' LINKS < <(find . -mindepth 1 -type l        -print0 | sort -z)
+    mapfile -d '' FILES < <(find . -mindepth 1 -type f        -print0 | sort -z)
+
+    if [[ ${#FILES[@]} -eq 0 && ${#LINKS[@]} -eq 0 ]]; then
+        popd >/dev/null
+        echo "> ERROR: no files or symlinks found in directory '$SRC'" >&2
+        exit 1
+    fi
+
+    TOTAL=0
+    for f in "${FILES[@]}"; do TOTAL=$(( TOTAL + $(fsize "$f") )); done
+
+    echo "> Directory '$DIRNAME' contains ${#FILES[@]} files, ${#LINKS[@]} symlinks, ${#DIRS[@]} subdirs ~ $(human "$TOTAL")"
+    if command -v tree >/dev/null 2>&1; then
+        echo "> tree:"
+        tree -a --noreport "." | sed 's/^/    /'
+    fi
+    printf "> Convert all of '%s' (recursive) to '%s-Files.sh'? [N/y] " "$DIRNAME" "$DIRNAME"
+    read -r ANS
+    case "$ANS" in
+        [Yy]*) ;;
+        *) popd >/dev/null; echo "> aborted"; exit 0 ;;
+    esac
+
+    echo "> creating '$(basename "$OUT")'..."
+
+    # ---- write recursive rebuild script ----
+    {
+        cat <<BULK_HEADER
+#!/usr/bin/env bash
+# Self-extracting base64 RECURSIVE rebuild script for directory: $DIRNAME
+# Files: ${#FILES[@]}  Symlinks: ${#LINKS[@]}  Subdirs: ${#DIRS[@]}  Total: $(human "$TOTAL")
+# Rebuilds the complete '$DIRNAME/' tree in the current working directory.
+set -euo pipefail
+
+FAIL=0
+ROOT="$DIRNAME"
+_fsize() { local s; if s=\$(stat -c%s "\$1" 2>/dev/null); then printf '%s' "\$s"; else stat -f%z "\$1"; fi; }
+
+if [[ -e "\$ROOT" ]]; then
+    if { true </dev/tty; } 2>/dev/null; then
+        printf "> '%s' already exists here. Merge/overwrite into it? [y/N] " "\$ROOT"
+        read -r a </dev/tty
+    else
+        a="y"   # non-interactive: proceed
+    fi
+    case "\$a" in [Yy]*) ;; *) echo "> aborted"; exit 1 ;; esac
+fi
+
+echo "> rebuilding tree '\$ROOT/' ..."
+mkdir -p "\$ROOT"
+
+_mkdir() { mkdir -p "\$ROOT/\$1"; }
+
+_link() {
+    # args: linkpath  target
+    local lp="\$ROOT/\$1" tgt="\$2"
+    mkdir -p "\$(dirname "\$lp")"
+    ln -sfn "\$tgt" "\$lp"
+    echo ">   LINK '\$1' -> '\$tgt'"
+}
+
+_file() {
+    # args: relpath  expected_size  mode   (base64 on stdin)
+    local rp="\$ROOT/\$1" expect="\$2" mode="\$3"
+    mkdir -p "\$(dirname "\$rp")"
+    base64 -d > "\$rp"
+    local got; got=\$(_fsize "\$rp")
+    [[ -n "\$mode" ]] && chmod "\$mode" "\$rp" 2>/dev/null || true
+    if [[ "\$got" == "\$expect" ]]; then
+        echo ">   OK  '\$1' (\$got bytes)"
+    else
+        echo ">   WARNING '\$1' size mismatch: got \$got expected \$expect - may be corrupt"
+        FAIL=1
+    fi
+}
+BULK_HEADER
+
+        # recreate directories first (so empty dirs survive too)
+        for d in "${DIRS[@]}"; do
+            d="${d#./}"
+            printf "_mkdir %q\n" "$d"
+        done
+
+        # symlinks: store link path + target verbatim
+        for l in "${LINKS[@]}"; do
+            rel="${l#./}"
+            tgt="$(readlink "$l")"
+            printf "_link %q %q\n" "$rel" "$tgt"
+        done
+
+        # files: one heredoc blob each, preserving relative path + exec mode
+        for f in "${FILES[@]}"; do
+            rel="${f#./}"
+            fsz="$(fsize "$f")"
+            if [[ -x "$f" ]]; then mode="755"; else mode="644"; fi
+            printf "\n_file %q %s %s << 'B64_EOF'\n" "$rel" "$fsz" "$mode"
+            base64 "$f"
+            printf "B64_EOF\n"
+        done
+
+        cat <<'BULK_FOOTER'
+
+if [[ "$FAIL" -eq 0 ]]; then
+    echo "> recursive rebuild complete - all files verified OK"
+else
+    echo "> recursive rebuild finished WITH WARNINGS - one or more files may be corrupt"
+    exit 2
+fi
+BULK_FOOTER
+    } > "$OUT"
+
+    popd >/dev/null
+    chmod +x "$OUT"
+    OUT_ABS="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
+    echo "> base64 recursive rebuild script saved at '$OUT_ABS'"
+    echo "> execute the script in any directory to rebuild the full '$DIRNAME/' tree there."
+    exit 0
+fi
+
+
+if [[ ! -f "$SRC" ]]; then
+    echo "> ERROR: source '$SRC' not found (not a file or directory)" >&2
+    exit 1
+fi
+
+BASENAME="$(basename "$SRC")"
+OUT="${SRC}.sh"
+SIZE="$(fsize "$SRC")"
+
+echo "> Source file '$BASENAME' is $SIZE bytes"
+echo "> creating '${BASENAME}.sh'"
+
+{
+    cat <<REBUILD_HEADER
+#!/usr/bin/env bash
+# Self-extracting base64 rebuild script for: $BASENAME
+# Original size: $SIZE bytes
+set -euo pipefail
+
+OUT_FILE="$BASENAME"
+EXPECTED_SIZE=$SIZE
+
+if [[ -e "\$OUT_FILE" ]]; then
+    printf "> '%s' already exists. Overwrite? [y/N] " "\$OUT_FILE"
+    read -r ANS
+    case "\$ANS" in
+        [Yy]*) ;;
+        *) echo "> aborted"; exit 1 ;;
+    esac
+fi
+
+echo "> rebuilding '\$OUT_FILE'..."
+base64 -d <<'B64_DATA' > "\$OUT_FILE"
+REBUILD_HEADER
+
+    base64 "$SRC"
+
+    cat <<'REBUILD_FOOTER'
+B64_DATA
+
+if ACTUAL=$(stat -c%s "$OUT_FILE" 2>/dev/null); then :; else ACTUAL=$(stat -f%z "$OUT_FILE"); fi
+
+if [[ "$ACTUAL" -eq "$EXPECTED_SIZE" ]]; then
+    echo "> rebuild complete: '$OUT_FILE' ($ACTUAL bytes) - byte count matches"
+else
+    echo "> WARNING: byte count mismatch!"
+    echo ">   expected: $EXPECTED_SIZE bytes"
+    echo ">   actual:   $ACTUAL bytes"
+    echo ">   file rebuild may be corrupt."
+    exit 2
+fi
+REBUILD_FOOTER
+} > "$OUT"
+
+chmod +x "$OUT"
+OUT_ABS="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
+echo "> base64 rebuild script saved at '$OUT_ABS'"
+echo "> execute the script in any directory to rebuild the source file there."
+
+S2E
+
+sudo bash /tmp/.convert2base64 && sudo rm -f /tmp/.convert2base64
